@@ -1,18 +1,18 @@
 # Informe de pruebas
 
-Fecha de generación: 17/11/2026 21:31 (hora peninsular) · Versión 1.0.2 · compilación final
+Fecha de generación: 17/11/2026 22:33 (hora peninsular) · Versión 1.0.3 · compilación final
 
 | Bloque | Pruebas | Superadas | Fallidas |
 |---|---:|---:|---:|
 | Reglas de negocio, datos y rendimiento del motor (unidad, `node:test`) | 28 | 28 | 0 |
-| Servidor de sincronización e integración completa (`node:test`, servidor real) | 14 | 14 | 0 |
+| Servidor de sincronización, integración completa e instalador para Windows (simulado) | 16 | 16 | 0 |
 | Aceptación en navegador (Chrome + Playwright, móvil y tablet) | 31 | 31 | 0 |
 | Particularidades de Chrome para Android (simuladas en el navegador) | 5 | 5 | 0 |
 | Comprobaciones de calidad (instalabilidad, accesibilidad, seguridad, HTTPS) | 12 | 12 | 0 |
 | Publicación en subcarpeta como en GitHub Pages (local) | 7 | 7 | 0 |
 | Plataforma publicada en GitHub Pages (en vivo, por Internet) | 7 | 7 | 0 |
 | Mapas y búsqueda de coordenadas en vivo (Google y OpenStreetMap) | 5 | 5 | 0 |
-| **Total** | **109** | **109** | **0** |
+| **Total** | **111** | **111** | **0** |
 
 Todas las pruebas listadas se han **ejecutado realmente** y este informe se genera a partir de sus archivos de resultados (`tests/generar_informe.py`): `tests/resultados-node.tap`, `tests/e2e/resultados.json`, `tests/checks/resultados*.json` y `tests/perf/resultados-*.json`. Capturas en `tests/e2e/capturas/` y `tests/checks/capturas-mapas/`. Además se han medido los tiempos de respuesta (apartado 6).
 
@@ -46,7 +46,11 @@ Todas las pruebas listadas se han **ejecutado realmente** y este informe se gene
 - ✔ bitácora: registra usuario, elemento, acción, valor anterior y nuevo
 - ✔ geo: mapas incrustables sin clave (Google y OpenStreetMap)
 
-## 2. Servidor e integración (repositorio cifrado + motor + sincronización real)
+## 2. Servidor e integración (repositorio cifrado + motor + sincronización real) e instalador para Windows
+El instalador para Windows se ejecuta en modo simulado: `schtasks` y `tailscale` se sustituyen por programas de prueba que registran las órdenes, y el servidor arranca de verdad con los mismos argumentos que en Windows.
+
+- ✔ instalador para Windows: instala, arranca, publica, informa del estado y desinstala conservando los datos
+- ✔ instalador para Windows: si el puerto está ocupado por otro programa, usa el siguiente libre
 - ✔ A crea un preventivo compartido y B se incorpora con el código
 - ✔ avisos creados a la vez en dos dispositivos: sin duplicados y numeración única
 - ✔ desconexión: B sigue trabajando sin red y al reconectar se sincroniza sin pérdidas
@@ -67,7 +71,7 @@ Entorno: Google Chrome (sin interfaz) controlado con Playwright, con la aplicaci
 
 | Prueba | Resultado | Detalle |
 |---|---|---|
-| Alta inicial del administrador y clave de recuperación | SUPERADA | clave XGNKV… |
+| Alta inicial del administrador y clave de recuperación | SUPERADA | clave W6AKW… |
 | Permisos del dispositivo: solicitar todos | SUPERADA | aviso al primer acceso; ubicación y notificaciones concedidas; queda en la auditoría |
 | Crear preventivo independiente y activarlo | SUPERADA |  |
 | Unidades: crear desde el formulario | SUPERADA | 3 unidades |
@@ -127,7 +131,7 @@ Tablet con agente de usuario de Android. Se reproducen en el navegador de prueba
 | Servidor: rechaza datos no válidos, envíos enormes, rutas fuera de la carpeta y accesos sin credenciales | CORRECTA | JSON roto 400, 26 MB -1, ruta 403, sin token 404 |
 
 ## 3 quater. Publicación en subcarpeta (`tests/checks/subruta_pages.py`, local)
-URL: http://127.0.0.1:8660/emergencias-uco/ · 2026-11-17 21:27
+URL: http://127.0.0.1:8660/emergencias-uco/ · 2026-11-17 22:31
 
 | Comprobación | Resultado | Detalle |
 |---|---|---|
@@ -140,7 +144,7 @@ URL: http://127.0.0.1:8660/emergencias-uco/ · 2026-11-17 21:27
 | Alta, preventivo y unidad se guardan y siguen tras recargar | CORRECTA | datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades) |
 
 ## 3 quinquies. Plataforma publicada (`tests/checks/subruta_pages.py URL`, en vivo)
-URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 21:30 · Chrome a través de Internet; los archivos publicados coinciden byte a byte con `dist/app/`
+URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 22:32 · Chrome a través de Internet; los archivos publicados coinciden byte a byte con `dist/app/`
 
 | Comprobación | Resultado | Detalle |
 |---|---|---|
@@ -153,7 +157,7 @@ URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 21:30 · Chrome a 
 | Alta, preventivo y unidad se guardan y siguen tras recargar | CORRECTA | datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades) |
 
 ## 3 sexies. Mapas en vivo (`tests/checks/mapas_en_vivo.py`)
-URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 21:31 · capturas en `tests/checks/capturas-mapas/`
+URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 22:33 · capturas en `tests/checks/capturas-mapas/`
 
 | Comprobación | Resultado | Detalle |
 |---|---|---|
@@ -183,7 +187,8 @@ URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 21:31 · capturas 
 - **Dispositivos Android físicos**: las pruebas usan Chrome con emulación táctil de teléfono y tablet y con las restricciones de Android simuladas, no terminales reales. Se recomienda una prueba en campo con los modelos que se vayan a usar (instalación como aplicación, modo avión, rotación de pantalla).
 - **Avisos, vibración y pantalla encendida en un terminal**: comprobados en Chrome simulando las restricciones de Android. Para confirmarlos en cada terminal: *Sistema → Permisos del dispositivo → «Probar»* en Notificaciones y en Vibración.
 - **Mapas en terminales Android reales**: el mapa de Google sin clave, el de OpenStreetMap y la búsqueda de coordenadas se han comprobado en vivo por Internet con Chrome (emulación de tablet), no en un terminal físico. El formato de Google sin clave no es oficial y podría dejar de funcionar; por eso la aplicación ofrece también el mapa de OpenStreetMap y el botón «Abrir en Google Maps». El GPS se ha probado con posición simulada.
-- **Servidor de sincronización publicado con HTTPS real** (Cloudflare Tunnel, VPS…): probado en local por HTTP y HTTPS con certificado propio; no hay ningún servidor de sincronización publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
+- **Servidor de sincronización publicado con HTTPS real**: probado en local por HTTP y HTTPS con certificado propio; todavía no hay ningún servidor publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
+- **Instalador del servidor para Windows** (`servidor-uco-windows.zip`): probado en modo simulado en Linux (órdenes de Windows y de Tailscale sustituidas; el servidor y los archivos generados son reales, y la tarea programada es XML válido). No se ha ejecutado en un Windows real ni con una cuenta de Tailscale: la primera instalación en el PC servidor es la prueba definitiva; `estado-servidor.bat` comprueba que responde desde Internet.
 - **Rendimiento en terminales reales**: medido con la CPU ralentizada 4 veces como aproximación; un terminal concreto puede ser más rápido o más lento.
 
 ## 6. Rendimiento con preventivos grandes (`tests/perf/`)
@@ -238,6 +243,9 @@ Datos cifrados en IndexedDB e interfaz real; tiempo desde la pulsación hasta qu
 | Tamaño del informe PDF (853 páginas) | 21 MB | 2,3 MB | El contenido de las páginas se comprime (FlateDecode); validado con qpdf y pdftotext |
 
 ## 7. Correcciones derivadas de las comprobaciones
+### Versión 1.0.3
+- **Servidor de sincronización para Windows:** nuevo instalador de doble clic con dirección HTTPS fija gratuita (Tailscale Funnel) y arranque automático; el servidor se identifica en `/api/v1/salud` para que el instalador detecte una instalación anterior.
+
 ### Versión 1.0.2
 - **Avisos de fin de descanso en Android:** Chrome para Android no permite `new Notification()` y el aviso no se mostraba nunca. Ahora lo muestra el service worker; al tocarlo se abre la aplicación. Nuevo botón «Probar» en Notificaciones.
 - **Pantalla siempre encendida:** tras salir y volver a la aplicación dos veces, la pantalla dejaba de mantenerse encendida. Ahora se recupera cada vez.

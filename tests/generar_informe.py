@@ -44,7 +44,7 @@ def main():
     ok = lambda rs, k='resultado', v=('SUPERADA', 'CORRECTA'): sum(1 for r in rs if r[k] in v)
     bloques = [
         ('Reglas de negocio, datos y rendimiento del motor (unidad, `node:test`)', len(uni), sum(1 for r in uni if r[0])),
-        ('Servidor de sincronización e integración completa (`node:test`, servidor real)', len(srv), sum(1 for r in srv if r[0])),
+        ('Servidor de sincronización, integración completa e instalador para Windows (simulado)', len(srv), sum(1 for r in srv if r[0])),
         ('Aceptación en navegador (Chrome + Playwright, móvil y tablet)', len(e2e_gen), ok(e2e_gen)),
         ('Particularidades de Chrome para Android (simuladas en el navegador)', len(e2e_and), ok(e2e_and)),
         ('Comprobaciones de calidad (instalabilidad, accesibilidad, seguridad, HTTPS)', len(chk), ok(chk)),
@@ -62,7 +62,8 @@ def main():
           '(`tests/generar_informe.py`): `tests/resultados-node.tap`, `tests/e2e/resultados.json`, `tests/checks/resultados*.json` y `tests/perf/resultados-*.json`. '
           'Capturas en `tests/e2e/capturas/` y `tests/checks/capturas-mapas/`. Además se han medido los tiempos de respuesta (apartado 6).', '']
     L += ['## 1. Pruebas de unidad (reglas críticas, datos y motor)'] + [('- ✔ ' if r[0] else '- ✘ ') + r[1] for r in uni] + ['']
-    L += ['## 2. Servidor e integración (repositorio cifrado + motor + sincronización real)'] + [('- ✔ ' if r[0] else '- ✘ ') + r[1] for r in srv] + ['']
+    L += ['## 2. Servidor e integración (repositorio cifrado + motor + sincronización real) e instalador para Windows',
+          'El instalador para Windows se ejecuta en modo simulado: `schtasks` y `tailscale` se sustituyen por programas de prueba que registran las órdenes, y el servidor arranca de verdad con los mismos argumentos que en Windows.', ''] + [('- ✔ ' if r[0] else '- ✘ ') + r[1] for r in srv] + ['']
     L += ['## 3. Aceptación en navegador',
           'Entorno: Google Chrome (sin interfaz) controlado con Playwright, con la aplicación compilada servida por el servidor de sincronización. '
           'Perfiles: **teléfono** 390×844 táctil y **tablet** 1280×800 táctil. En el escenario 2 trabajan a la vez una tablet y un teléfono con almacenamiento independiente.', '',
@@ -125,7 +126,8 @@ ESTATICO_4_5 = """## 4. Correspondencia con las pruebas de aceptación del plieg
 - **Dispositivos Android físicos**: las pruebas usan Chrome con emulación táctil de teléfono y tablet y con las restricciones de Android simuladas, no terminales reales. Se recomienda una prueba en campo con los modelos que se vayan a usar (instalación como aplicación, modo avión, rotación de pantalla).
 - **Avisos, vibración y pantalla encendida en un terminal**: comprobados en Chrome simulando las restricciones de Android. Para confirmarlos en cada terminal: *Sistema → Permisos del dispositivo → «Probar»* en Notificaciones y en Vibración.
 - **Mapas en terminales Android reales**: el mapa de Google sin clave, el de OpenStreetMap y la búsqueda de coordenadas se han comprobado en vivo por Internet con Chrome (emulación de tablet), no en un terminal físico. El formato de Google sin clave no es oficial y podría dejar de funcionar; por eso la aplicación ofrece también el mapa de OpenStreetMap y el botón «Abrir en Google Maps». El GPS se ha probado con posición simulada.
-- **Servidor de sincronización publicado con HTTPS real** (Cloudflare Tunnel, VPS…): probado en local por HTTP y HTTPS con certificado propio; no hay ningún servidor de sincronización publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
+- **Servidor de sincronización publicado con HTTPS real**: probado en local por HTTP y HTTPS con certificado propio; todavía no hay ningún servidor publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
+- **Instalador del servidor para Windows** (`servidor-uco-windows.zip`): probado en modo simulado en Linux (órdenes de Windows y de Tailscale sustituidas; el servidor y los archivos generados son reales, y la tarea programada es XML válido). No se ha ejecutado en un Windows real ni con una cuenta de Tailscale: la primera instalación en el PC servidor es la prueba definitiva; `estado-servidor.bat` comprueba que responde desde Internet.
 - **Rendimiento en terminales reales**: medido con la CPU ralentizada 4 veces como aproximación; un terminal concreto puede ser más rápido o más lento.
 """
 
@@ -142,6 +144,9 @@ ESTATICO_6_3 = """### 6.3 Mejoras aplicadas tras la primera medición (300 unida
 """
 
 ESTATICO_7 = """## 7. Correcciones derivadas de las comprobaciones
+### Versión 1.0.3
+- **Servidor de sincronización para Windows:** nuevo instalador de doble clic con dirección HTTPS fija gratuita (Tailscale Funnel) y arranque automático; el servidor se identifica en `/api/v1/salud` para que el instalador detecte una instalación anterior.
+
 ### Versión 1.0.2
 - **Avisos de fin de descanso en Android:** Chrome para Android no permite `new Notification()` y el aviso no se mostraba nunca. Ahora lo muestra el service worker; al tocarlo se abre la aplicación. Nuevo botón «Probar» en Notificaciones.
 - **Pantalla siempre encendida:** tras salir y volver a la aplicación dos veces, la pantalla dejaba de mantenerse encendida. Ahora se recupera cada vez.
