@@ -1,0 +1,41 @@
+{
+ "url": "http://127.0.0.1:8660/emergencias-uco/",
+ "fecha": "2026-11-17 18:42",
+ "resultados": [
+  {
+   "comprobacion": "Service worker registrado en la subcarpeta",
+   "resultado": "CORRECTA",
+   "detalle": "ámbito http://127.0.0.1:8660/emergencias-uco/"
+  },
+  {
+   "comprobacion": "Service worker controla la página",
+   "resultado": "CORRECTA",
+   "detalle": ""
+  },
+  {
+   "comprobacion": "Instalable como aplicación desde la subcarpeta",
+   "resultado": "CORRECTA",
+   "detalle": "sin errores de instalabilidad"
+  },
+  {
+   "comprobacion": "Manifiesto encontrado y válido",
+   "resultado": "CORRECTA",
+   "detalle": "http://127.0.0.1:8660/emergencias-uco/manifest.webmanifest"
+  },
+  {
+   "comprobacion": "Abre sin conexión (modo avión)",
+   "resultado": "CORRECTA",
+   "detalle": "pantalla de alta visible sin red"
+  },
+  {
+   "comprobacion": "Sin errores de JavaScript",
+   "resultado": "CORRECTA",
+   "detalle": ""
+  },
+  {
+   "comprobacion": "Alta, preventivo y unidad se guardan y siguen tras recargar",
+   "resultado": "CORRECTA",
+   "detalle": "datos cifrados en el dispositivo"
+  }
+ ]
+}

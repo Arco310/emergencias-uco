@@ -1,0 +1,280 @@
+// Arranque de la aplicación, navegación, distribución móvil/tablet y eventos globales.
+import { openStorage } from '../data/idb.js';
+import { AppCore } from '../app/core.js';
+import { G, A, F, CH } from './state.js';
+import { esc, $, $$, toast, closeSheet, handlePop, refreshSheets, drawLayer, dialogSubmit, sheets, openSheet, confirmDlg } from './dom.js';
+import { icon } from './icons.js';
+import { fmtClock, fmtDur, now, AppError } from '../core/util.js';
+import { APP_NAME, APP_VERSION } from '../core/defaults.js';
+import { isResting } from '../core/engine.js';
+import { SYNC_ESTADOS } from '../data/sync.js';
+import * as auth from './views/auth.js';
+import * as home from './views/home.js';
+import * as ops from './views/ops.js';
+import * as plano from './views/plano.js';
+import * as analysis from './views/analysis.js';
+import * as admin from './views/admin.js';
+
+/* global __PREVIEW__ */
+G.preview = typeof __PREVIEW__ !== 'undefined' && __PREVIEW__;
+
+const VIEWS = {
+  // Fuera de un preventivo
+  inicio: { t: 'Preventivos', ic: 'inicio', scope: 'g', r: home.renderHome },
+  plantillas: { t: 'Plantillas', ic: 'plantilla', scope: 'g', r: home.renderTemplates },
+  config: { t: 'Configuración general', ic: 'ajustes', scope: 'g', r: admin.renderGlobalConfig },
+  sistema: { t: 'Sistema', ic: 'mas', scope: 'g', r: admin.renderSystemMenu },
+  usuarios: { t: 'Usuarios y roles', ic: 'usuario', scope: 'g', r: admin.renderUsers, parent: 'sistema' },
+  copias: { t: 'Copias de seguridad', ic: 'archivar', scope: 'g', r: admin.renderBackups, parent: 'sistema' },
+  auditoria: { t: 'Auditoría del sistema', ic: 'bitacora', scope: 'g', r: admin.renderAudit, parent: 'sistema' },
+  permisos: { t: 'Permisos del dispositivo', ic: 'escudo', scope: 'g', r: admin.renderDevicePerms, parent: 'sistema' },
+  cuenta: { t: 'Mi cuenta', ic: 'usuario', scope: 'g', r: admin.renderAccount, parent: 'sistema' },
+  acerca: { t: 'Acerca de', ic: 'info', scope: 'g', r: admin.renderAbout, parent: 'sistema' },
+  // Dentro de un preventivo
+  panel: { t: 'Centro de control', ic: 'panel', scope: 'p', r: ops.renderPanel },
+  unidades: { t: 'Unidades', ic: 'unidades', scope: 'p', r: ops.renderUnits },
+  avisos: { t: 'Avisos', ic: 'avisos', scope: 'p', r: ops.renderAvisos },
+  plano: { t: 'Plano táctico', ic: 'plano', scope: 'p', r: plano.renderPlano, full: true },
+  mas: { t: 'Más', ic: 'mas', scope: 'p', r: admin.renderPrevMenu },
+  bitacora: { t: 'Bitácora y auditoría', ic: 'bitacora', scope: 'p', r: analysis.renderLog, parent: 'mas' },
+  cronologia: { t: 'Cronología de unidades', ic: 'reloj', scope: 'p', r: analysis.renderChrono, parent: 'mas' },
+  estadisticas: { t: 'Tiempos y estadísticas', ic: 'grafico', scope: 'p', r: analysis.renderStats, parent: 'mas' },
+  mapa: { t: 'Mapa real', ic: 'mapa', scope: 'p', r: ops.renderMap, parent: 'mas' },
+  ajustes: { t: 'Configuración del preventivo', ic: 'ajustes', scope: 'p', r: admin.renderPrevConfig, parent: 'mas' },
+  sync: { t: 'Sincronización', ic: 'sync', scope: 'p', r: admin.renderSync, parent: 'mas' },
+  cierre: { t: 'Cierre e informes', ic: 'archivo', scope: 'p', r: admin.renderClose, parent: 'mas' },
+};
+const NAV_P = ['panel', 'unidades', 'avisos', 'plano', 'mas'];
+const NAV_G = ['inicio', 'plantillas', 'config', 'sistema'];
+
+export function go(route, params = {}) {
+  if (!VIEWS[route]) route = G.core && G.core.cur ? 'panel' : 'inicio';
+  G.ui.route = route; G.ui.params = params;
+  try { if (location.hash !== '#' + route) history.replaceState(history.state, '', '#' + route); } catch { }
+  render(); window.scrollTo(0, 0); const m = $('#main'); if (m) m.scrollTop = 0;
+}
+A['nav'] = el => go(el.dataset.v);
+A['sheet.close'] = () => closeSheet();
+A['dlg.cancel'] = () => closeSheet();
+F['dlg.submit'] = form => dialogSubmit(form);
+
+let renderQueued = false;
+export function render() {
+  renderQueued = false;
+  const app = $('#app'); if (!app) return;
+  const core = G.core;
+  if (!core || !core.session || auth.blocking()) { app.className = 'app auth'; app.innerHTML = auth.renderAuth(); drawLayer(); return; }
+  if (G.applyTheme) G.applyTheme();
+  let route = G.ui.route;
+  const v0 = VIEWS[route];
+  if (!v0 || (v0.scope === 'p' && !core.cur)) route = G.ui.route = 'inicio';
+  if (v0 && v0.scope === 'g' && core.cur && !['cuenta', 'permisos', 'acerca'].includes(route)) { /* se permite consultar ajustes globales */ }
+  const v = VIEWS[route];
+  const focusId = document.activeElement && document.activeElement.id;
+  const selStart = focusId && document.activeElement.selectionStart;
+  const main = $('#main'); const scroll = main ? main.scrollTop : 0;
+  let body;
+  try { body = v.r(); } catch (e) { console.error(e); body = `<div class="empty">${icon('alerta')}<p>Error al mostrar la pantalla: ${esc(e.message)}</p></div>`; }
+  app.className = 'app' + (v.full ? ' full' : '') + (core.cur ? ' in-prev' : '');
+  app.innerHTML = layout(route, v, body);
+  const m2 = $('#main'); if (m2 && G.ui._lastRoute === route) m2.scrollTop = scroll;
+  G.ui._lastRoute = route;
+  if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); try { if (selStart != null) el.setSelectionRange(selStart, selStart); } catch { } } }
+  refreshSheets();
+  tick();
+  if (v.after) v.after();
+  plano.afterRender && route === 'plano' && plano.afterRender();
+}
+export function queueRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(render); } }
+
+function layout(route, v, body) {
+  const core = G.core; const s = core.state; const inPrev = !!core.cur && !!s;
+  const nav = inPrev ? NAV_P : NAV_G;
+  const activeNav = v.parent || route;
+  const navHtml = cls => `<nav class="${cls}" aria-label="Navegación">${nav.map(k => `<button type="button" class="nav-i${k === activeNav ? ' on' : ''}" data-a="nav" data-v="${k}" aria-current="${k === activeNav ? 'page' : 'false'}">${icon(VIEWS[k].ic)}<span>${VIEWS[k].t === 'Centro de control' ? 'Panel' : VIEWS[k].t === 'Plano táctico' ? 'Plano' : VIEWS[k].t.replace('Configuración general', 'Ajustes')}</span>${badge(k)}</button>`).join('')}</nav>`;
+  const st = inPrev ? s.prev : null;
+  const est = st ? { preparacion: ['En preparación', 'warn'], activo: ['Activo', 'ok'], cerrado: ['Cerrado', 'muted'] }[st.estado] : null;
+  return `
+  ${G.preview ? `<div class="preview-bar">${icon('info')} Vista previa: los datos pueden no conservarse y no hay modo sin conexión, sincronización, GPS ni descargas. Para uso real, aloja la aplicación.</div>` : ''}
+  <header class="top">
+    ${inPrev ? `<button class="btn icon ghost" data-a="prev.exit" title="Volver a preventivos" aria-label="Volver a preventivos">${icon('atras')}</button>` : `<span class="logo">${logoSvg()}</span>`}
+    <div class="top-title">${inPrev ? `<b>${esc(st.nombre)}</b><span class="chip sm ${est[1]}">${est[0]}${st.archivado ? ' · archivado' : ''}</span>` : `<b>${APP_NAME}</b>`}
+      ${v.parent ? `<span class="crumb">${esc(v.t)}</span>` : ''}</div>
+    <div class="top-act">${inPrev ? syncBadge() : ''}${netBadge()}
+      <button class="btn icon ghost" data-a="user.menu" aria-label="Usuario: ${esc(core.user.nombre)}">${icon('usuario')}</button></div>
+  </header>
+  ${navHtml('rail')}
+  <main id="main" tabindex="-1">${v.parent ? `<div class="subhead"><button class="btn ghost sm" data-a="nav" data-v="${v.parent}">${icon('atras')}<span>${esc(VIEWS[v.parent].t)}</span></button><h1>${esc(v.t)}</h1></div>` : ''}${body}</main>
+  ${navHtml('bottom')}`;
+}
+function badge(k) {
+  const s = G.core.state; if (!s) return '';
+  if (k === 'avisos') { const n = Object.values(s.avisos).filter(a => a.estado === 'pendiente').length; return n ? `<i class="nbadge">${n}</i>` : ''; }
+  if (k === 'mas') { const n = G.core.engine().pendingConflicts().length; return n ? `<i class="nbadge">${n}</i>` : ''; }
+  return '';
+}
+function syncBadge() {
+  const core = G.core;
+  if (!core.isShared()) return '';
+  const st = core.sync.status(core.cur);
+  const conf = core.engine().pendingConflicts().length;
+  const k = conf ? 'conflicto' : st.estado || 'pendiente';
+  const cls = { sincronizado: 'ok', pendiente: 'warn', sincronizando: 'info', sin_conexion: 'muted', error: 'bad', conflicto: 'bad', local: 'muted' }[k] || 'muted';
+  return `<button class="sync-b ${cls}" data-a="nav" data-v="sync" title="${esc(SYNC_ESTADOS[k] || k)}">${icon('sync')}<span>${esc(SYNC_ESTADOS[k] || k)}${st.pendientes ? ' · ' + st.pendientes : ''}</span></button>`;
+}
+function netBadge() { return navigator.onLine === false ? `<span class="net-off" title="Sin conexión: todo sigue funcionando en este dispositivo">${icon('sinred')}<span>Sin conexión</span></span>` : ''; }
+export function logoSvg() {
+  return `<svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true"><rect width="48" height="48" rx="11" fill="#B71C1C"/><path d="M20 9h8v11h11v8H28v11h-8V28H9v-8h11z" fill="#fff"/></svg>`;
+}
+
+// ---------------- eventos globales ----------------
+async function runAction(fn, el, ev) {
+  try { await fn(el, ev); }
+  catch (e) {
+    if (e && e.name === 'AbortError') return;
+    console.error(e);
+    toast(e instanceof AppError || (e && e.code) ? e.message : 'Error: ' + (e && e.message ? e.message : e), 'error', 6000);
+  }
+}
+function bindGlobal() {
+  document.addEventListener('click', ev => {
+    const el = ev.target.closest('[data-a]'); if (!el || el.disabled) return;
+    const fn = A[el.dataset.a]; if (!fn) { console.warn('Acción sin manejador', el.dataset.a); return; }
+    if (el.tagName === 'A' && el.getAttribute('href') && !el.dataset.prevent) { /* enlace real */ } else ev.preventDefault();
+    runAction(fn, el, ev);
+  });
+  document.addEventListener('submit', ev => {
+    const form = ev.target.closest('form[data-f]'); if (!form) return;
+    ev.preventDefault();
+    const fn = F[form.dataset.f]; if (!fn) return;
+    const b = form.querySelector('[type=submit]'); if (b) b.disabled = true;
+    runAction(async () => { try { await fn(form, ev); } finally { if (b && b.isConnected) b.disabled = false; } }, form, ev);
+  });
+  const onCh = ev => { const el = ev.target.closest('[data-c]'); if (!el) return; const fn = CH[el.dataset.c]; if (fn) runAction(fn, el, ev); };
+  document.addEventListener('change', onCh);
+  document.addEventListener('input', ev => { const el = ev.target.closest('[data-c][data-live]'); if (el) onCh(ev); });
+  window.addEventListener('popstate', () => {
+    if (!handlePop()) { const r = location.hash.slice(1); if (r && r !== G.ui.route && VIEWS[r]) go(r); }
+    else { try { if (location.hash !== '#' + G.ui.route) history.replaceState(history.state, '', '#' + G.ui.route); } catch { } }
+  });
+  window.addEventListener('online', () => { queueRender(); if (G.core && G.core.cur && G.core.isShared()) G.core.sync.syncNow(G.core.cur); });
+  window.addEventListener('offline', queueRender);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && G.core && G.core.cur && G.core.isShared()) G.core.sync.syncNow(G.core.cur); if (document.hidden && G.core) G.core.autoBackup(); });
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); G.installPrompt = e; });
+  for (const evn of ['pointerdown', 'keydown']) document.addEventListener(evn, () => { G.lastActivity = Date.now(); }, { passive: true });
+  window.addEventListener('pagehide', () => { if (G.core) G.core.autoBackup(); });
+}
+
+// ---------------- temporizadores (cuentas atrás con marcas de tiempo reales) ----------------
+const restSeen = new Set();
+function tick() {
+  const t = now();
+  for (const el of $$('[data-cd]')) { const end = Number(el.dataset.cd); el.textContent = fmtClock(end - t); el.classList.toggle('late', end - t < 60000); }
+  for (const el of $$('[data-since]')) el.textContent = fmtDur(t - Number(el.dataset.since));
+}
+function restWatch() {
+  const core = G.core; if (!core || !core.state) return;
+  const t = now(); let ended = false;
+  for (const u of Object.values(core.state.units)) {
+    const d = u.descanso; if (!d || d.fin != null) continue;
+    const key = d.id;
+    if (t >= d.finPrev && !restSeen.has(key)) {
+      restSeen.add(key);
+      if (t - d.finPrev < 15000) {
+        ended = true;
+        toast('Fin del descanso: ' + (u.ind || u.nombre), 'info', 8000);
+        try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch { }
+        try { if (window.Notification && Notification.permission === 'granted') new Notification('Fin del descanso', { body: (u.ind || '') + ' ' + (u.nombre || ''), tag: key }); } catch { }
+      }
+    } else if (t < d.finPrev) restSeen.delete(key);
+  }
+  if (ended) queueRender();
+}
+function lockWatch() {
+  const core = G.core; if (!core || !core.session || G.locked) return;
+  const min = Number(core.cfg && core.cfg.bloqueoMin) || 0;
+  if (min > 0 && Date.now() - (G.lastActivity || Date.now()) > min * 60000) lockScreen();
+}
+export function lockScreen() {
+  if (G.locked) return; G.locked = true;
+  openSheet({
+    title: 'Sesión bloqueada', size: 's', dialog: true, onClose: () => { if (G.locked) setTimeout(lockScreen, 0); G.locked = false; },
+    render: () => `<form data-f="unlock"><p>Introduce la contraseña de <b>${esc(G.core.user.nombre)}</b> para continuar.</p>
+      <div class="fld"><label for="f_unlock">Contraseña</label><input type="password" id="f_unlock" name="p" autocomplete="current-password" required></div>
+      <div class="row between gap"><button type="button" class="btn ghost" data-a="session.logout">Cerrar sesión</button><button class="btn primary">Desbloquear</button></div></form>`,
+  });
+}
+F['unlock'] = async form => {
+  const ok = await G.core.repo.verifyPassword(form.p.value);
+  if (!ok) { toast('Contraseña incorrecta', 'error'); return; }
+  G.locked = false; G.lastActivity = Date.now(); closeSheet();
+};
+
+A['user.menu'] = () => {
+  const u = G.core.user;
+  openSheet({
+    title: u.nombre, size: 's',
+    render: () => `<p class="muted">${esc(u.usuario)} · ${esc(u.rolNombre)} · ${esc(G.core.device.nombre)} (${esc(G.core.device.code)})</p>
+    <div class="menu">
+      <button class="menu-i" data-a="menu.go" data-v="cuenta">${icon('usuario')}<span>Mi cuenta y contraseña</span></button>
+      <button class="menu-i" data-a="menu.go" data-v="permisos">${icon('escudo')}<span>Permisos del dispositivo</span></button>
+      <button class="menu-i" data-a="session.lock">${icon('candado')}<span>Bloquear pantalla</span></button>
+      <button class="menu-i" data-a="session.logout">${icon('salir')}<span>Cerrar sesión</span></button>
+    </div>`,
+  });
+};
+A['menu.go'] = el => { closeSheet(); setTimeout(() => go(el.dataset.v), 0); };
+A['session.lock'] = () => { closeSheet(); setTimeout(lockScreen, 50); };
+A['session.logout'] = async () => {
+  while (sheets().length) closeSheet();
+  G.locked = false;
+  await G.core.logout(); G.ui.route = 'inicio'; render();
+};
+A['prev.exit'] = () => { G.core.closePrev(); try { localStorage.removeItem('uco:last'); } catch { } go('inicio'); };
+
+// ---------------- arranque ----------------
+async function boot() {
+  const root = document.getElementById('app');
+  root.innerHTML = `<div class="splash">${logoSvg()}<p>Cargando…</p></div>`;
+  let storage;
+  try { storage = await openStorage(); } catch (e) { root.innerHTML = '<div class="splash"><p>No se pudo abrir el almacenamiento: ' + esc(e.message) + '</p></div>'; return; }
+  G.storageKind = storage.kind;
+  if (storage.kind === 'memoria') G.preview = true;
+  const core = new AppCore(storage);
+  G.core = core; G.go = go; G.render = queueRender; G.tick = tick; G.lastActivity = Date.now();
+  await core.boot();
+  core.on((type, data) => {
+    if (type === 'change' && data && data.remote && data.pid === core.cur) { queueRender(); return; }
+    if (type === 'sync') { if (data.pid === core.cur) queueRender(); return; }
+    queueRender();
+  });
+  bindGlobal();
+  setInterval(tick, 1000);
+  setInterval(restWatch, 2000);
+  setInterval(lockWatch, 15000);
+  const h = location.hash.slice(1); if (VIEWS[h]) G.ui.route = h;
+  render();
+  if (!G.preview && 'serviceWorker' in navigator && location.protocol !== 'file:') {
+    try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      reg.addEventListener('updatefound', () => { const w = reg.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) toast('Nueva versión disponible: se aplicará al volver a abrir la aplicación', 'info', 8000); }); });
+    } catch (e) { console.warn('Service worker no registrado', e); }
+  }
+  if (navigator.storage && navigator.storage.persist) { try { G.persisted = await navigator.storage.persisted(); } catch { } }
+}
+/** Tras iniciar sesión: abre el último preventivo usado */
+export async function afterLogin() {
+  try { const last = localStorage.getItem('uco:last'); if (last && (G.core.summaries || []).some(s => s.id === last)) { await G.core.openPrev(last); go(['panel', 'unidades', 'avisos', 'plano'].includes(G.ui.route) ? G.ui.route : 'panel'); return; } } catch (e) { console.warn(e); }
+  go('inicio');
+  if (navigator.storage && navigator.storage.persist && !G.preview) { try { G.persisted = await navigator.storage.persist(); } catch { } }
+}
+async function afterLoginWrap() {
+  await afterLogin();
+  setTimeout(() => { if (G.askPerms) G.askPerms(); }, 700);
+}
+G.afterLogin = afterLoginWrap;
+export { VIEWS, APP_VERSION };
+
+if (typeof window !== 'undefined') window.addEventListener('DOMContentLoaded', boot);
+// expuesto para pruebas automatizadas
+if (typeof window !== 'undefined') window.__UCO = G;

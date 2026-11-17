@@ -1,0 +1,161 @@
+{
+ "fecha": "2026-11-17 17:42:20",
+ "navegador": "Google Chrome (Playwright)",
+ "resultados": [
+  {
+   "prueba": "Alta inicial del administrador y clave de recuperación",
+   "resultado": "SUPERADA",
+   "detalle": "clave 98GQY…"
+  },
+  {
+   "prueba": "Permisos del dispositivo: solicitar todos",
+   "resultado": "SUPERADA",
+   "detalle": "aviso al primer acceso; ubicación y notificaciones concedidas; queda en la auditoría"
+  },
+  {
+   "prueba": "Crear preventivo independiente y activarlo",
+   "resultado": "SUPERADA",
+   "detalle": ""
+  },
+  {
+   "prueba": "Unidades: crear desde el formulario",
+   "resultado": "SUPERADA",
+   "detalle": "3 unidades"
+  },
+  {
+   "prueba": "Unidades: editar y personalizar apariencia",
+   "resultado": "SUPERADA",
+   "detalle": "nombre, forma, icono y tamaño personalizados"
+  },
+  {
+   "prueba": "Color C0: personalizar en C0",
+   "resultado": "SUPERADA",
+   "detalle": "color principal y borde = #AA00AA en C0"
+  },
+  {
+   "prueba": "Avisos: crear, numerar, sugerir y asignar; claves C1-C3",
+   "resultado": "SUPERADA",
+   "detalle": "Nº 1 · AMB-01 C1 → C2 → C3 · aviso en curso"
+  },
+  {
+   "prueba": "Color C0: bloqueo fuera de C0, color de clave y borde C0",
+   "resultado": "SUPERADA",
+   "detalle": "fuera de C0: principal = color de clave C3, borde = C0, edición bloqueada"
+  },
+  {
+   "prueba": "Descansos: bloqueo con aviso activo",
+   "resultado": "SUPERADA",
+   "detalle": "botón de descanso deshabilitado con aviso activo"
+  },
+  {
+   "prueba": "Descansos: temporizador real que se recupera tras recargar",
+   "resultado": "SUPERADA",
+   "detalle": "cuenta atrás 0:59 → tras recargar 0:56; unidad en gris"
+  },
+  {
+   "prueba": "Avisos: finalizar y apartado de finalizados",
+   "resultado": "SUPERADA",
+   "detalle": "aparece en Avisos finalizados; AMB-01 liberada a C0"
+  },
+  {
+   "prueba": "Color C0: recuperación al volver a C0 y persistencia",
+   "resultado": "SUPERADA",
+   "detalle": "al regresar a C0 recupera #AA00AA"
+  },
+  {
+   "prueba": "Descansos: fin automático y recuperación del estado",
+   "resultado": "SUPERADA",
+   "detalle": "fin automático: vuelve a C0 con su color, sin sobrescribir la clave"
+  },
+  {
+   "prueba": "Claves especiales: CESP con motivo",
+   "resultado": "SUPERADA",
+   "detalle": "CESP con motivo del desplegable"
+  },
+  {
+   "prueba": "Plano táctico: importar, colocar unidades y persistencia",
+   "resultado": "SUPERADA",
+   "detalle": "imagen importada; 2 unidades colocadas; posiciones persistentes tras recargar"
+  },
+  {
+   "prueba": "Estadísticas: vistas con datos reales",
+   "resultado": "SUPERADA",
+   "detalle": "vistas por preventivo, unidad y aviso"
+  },
+  {
+   "prueba": "Bitácora: registro cronológico",
+   "resultado": "SUPERADA",
+   "detalle": "18 registros con usuario y valores anterior/nuevo"
+  },
+  {
+   "prueba": "Cronología individual de unidad",
+   "resultado": "SUPERADA",
+   "detalle": "10 acontecimientos con duraciones"
+  },
+  {
+   "prueba": "Informes: PDF, JSON y CSV con contenido real",
+   "resultado": "SUPERADA",
+   "detalle": "PDF 40 KB, JSON con 18 operaciones, ZIP con 8 CSV"
+  },
+  {
+   "prueba": "Funcionamiento sin conexión (modo avión)",
+   "resultado": "SUPERADA",
+   "detalle": "modo avión: recarga, sesión, aviso nº 2, descanso, plano e informe PDF sin red"
+  },
+  {
+   "prueba": "Plantillas: crear, aplicar y aislamiento",
+   "resultado": "SUPERADA",
+   "detalle": "preventivo desde plantilla: 3 unidades, plano y colores; 0 avisos; cambios posteriores en la plantilla no le afectan"
+  },
+  {
+   "prueba": "Usuarios, roles y permisos",
+   "resultado": "SUPERADA",
+   "detalle": "Consulta sin acciones operativas; Operador crea avisos pero no edita configuración"
+  },
+  {
+   "prueba": "Cierre del preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "cerrado con advertencias registradas, archivado y en solo lectura"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (móvil)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Compartido: crear preventivo con servidor",
+   "resultado": "SUPERADA",
+   "detalle": "código de incorporación generado"
+  },
+  {
+   "prueba": "Compartido: incorporar otro dispositivo",
+   "resultado": "SUPERADA",
+   "detalle": "el móvil recibe el preventivo y sus 3 unidades"
+  },
+  {
+   "prueba": "Compartido: avisos simultáneos sin duplicados",
+   "resultado": "SUPERADA",
+   "detalle": "números definitivos únicos 1 y 2 en ambos dispositivos"
+  },
+  {
+   "prueba": "Compartido: desconexión, trabajo local y reconexión",
+   "resultado": "SUPERADA",
+   "detalle": "trabajo sin red (ref. provisional M-2), reconexión y convergencia sin pérdidas"
+  },
+  {
+   "prueba": "Compartido: resolución de conflictos",
+   "resultado": "SUPERADA",
+   "detalle": "conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador"
+  },
+  {
+   "prueba": "Tablet: panel operativo multicolumna",
+   "resultado": "SUPERADA",
+   "detalle": "panel de 3 columnas y navegación lateral"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (multidispositivo)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  }
+ ]
+}

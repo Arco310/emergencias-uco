@@ -1,0 +1,65 @@
+{
+ "fecha": "2026-11-17 17:42:58",
+ "comprobaciones": [
+  {
+   "comprobacion": "Instalable como aplicación (criterios de Chrome)",
+   "resultado": "CORRECTA",
+   "detalle": "sin errores de instalabilidad"
+  },
+  {
+   "comprobacion": "Manifiesto válido",
+   "resultado": "CORRECTA",
+   "detalle": "http://127.0.0.1:8650/manifest.webmanifest"
+  },
+  {
+   "comprobacion": "Service worker activo (uso sin conexión)",
+   "resultado": "CORRECTA",
+   "detalle": "controla la página tras la primera carga"
+  },
+  {
+   "comprobacion": "Controles con nombre accesible (24 pantallas)",
+   "resultado": "CORRECTA",
+   "detalle": "todos los botones, enlaces y campos tienen nombre"
+  },
+  {
+   "comprobacion": "Controles táctiles de al menos 32 px",
+   "resultado": "CORRECTA",
+   "detalle": "ningún control por debajo de 32 px (la mayoría 44 px)"
+  },
+  {
+   "comprobacion": "Identificadores únicos en cada pantalla",
+   "resultado": "CORRECTA",
+   "detalle": "sin duplicados"
+  },
+  {
+   "comprobacion": "Sin errores de JavaScript en el recorrido",
+   "resultado": "CORRECTA",
+   "detalle": "ninguno"
+  },
+  {
+   "comprobacion": "Contraste del texto sobre el color de cada clave (WCAG AA ≥ 4,5)",
+   "resultado": "CORRECTA",
+   "detalle": "8 claves correctas"
+  },
+  {
+   "comprobacion": "Sin claves ni credenciales en la aplicación publicada",
+   "resultado": "CORRECTA",
+   "detalle": "ninguna clave de API ni secreto"
+  },
+  {
+   "comprobacion": "Política de seguridad de contenidos (CSP)",
+   "resultado": "CORRECTA",
+   "detalle": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; fon…"
+  },
+  {
+   "comprobacion": "Servidor con HTTPS (certificado propio)",
+   "resultado": "CORRECTA",
+   "detalle": "API y aplicación servidas por HTTPS"
+  },
+  {
+   "comprobacion": "Servidor: rechaza datos no válidos, envíos enormes, rutas fuera de la carpeta y accesos sin credenciales",
+   "resultado": "CORRECTA",
+   "detalle": "JSON roto 400, 26 MB -1, ruta 403, sin token 404"
+  }
+ ]
+}
