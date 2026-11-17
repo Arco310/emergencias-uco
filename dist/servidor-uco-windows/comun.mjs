@@ -12,6 +12,7 @@ export const TAREA = 'GestorUCO Servidor';
 export const SCHTASKS = process.env.UCO_SCHTASKS || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe');
 export const TAILSCALE = process.env.UCO_TAILSCALE || win32.join(process.env.ProgramFiles || 'C:\\Program Files', 'Tailscale', 'tailscale.exe');
 export const CMD = win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe');
+export const POWERCFG = process.env.UCO_POWERCFG || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'powercfg.exe');
 export const NODE = process.env.UCO_NODE || process.execPath;
 export const RUTAS = {
   servidor: join(BASE, 'servidor', 'server.mjs'), app: join(BASE, 'app'), datos: join(BASE, 'datos'),

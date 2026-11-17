@@ -1,0 +1,32 @@
+{
+ "app": "https://arco310.github.io/emergencias-uco/",
+ "servidor": "https://desktop-g5s6ch9.tailb6d0d2.ts.net",
+ "fecha": "2026-11-18 00:09",
+ "resultados": [
+  {
+   "comprobacion": "Crear preventivo compartido con el servidor",
+   "resultado": "CORRECTA",
+   "detalle": "preventivo registrado en el servidor y código de incorporación generado"
+  },
+  {
+   "comprobacion": "Incorporar el segundo dispositivo",
+   "resultado": "CORRECTA",
+   "detalle": "el móvil recibe el preventivo y sus 2 unidades por Internet"
+  },
+  {
+   "comprobacion": "Avisos simultáneos numerados por el servidor",
+   "resultado": "CORRECTA",
+   "detalle": "números definitivos 1 y 2, únicos en ambos dispositivos"
+  },
+  {
+   "comprobacion": "Desconexión y reconexión",
+   "resultado": "CORRECTA",
+   "detalle": "trabajo sin red, reconexión y convergencia sin pérdidas ni duplicados"
+  },
+  {
+   "comprobacion": "Sin errores de JavaScript",
+   "resultado": "CORRECTA",
+   "detalle": ""
+  }
+ ]
+}

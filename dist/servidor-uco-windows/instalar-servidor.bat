@@ -28,11 +28,11 @@ if errorlevel 1 (
 )
 if not exist "%NODE%" (
   echo Instalando Node.js LTS...
-  winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+  winget install -e --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements
 )
 if not exist "%TS%" (
   echo Instalando Tailscale...
-  winget install -e --id Tailscale.Tailscale --accept-source-agreements --accept-package-agreements
+  winget install -e --id Tailscale.Tailscale --source winget --accept-source-agreements --accept-package-agreements
 )
 :instalar
 if not exist "%NODE%" for /f "delims=" %%i in ('where node 2^>nul') do set "NODE=%%i"

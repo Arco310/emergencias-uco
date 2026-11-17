@@ -2,7 +2,7 @@
 // copia los archivos, crea una tarea que lo arranca al encender el equipo y lo publica en
 // Internet con una dirección HTTPS fija mediante Tailscale Funnel.
 // Se ejecuta desde instalar-servidor.bat (con permisos de administrador).
-import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -16,8 +16,10 @@ const preguntar = async txt => {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try { return (await rl.question(txt)).trim(); } finally { rl.close(); }
 };
-const fallo = msg => { console.log('\n✖ ' + msg); process.exit(1); };
-const ok = msg => console.log('✔ ' + msg);
+// Respuestas dadas de antemano (opcional): opciones.json junto al instalador, p. ej. { "evitarSuspension": true }
+const OPC = (() => { try { return JSON.parse(readFileSync(process.env.UCO_OPCIONES || join(AQUI, 'opciones.json'), 'utf8')); } catch { return {}; } })();
+const fallo = msg => { console.log('\n[ERROR] ' + msg); process.exit(1); };
+const ok = msg => console.log('[OK] ' + msg);
 const libre = p => new Promise(res => { const s = createServer(); s.once('error', () => res(false)); s.listen(p, '127.0.0.1', () => s.close(() => res(true))); });
 
 async function elegirPuerto() {
@@ -80,13 +82,15 @@ async function main() {
   console.log('\nComprobando la dirección pública (la primera vez el certificado puede tardar un par de minutos)…');
   const pub = await U.esperar(() => U.salud(process.env.UCO_URL_PRUEBA || url, 8000), U.SIM ? 10 : 150, 5000);
   if (pub) ok('Responde desde Internet: ' + url);
-  else console.log('⚠ Todavía no responde desde Internet. Espera unos minutos y comprueba con estado-servidor.bat.');
+  else console.log('[AVISO] Todavía no responde desde Internet. Espera unos minutos y comprueba con estado-servidor.bat.');
 
-  // 5. Evitar la suspensión del equipo (con permiso del usuario)
-  if (!U.SIM) {
-    const r = await preguntar('\n¿Evitar que este PC se suspenda cuando está enchufado? Así el servidor sigue disponible. (S/n): ');
-    if (!/^n/i.test(r)) { U.run('powercfg', ['/change', 'standby-timeout-ac', '0']); ok('Suspensión desactivada con el PC enchufado'); }
-  }
+  // 5. Evitar la suspensión del equipo enchufado: solo con permiso (respuesta en opciones.json o pregunta)
+  let evitar = OPC.evitarSuspension;
+  if (typeof evitar !== 'boolean') evitar = U.SIM ? false : !/^n/i.test(await preguntar('\n¿Evitar que este PC se suspenda cuando está enchufado? Así el servidor sigue disponible. (S/n): '));
+  if (evitar) {
+    const r = U.run(U.POWERCFG, ['/change', 'standby-timeout-ac', '0']);
+    if (r.code === 0) ok('Suspensión desactivada con el PC enchufado'); else console.log('[AVISO] No se pudo desactivar la suspensión: ' + r.out.trim());
+  } else console.log('[--] Suspensión del equipo sin cambios');
 
   writeFileSync(U.RUTAS.direccion, [
     'Servidor de sincronización del Gestor de Emergencias UCO', '', 'Dirección: ' + url, '',

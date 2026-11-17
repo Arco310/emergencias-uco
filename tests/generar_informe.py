@@ -38,6 +38,7 @@ def main():
     sub = load(T('checks', 'resultados-subcarpeta.json'))
     viv = load(T('checks', 'resultados-en-vivo.json'))
     mapas = load(T('checks', 'resultados-mapas.json'))
+    sinc = load(T('checks', 'resultados-sincronizacion-en-vivo.json'))
     motor = load(T('perf', 'resultados-motor.json'))
     nav = [load(T('perf', f'resultados-navegador-{n}.json')) for n in (300, 3000)]
 
@@ -51,6 +52,7 @@ def main():
         ('Publicación en subcarpeta como en GitHub Pages (local)', len(sub['resultados']), ok(sub['resultados'])),
         ('Plataforma publicada en GitHub Pages (en vivo, por Internet)', len(viv['resultados']), ok(viv['resultados'])),
         ('Mapas y búsqueda de coordenadas en vivo (Google y OpenStreetMap)', len(mapas['resultados']), ok(mapas['resultados'])),
+        ('Sincronización real por Internet con el servidor instalado (2 dispositivos)', len(sinc['resultados']), ok(sinc['resultados'])),
     ]
     tot = sum(b[1] for b in bloques); sup = sum(b[2] for b in bloques)
     L = ['# Informe de pruebas', '',
@@ -79,6 +81,9 @@ def main():
                              ('3 quinquies. Plataforma publicada (`tests/checks/subruta_pages.py URL`, en vivo)', viv, ' · Chrome a través de Internet; los archivos publicados coinciden byte a byte con `dist/app/`'),
                              ('3 sexies. Mapas en vivo (`tests/checks/mapas_en_vivo.py`)', mapas, ' · capturas en `tests/checks/capturas-mapas/`')]:
         L += ['## ' + titulo, f"URL: {d['url']} · {d['fecha']}{extra}", '', tabla([(r['comprobacion'], r['resultado'], r['detalle']) for r in d['resultados']]), '']
+    L += ['## 3 septies. Sincronización real por Internet (`tests/checks/sincronizacion_en_vivo.py`)',
+          f"Aplicación {sinc['app']} y servidor {sinc['servidor']} (PC con Windows 10, instalado con `servidor-uco-windows`, publicado con Tailscale Funnel) · {sinc['fecha']}. Tablet y móvil con almacenamiento independiente; deja en el servidor el preventivo cifrado «PRUEBA DE FUNCIONAMIENTO».", '',
+          tabla([(r['comprobacion'], r['resultado'], r['detalle']) for r in sinc['resultados']]), '']
     L += [ESTATICO_4_5]
     # 6. Rendimiento
     L += ['## 6. Rendimiento con preventivos grandes (`tests/perf/`)',
@@ -126,8 +131,8 @@ ESTATICO_4_5 = """## 4. Correspondencia con las pruebas de aceptación del plieg
 - **Dispositivos Android físicos**: las pruebas usan Chrome con emulación táctil de teléfono y tablet y con las restricciones de Android simuladas, no terminales reales. Se recomienda una prueba en campo con los modelos que se vayan a usar (instalación como aplicación, modo avión, rotación de pantalla).
 - **Avisos, vibración y pantalla encendida en un terminal**: comprobados en Chrome simulando las restricciones de Android. Para confirmarlos en cada terminal: *Sistema → Permisos del dispositivo → «Probar»* en Notificaciones y en Vibración.
 - **Mapas en terminales Android reales**: el mapa de Google sin clave, el de OpenStreetMap y la búsqueda de coordenadas se han comprobado en vivo por Internet con Chrome (emulación de tablet), no en un terminal físico. El formato de Google sin clave no es oficial y podría dejar de funcionar; por eso la aplicación ofrece también el mapa de OpenStreetMap y el botón «Abrir en Google Maps». El GPS se ha probado con posición simulada.
-- **Servidor de sincronización publicado con HTTPS real**: probado en local por HTTP y HTTPS con certificado propio; todavía no hay ningún servidor publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
-- **Instalador del servidor para Windows** (`servidor-uco-windows.zip`): probado en modo simulado en Linux (órdenes de Windows y de Tailscale sustituidas; el servidor y los archivos generados son reales, y la tarea programada es XML válido). No se ha ejecutado en un Windows real ni con una cuenta de Tailscale: la primera instalación en el PC servidor es la prueba definitiva; `estado-servidor.bat` comprueba que responde desde Internet.
+- **Arranque automático tras reiniciar el PC servidor**: la tarea programada se creó y arrancó el servidor como SYSTEM en un Windows 10 real (comprobado en su registro), pero no se ha reiniciado el equipo para verlo volver solo.
+- **Instalador del servidor para Windows**: ejecutado en un Windows 10 real (DESKTOP-G5S6CH9) hasta dejar el servidor publicado. La primera ejecución destapó dos fallos que la simulación no veía, ya corregidos: winget fallaba al consultar la Microsoft Store (error de certificado 0x8a15005e) y la consola de Windows 10 no mostraba los símbolos ✔/✖.
 - **Rendimiento en terminales reales**: medido con la CPU ralentizada 4 veces como aproximación; un terminal concreto puede ser más rápido o más lento.
 """
 
@@ -144,6 +149,11 @@ ESTATICO_6_3 = """### 6.3 Mejoras aplicadas tras la primera medición (300 unida
 """
 
 ESTATICO_7 = """## 7. Correcciones derivadas de las comprobaciones
+### Instalador para Windows (tras la instalación real)
+- `winget` se usa solo con el origen `winget`: el de Microsoft Store fallaba en el PC servidor con un error de certificado (0x8a15005e) y Tailscale no se instalaba.
+- Marcas de estado en ASCII (`[OK]`, `[ERROR]`, `[AVISO]`): la consola de Windows 10 no tiene los símbolos ✔ ✖ ⚠.
+- `opciones.json` permite dejar respondida de antemano la pregunta de la suspensión del equipo.
+
 ### Versión 1.0.3
 - **Servidor de sincronización para Windows:** nuevo instalador de doble clic con dirección HTTPS fija gratuita (Tailscale Funnel) y arranque automático; el servidor se identifica en `/api/v1/salud` para que el instalador detecte una instalación anterior.
 

@@ -17,19 +17,21 @@ function entorno({ tsInicial = 'Running' } = {}) {
   const log = join(dir, 'ordenes.log'), est = join(dir, 'ts-estado');
   writeFileSync(est, tsInicial);
   const fake = (nombre, cuerpo) => { const f = join(dir, nombre); writeFileSync(f, '#!/bin/sh\necho "' + nombre + ' $*" >> "' + log + '"\n' + cuerpo); chmodSync(f, 0o755); return f; };
+  const powercfg = fake('powercfg', 'exit 0\n');
   const schtasks = fake('schtasks', 'case "$1" in /Query) [ -f "' + dir + '/tarea" ] && echo "GestorUCO Servidor  Listo" && exit 0; exit 1;;\n /Create) touch "' + dir + '/tarea";;\n /Delete) rm -f "' + dir + '/tarea";;\nesac\nexit 0\n');
   const tailscale = fake('tailscale', 'case "$1" in status) echo "{\\"BackendState\\":\\"$(cat ' + est + ')\\",\\"Self\\":{\\"DNSName\\":\\"pc-prueba.tail1234.ts.net.\\"}}";;\n up) echo Running > "' + est + '";;\nesac\nexit 0\n');
-  return { dir, log, base: join(dir, 'GestorUCO'), schtasks, tailscale };
+  return { dir, log, base: join(dir, 'GestorUCO'), schtasks, tailscale, powercfg };
 }
 const correr = (script, e, puerto, extra = {}) => spawnSync(process.execPath, [join(PKG, script)], {
   encoding: 'utf8', timeout: 90000,
-  env: { ...process.env, UCO_SIMULAR: '1', UCO_SIN_PREGUNTAS: '1', UCO_BASE: e.base, UCO_PUERTO: String(puerto), UCO_SCHTASKS: e.schtasks, UCO_TAILSCALE: e.tailscale, UCO_URL_PRUEBA: 'http://127.0.0.1:' + puerto + '/', ...extra },
+  env: { ...process.env, UCO_SIMULAR: '1', UCO_SIN_PREGUNTAS: '1', UCO_BASE: e.base, UCO_PUERTO: String(puerto), UCO_SCHTASKS: e.schtasks, UCO_TAILSCALE: e.tailscale, UCO_POWERCFG: e.powercfg, UCO_URL_PRUEBA: 'http://127.0.0.1:' + puerto + '/', ...extra },
 });
 
 test('instalador para Windows: instala, arranca, publica, informa del estado y desinstala conservando los datos', async () => {
   assert.ok(existsSync(join(PKG, 'instalar-servidor.bat')), 'paquete generado por build.mjs');
   const e = entorno({ tsInicial: 'NeedsLogin' }); const p = await libre();
-  const r = correr('instalar.mjs', e, p);
+  const opc = join(e.dir, 'opciones.json'); writeFileSync(opc, JSON.stringify({ evitarSuspension: true }));
+  const r = correr('instalar.mjs', e, p, { UCO_OPCIONES: opc });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /SERVIDOR INSTALADO/);
   assert.match(r.stdout, /https:\/\/pc-prueba\.tail1234\.ts\.net\//);
@@ -53,13 +55,14 @@ test('instalador para Windows: instala, arranca, publica, informa del estado y d
   assert.match(ordenes, /schtasks \/Create \/TN GestorUCO Servidor \/XML .*tarea\.xml \/F/);
   assert.match(ordenes, /tailscale up --unattended/, 'inicia sesión en Tailscale si hace falta');
   assert.match(ordenes, new RegExp('tailscale funnel --bg ' + p), 'publica el puerto del servidor con HTTPS');
+  assert.match(ordenes, /powercfg \/change standby-timeout-ac 0/, 'evita la suspensión solo porque opciones.json lo autoriza');
   // El servidor funciona de verdad con esos argumentos
   const salud = await (await fetch('http://127.0.0.1:' + p + '/api/v1/salud')).json();
   assert.equal(salud.servicio, 'gestor-emergencias-uco');
   // Estado
   const s = correr('estado.mjs', e, p);
-  assert.match(s.stdout, /✔ Arranque automático/); assert.match(s.stdout, /✔ En este equipo: funcionando/);
-  assert.match(s.stdout, /✔ Tailscale: conectado \(pc-prueba\.tail1234\.ts\.net\)/); assert.match(s.stdout, /✔ Desde Internet: responde/);
+  assert.match(s.stdout, /\[OK\] Arranque automático/); assert.match(s.stdout, /\[OK\] En este equipo: funcionando/);
+  assert.match(s.stdout, /\[OK\] Tailscale: conectado \(pc-prueba\.tail1234\.ts\.net\)/); assert.match(s.stdout, /\[OK\] Desde Internet: responde/);
   // Desinstalación: detiene, quita la tarea y Funnel, conserva los datos
   writeFileSync(join(e.base, 'datos', 'prueba.txt'), 'dato');
   const d = correr('desinstalar.mjs', e, p);
@@ -82,6 +85,7 @@ test('instalador para Windows: si el puerto está ocupado por otro programa, usa
     assert.match(readFileSync(join(e.base, 'arrancar.cmd'), 'utf8'), new RegExp('--port ' + (p + 1)));
     assert.match(readFileSync(e.log, 'utf8'), new RegExp('tailscale funnel --bg ' + (p + 1)));
     assert.match(readFileSync(e.log, 'utf8'), /tailscale set --unattended/, 'con sesión ya iniciada solo activa el modo desatendido');
+    assert.doesNotMatch(readFileSync(e.log, 'utf8'), /powercfg/, 'sin autorización no se cambia la suspensión');
   } finally {
     otro.close(); correr('desinstalar.mjs', e, p + 1);
   }

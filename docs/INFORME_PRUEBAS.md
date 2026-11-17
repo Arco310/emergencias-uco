@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha de generación: 17/11/2026 22:33 (hora peninsular) · Versión 1.0.3 · compilación final
+Fecha de generación: 18/11/2026 00:10 (hora peninsular) · Versión 1.0.3 · compilación final
 
 | Bloque | Pruebas | Superadas | Fallidas |
 |---|---:|---:|---:|
@@ -12,7 +12,8 @@ Fecha de generación: 17/11/2026 22:33 (hora peninsular) · Versión 1.0.3 · co
 | Publicación en subcarpeta como en GitHub Pages (local) | 7 | 7 | 0 |
 | Plataforma publicada en GitHub Pages (en vivo, por Internet) | 7 | 7 | 0 |
 | Mapas y búsqueda de coordenadas en vivo (Google y OpenStreetMap) | 5 | 5 | 0 |
-| **Total** | **111** | **111** | **0** |
+| Sincronización real por Internet con el servidor instalado (2 dispositivos) | 5 | 5 | 0 |
+| **Total** | **116** | **116** | **0** |
 
 Todas las pruebas listadas se han **ejecutado realmente** y este informe se genera a partir de sus archivos de resultados (`tests/generar_informe.py`): `tests/resultados-node.tap`, `tests/e2e/resultados.json`, `tests/checks/resultados*.json` y `tests/perf/resultados-*.json`. Capturas en `tests/e2e/capturas/` y `tests/checks/capturas-mapas/`. Además se han medido los tiempos de respuesta (apartado 6).
 
@@ -167,6 +168,17 @@ URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 22:33 · capturas 
 | Lugar del preventivo guardado y mostrado en «Mapa» | CORRECTA | Mezquita-Catedral de Córdoba (37.879026, -4.779453) · enlace https://www.google.com/maps/search/?api=1&query=37.879026%2C-4.779453 |
 | Sin errores de JavaScript | CORRECTA |  |
 
+## 3 septies. Sincronización real por Internet (`tests/checks/sincronizacion_en_vivo.py`)
+Aplicación https://arco310.github.io/emergencias-uco/ y servidor https://desktop-g5s6ch9.tailb6d0d2.ts.net (PC con Windows 10, instalado con `servidor-uco-windows`, publicado con Tailscale Funnel) · 2026-11-18 00:09. Tablet y móvil con almacenamiento independiente; deja en el servidor el preventivo cifrado «PRUEBA DE FUNCIONAMIENTO».
+
+| Comprobación | Resultado | Detalle |
+|---|---|---|
+| Crear preventivo compartido con el servidor | CORRECTA | preventivo registrado en el servidor y código de incorporación generado |
+| Incorporar el segundo dispositivo | CORRECTA | el móvil recibe el preventivo y sus 2 unidades por Internet |
+| Avisos simultáneos numerados por el servidor | CORRECTA | números definitivos 1 y 2, únicos en ambos dispositivos |
+| Desconexión y reconexión | CORRECTA | trabajo sin red, reconexión y convergencia sin pérdidas ni duplicados |
+| Sin errores de JavaScript | CORRECTA |  |
+
 ## 4. Correspondencia con las pruebas de aceptación del pliego (sección 25)
 | Pliego | Cubierto por |
 |---|---|
@@ -187,8 +199,8 @@ URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 22:33 · capturas 
 - **Dispositivos Android físicos**: las pruebas usan Chrome con emulación táctil de teléfono y tablet y con las restricciones de Android simuladas, no terminales reales. Se recomienda una prueba en campo con los modelos que se vayan a usar (instalación como aplicación, modo avión, rotación de pantalla).
 - **Avisos, vibración y pantalla encendida en un terminal**: comprobados en Chrome simulando las restricciones de Android. Para confirmarlos en cada terminal: *Sistema → Permisos del dispositivo → «Probar»* en Notificaciones y en Vibración.
 - **Mapas en terminales Android reales**: el mapa de Google sin clave, el de OpenStreetMap y la búsqueda de coordenadas se han comprobado en vivo por Internet con Chrome (emulación de tablet), no en un terminal físico. El formato de Google sin clave no es oficial y podría dejar de funcionar; por eso la aplicación ofrece también el mapa de OpenStreetMap y el botón «Abrir en Google Maps». El GPS se ha probado con posición simulada.
-- **Servidor de sincronización publicado con HTTPS real**: probado en local por HTTP y HTTPS con certificado propio; todavía no hay ningún servidor publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
-- **Instalador del servidor para Windows** (`servidor-uco-windows.zip`): probado en modo simulado en Linux (órdenes de Windows y de Tailscale sustituidas; el servidor y los archivos generados son reales, y la tarea programada es XML válido). No se ha ejecutado en un Windows real ni con una cuenta de Tailscale: la primera instalación en el PC servidor es la prueba definitiva; `estado-servidor.bat` comprueba que responde desde Internet.
+- **Arranque automático tras reiniciar el PC servidor**: la tarea programada se creó y arrancó el servidor como SYSTEM en un Windows 10 real (comprobado en su registro), pero no se ha reiniciado el equipo para verlo volver solo.
+- **Instalador del servidor para Windows**: ejecutado en un Windows 10 real (DESKTOP-G5S6CH9) hasta dejar el servidor publicado. La primera ejecución destapó dos fallos que la simulación no veía, ya corregidos: winget fallaba al consultar la Microsoft Store (error de certificado 0x8a15005e) y la consola de Windows 10 no mostraba los símbolos ✔/✖.
 - **Rendimiento en terminales reales**: medido con la CPU ralentizada 4 veces como aproximación; un terminal concreto puede ser más rápido o más lento.
 
 ## 6. Rendimiento con preventivos grandes (`tests/perf/`)
@@ -243,6 +255,11 @@ Datos cifrados en IndexedDB e interfaz real; tiempo desde la pulsación hasta qu
 | Tamaño del informe PDF (853 páginas) | 21 MB | 2,3 MB | El contenido de las páginas se comprime (FlateDecode); validado con qpdf y pdftotext |
 
 ## 7. Correcciones derivadas de las comprobaciones
+### Instalador para Windows (tras la instalación real)
+- `winget` se usa solo con el origen `winget`: el de Microsoft Store fallaba en el PC servidor con un error de certificado (0x8a15005e) y Tailscale no se instalaba.
+- Marcas de estado en ASCII (`[OK]`, `[ERROR]`, `[AVISO]`): la consola de Windows 10 no tiene los símbolos ✔ ✖ ⚠.
+- `opciones.json` permite dejar respondida de antemano la pregunta de la suspensión del equipo.
+
 ### Versión 1.0.3
 - **Servidor de sincronización para Windows:** nuevo instalador de doble clic con dirección HTTPS fija gratuita (Tailscale Funnel) y arranque automático; el servidor se identifica en `/api/v1/salud` para que el instalador detecte una instalación anterior.
 
