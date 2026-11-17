@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
   if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : 'true']);
   return acc;
@@ -91,7 +91,7 @@ function auth(req, p) {
 
 async function api(req, res, url) {
   const parts = url.pathname.split('/').filter(Boolean); // api v1 ...
-  if (parts[2] === 'salud') return send(res, 200, { ok: true, version: VERSION, hora: Date.now() });
+  if (parts[2] === 'salud') return send(res, 200, { ok: true, servicio: 'gestor-emergencias-uco', version: VERSION, hora: Date.now() });
   if (parts[2] !== 'prev') return send(res, 404, { error: 'No encontrado' });
   if (parts.length === 3 && req.method === 'POST') {
     const b = await readJson(req);

@@ -1,266 +1,278 @@
 
-> gestor-emergencias-uco@1.0.2 test
+> gestor-emergencias-uco@1.0.3 test
 > node --test --test-force-exit tests/unit/*.test.mjs tests/server/*.test.mjs
 
 TAP version 13
-# Subtest: A crea un preventivo compartido y B se incorpora con el código
-ok 1 - A crea un preventivo compartido y B se incorpora con el código
+# Subtest: instalador para Windows: instala, arranca, publica, informa del estado y desinstala conservando los datos
+ok 1 - instalador para Windows: instala, arranca, publica, informa del estado y desinstala conservando los datos
   ---
-  duration_ms: 276.469376
+  duration_ms: 1893.506299
+  type: 'test'
+  ...
+# Subtest: instalador para Windows: si el puerto está ocupado por otro programa, usa el siguiente libre
+ok 2 - instalador para Windows: si el puerto está ocupado por otro programa, usa el siguiente libre
+  ---
+  duration_ms: 5189.452541
+  type: 'test'
+  ...
+# Subtest: A crea un preventivo compartido y B se incorpora con el código
+ok 3 - A crea un preventivo compartido y B se incorpora con el código
+  ---
+  duration_ms: 282.85013
   type: 'test'
   ...
 # Subtest: avisos creados a la vez en dos dispositivos: sin duplicados y numeración única
-ok 2 - avisos creados a la vez en dos dispositivos: sin duplicados y numeración única
+ok 4 - avisos creados a la vez en dos dispositivos: sin duplicados y numeración única
   ---
-  duration_ms: 35.409052
+  duration_ms: 33.970883
   type: 'test'
   ...
 # Subtest: desconexión: B sigue trabajando sin red y al reconectar se sincroniza sin pérdidas
-ok 3 - desconexión: B sigue trabajando sin red y al reconectar se sincroniza sin pérdidas
+ok 5 - desconexión: B sigue trabajando sin red y al reconectar se sincroniza sin pérdidas
   ---
-  duration_ms: 25.698391
+  duration_ms: 25.129923
   type: 'test'
   ...
 # Subtest: conflicto: misma unidad editada sin conexión en ambos dispositivos
-ok 4 - conflicto: misma unidad editada sin conexión en ambos dispositivos
+ok 6 - conflicto: misma unidad editada sin conexión en ambos dispositivos
   ---
-  duration_ms: 34.745494
+  duration_ms: 34.925378
   type: 'test'
   ...
 # Subtest: sincronización por archivo sin servidor
-ok 5 - sincronización por archivo sin servidor
+ok 7 - sincronización por archivo sin servidor
   ---
-  duration_ms: 58.798525
+  duration_ms: 63.772983
   type: 'test'
   ...
 # Subtest: copias: exportación cifrada y restauración completa en otro dispositivo
-ok 6 - copias: exportación cifrada y restauración completa en otro dispositivo
+ok 8 - copias: exportación cifrada y restauración completa en otro dispositivo
   ---
-  duration_ms: 134.204876
+  duration_ms: 148.015809
   type: 'test'
   ...
 # Subtest: seguridad: bloqueo tras intentos fallidos y recuperación con clave
-ok 7 - seguridad: bloqueo tras intentos fallidos y recuperación con clave
+ok 9 - seguridad: bloqueo tras intentos fallidos y recuperación con clave
   ---
-  duration_ms: 256.751539
+  duration_ms: 238.947546
   type: 'test'
   ...
 # Subtest: recuperación del servidor: reenvío completo sin duplicados y conservando la numeración
-ok 8 - recuperación del servidor: reenvío completo sin duplicados y conservando la numeración
+ok 10 - recuperación del servidor: reenvío completo sin duplicados y conservando la numeración
   ---
-  duration_ms: 223.310029
+  duration_ms: 212.324704
   type: 'test'
   ...
 # Subtest: salud y registro del preventivo
-ok 9 - salud y registro del preventivo
+ok 11 - salud y registro del preventivo
   ---
-  duration_ms: 127.686576
+  duration_ms: 133.464592
   type: 'test'
   ...
 # Subtest: autenticación obligatoria
-ok 10 - autenticación obligatoria
+ok 12 - autenticación obligatoria
   ---
-  duration_ms: 5.842352
+  duration_ms: 6.251105
   type: 'test'
   ...
 # Subtest: envío idempotente, numeración concurrente única y lectura incremental
-ok 11 - envío idempotente, numeración concurrente única y lectura incremental
+ok 13 - envío idempotente, numeración concurrente única y lectura incremental
   ---
-  duration_ms: 62.208608
+  duration_ms: 54.335812
   type: 'test'
   ...
 # Subtest: archivos (planos) cifrados
-ok 12 - archivos (planos) cifrados
+ok 14 - archivos (planos) cifrados
   ---
-  duration_ms: 10.374666
+  duration_ms: 8.033733
   type: 'test'
   ...
 # Subtest: persistencia tras reinicio y continuidad de la numeración
-ok 13 - persistencia tras reinicio y continuidad de la numeración
+ok 15 - persistencia tras reinicio y continuidad de la numeración
   ---
-  duration_ms: 121.493085
+  duration_ms: 125.201052
   type: 'test'
   ...
 # Subtest: CORS para la aplicación alojada en otro dominio
-ok 14 - CORS para la aplicación alojada en otro dominio
+ok 16 - CORS para la aplicación alojada en otro dominio
   ---
-  duration_ms: 1.967774
+  duration_ms: 3.187957
   type: 'test'
   ...
 # Subtest: preventivo: creación, activación y unidades desde la creación
-ok 15 - preventivo: creación, activación y unidades desde la creación
+ok 17 - preventivo: creación, activación y unidades desde la creación
   ---
-  duration_ms: 6.569187
+  duration_ms: 7.832493
   type: 'test'
   ...
 # Subtest: color C0: solo editable en C0, borde siempre C0, recuperación al volver a C0
-ok 16 - color C0: solo editable en C0, borde siempre C0, recuperación al volver a C0
+ok 18 - color C0: solo editable en C0, borde siempre C0, recuperación al volver a C0
   ---
-  duration_ms: 3.240142
+  duration_ms: 4.893574
   type: 'test'
   ...
 # Subtest: color C0: el motor rechaza un cambio de color fuera de C0 aunque llegue de otro dispositivo
-ok 17 - color C0: el motor rechaza un cambio de color fuera de C0 aunque llegue de otro dispositivo
+ok 19 - color C0: el motor rechaza un cambio de color fuera de C0 aunque llegue de otro dispositivo
   ---
-  duration_ms: 2.216586
+  duration_ms: 2.697443
   type: 'test'
   ...
 # Subtest: claves: transiciones permitidas, motivo obligatorio en CESP y requisito de aviso
-ok 18 - claves: transiciones permitidas, motivo obligatorio en CESP y requisito de aviso
+ok 20 - claves: transiciones permitidas, motivo obligatorio en CESP y requisito de aviso
   ---
-  duration_ms: 1.872607
+  duration_ms: 2.2291
   type: 'test'
   ...
 # Subtest: avisos: flujo completo C1→C5, liberación al volver a C0 y finalización
-ok 19 - avisos: flujo completo C1→C5, liberación al volver a C0 y finalización
+ok 21 - avisos: flujo completo C1→C5, liberación al volver a C0 y finalización
   ---
-  duration_ms: 3.589311
+  duration_ms: 5.098061
   type: 'test'
   ...
 # Subtest: avisos: numeración correlativa que no depende de los avisos visibles
-ok 20 - avisos: numeración correlativa que no depende de los avisos visibles
+ok 22 - avisos: numeración correlativa que no depende de los avisos visibles
   ---
-  duration_ms: 2.194262
+  duration_ms: 3.381782
   type: 'test'
   ...
 # Subtest: descansos: bloqueo con aviso activo, temporizador real, recuperación tras recargar y fin automático
-ok 21 - descansos: bloqueo con aviso activo, temporizador real, recuperación tras recargar y fin automático
+ok 23 - descansos: bloqueo con aviso activo, temporizador real, recuperación tras recargar y fin automático
   ---
-  duration_ms: 1.5045
+  duration_ms: 2.468224
   type: 'test'
   ...
 # Subtest: descansos: duración distinta de la predeterminada requiere permiso; fin manual; asignación terminando descanso
-ok 22 - descansos: duración distinta de la predeterminada requiere permiso; fin manual; asignación terminando descanso
+ok 24 - descansos: duración distinta de la predeterminada requiere permiso; fin manual; asignación terminando descanso
   ---
-  duration_ms: 1.215926
+  duration_ms: 2.041714
   type: 'test'
   ...
 # Subtest: unidades: indicativo único, eliminación solo sin actividad, archivado conserva historial
-ok 23 - unidades: indicativo único, eliminación solo sin actividad, archivado conserva historial
+ok 25 - unidades: indicativo único, eliminación solo sin actividad, archivado conserva historial
   ---
-  duration_ms: 2.413418
+  duration_ms: 2.894148
   type: 'test'
   ...
 # Subtest: personalización: la unidad hereda del tipo y sus personalizaciones no se sobrescriben
-ok 24 - personalización: la unidad hereda del tipo y sus personalizaciones no se sobrescriben
+ok 26 - personalización: la unidad hereda del tipo y sus personalizaciones no se sobrescriben
   ---
-  duration_ms: 2.886845
+  duration_ms: 2.248372
   type: 'test'
   ...
 # Subtest: catálogos: no se puede eliminar una clave en uso ni dejar sin clave base
-ok 25 - catálogos: no se puede eliminar una clave en uso ni dejar sin clave base
+ok 27 - catálogos: no se puede eliminar una clave en uso ni dejar sin clave base
   ---
-  duration_ms: 1.909631
+  duration_ms: 1.405894
   type: 'test'
   ...
 # Subtest: cierre: advertencias, solo lectura y reapertura con autorización registrada
-ok 26 - cierre: advertencias, solo lectura y reapertura con autorización registrada
+ok 28 - cierre: advertencias, solo lectura y reapertura con autorización registrada
   ---
-  duration_ms: 2.435386
+  duration_ms: 1.61156
   type: 'test'
   ...
 # Subtest: permisos: perfil Consulta no puede operar; Operador no puede configurar
-ok 27 - permisos: perfil Consulta no puede operar; Operador no puede configurar
+ok 29 - permisos: perfil Consulta no puede operar; Operador no puede configurar
   ---
-  duration_ms: 0.795665
+  duration_ms: 0.748224
   type: 'test'
   ...
 # Subtest: validación perezosa: mismo resultado que con copia completa y sin modificar el estado
-ok 28 - validación perezosa: mismo resultado que con copia completa y sin modificar el estado
+ok 30 - validación perezosa: mismo resultado que con copia completa y sin modificar el estado
   ---
-  duration_ms: 80.222675
+  duration_ms: 59.793386
   type: 'test'
   ...
 # Subtest: número asignado por el servidor: actualización directa igual que reconstruir el registro
-ok 29 - número asignado por el servidor: actualización directa igual que reconstruir el registro
+ok 31 - número asignado por el servidor: actualización directa igual que reconstruir el registro
   ---
-  duration_ms: 2.952369
+  duration_ms: 2.592996
   type: 'test'
   ...
 # Subtest: multidispositivo: el mismo conjunto de operaciones produce el mismo estado en cualquier orden
-ok 30 - multidispositivo: el mismo conjunto de operaciones produce el mismo estado en cualquier orden
+ok 32 - multidispositivo: el mismo conjunto de operaciones produce el mismo estado en cualquier orden
   ---
-  duration_ms: 9.289589
+  duration_ms: 12.055571
   type: 'test'
   ...
 # Subtest: multidispositivo: modificaciones simultáneas generan conflicto (no gana la última escritura)
-ok 31 - multidispositivo: modificaciones simultáneas generan conflicto (no gana la última escritura)
+ok 33 - multidispositivo: modificaciones simultáneas generan conflicto (no gana la última escritura)
   ---
-  duration_ms: 4.678066
+  duration_ms: 6.361283
   type: 'test'
   ...
 # Subtest: multidispositivo: asignación y descanso simultáneos sobre la misma unidad
-ok 32 - multidispositivo: asignación y descanso simultáneos sobre la misma unidad
+ok 34 - multidispositivo: asignación y descanso simultáneos sobre la misma unidad
   ---
-  duration_ms: 3.267624
+  duration_ms: 4.525479
   type: 'test'
   ...
 # Subtest: numeración del servidor: números definitivos únicos aunque se creen a la vez
-ok 33 - numeración del servidor: números definitivos únicos aunque se creen a la vez
+ok 35 - numeración del servidor: números definitivos únicos aunque se creen a la vez
   ---
-  duration_ms: 1.676936
+  duration_ms: 2.58435
   type: 'test'
   ...
 # Subtest: HLC: orden total y monotonía con relojes desfasados
-ok 34 - HLC: orden total y monotonía con relojes desfasados
+ok 36 - HLC: orden total y monotonía con relojes desfasados
   ---
-  duration_ms: 0.243003
+  duration_ms: 0.255935
   type: 'test'
   ...
 # Subtest: plantillas: copia independiente, sin identificadores ni datos operativos
-ok 35 - plantillas: copia independiente, sin identificadores ni datos operativos
+ok 37 - plantillas: copia independiente, sin identificadores ni datos operativos
   ---
-  duration_ms: 2.795378
+  duration_ms: 4.089444
   type: 'test'
   ...
 # Subtest: estadísticas: tiempos verificados con datos conocidos
-ok 36 - estadísticas: tiempos verificados con datos conocidos
+ok 38 - estadísticas: tiempos verificados con datos conocidos
   ---
-  duration_ms: 4.049616
+  duration_ms: 5.566541
   type: 'test'
   ...
 # Subtest: exportación: CSV, JSON, ZIP y PDF con contenido real
-ok 37 - exportación: CSV, JSON, ZIP y PDF con contenido real
+ok 39 - exportación: CSV, JSON, ZIP y PDF con contenido real
   ---
-  duration_ms: 50.302188
+  duration_ms: 59.972209
   type: 'test'
   ...
 # Subtest: cifrado: claves envueltas, contraseña incorrecta, sellado y claves de preventivo
-ok 38 - cifrado: claves envueltas, contraseña incorrecta, sellado y claves de preventivo
+ok 40 - cifrado: claves envueltas, contraseña incorrecta, sellado y claves de preventivo
   ---
-  duration_ms: 20.726399
+  duration_ms: 10.70831
   type: 'test'
   ...
 # Subtest: sugerencias: prioriza cercanía, compatibilidad y sector; excluye descanso y ocupadas
-ok 39 - sugerencias: prioriza cercanía, compatibilidad y sector; excluye descanso y ocupadas
+ok 41 - sugerencias: prioriza cercanía, compatibilidad y sector; excluye descanso y ocupadas
   ---
-  duration_ms: 2.896792
+  duration_ms: 2.024545
   type: 'test'
   ...
 # Subtest: geo: coordenadas desde enlaces de Google Maps y distancias
-ok 40 - geo: coordenadas desde enlaces de Google Maps y distancias
+ok 42 - geo: coordenadas desde enlaces de Google Maps y distancias
   ---
-  duration_ms: 1.300498
+  duration_ms: 1.134523
   type: 'test'
   ...
 # Subtest: bitácora: registra usuario, elemento, acción, valor anterior y nuevo
-ok 41 - bitácora: registra usuario, elemento, acción, valor anterior y nuevo
+ok 43 - bitácora: registra usuario, elemento, acción, valor anterior y nuevo
   ---
-  duration_ms: 1.224992
+  duration_ms: 1.230371
   type: 'test'
   ...
 # Subtest: geo: mapas incrustables sin clave (Google y OpenStreetMap)
-ok 42 - geo: mapas incrustables sin clave (Google y OpenStreetMap)
+ok 44 - geo: mapas incrustables sin clave (Google y OpenStreetMap)
   ---
-  duration_ms: 0.474892
+  duration_ms: 0.443047
   type: 'test'
   ...
-1..42
-# tests 42
+1..44
+# tests 44
 # suites 0
-# pass 42
+# pass 44
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1944.199949
+# duration_ms 9058.424461

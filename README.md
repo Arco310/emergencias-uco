@@ -15,8 +15,10 @@ Aplicación para gestionar preventivos y operaciones de emergencia desde teléfo
 | `dist/app/` | **Aplicación lista para publicar** (subir tal cual a un alojamiento HTTPS). |
 | `dist/preview.html` | Vista previa de un solo archivo (sin modo sin conexión ni guardado fiable). |
 | `server/server.mjs` | Servidor de sincronización (Node.js 18+, sin dependencias). También puede servir la aplicación. |
+| `dist/servidor-uco-windows.zip` | **Servidor de sincronización para un PC con Windows**: instalador de doble clic con dirección HTTPS fija gratuita (Tailscale Funnel) y arranque automático. Ver `LEEME.txt` dentro del ZIP. |
+| `servidor-windows/` | Código del instalador para Windows. |
 | `src/` | Código fuente: `core/` (lógica de negocio), `data/` (almacenamiento cifrado y sincronización), `app/` (núcleo), `ui/` (interfaz). |
-| `tests/` | Pruebas automáticas: unidad, servidor e integración, y aceptación en navegador (Playwright). |
+| `tests/` | Pruebas automáticas: unidad, servidor e integración (incluido el instalador para Windows, simulado), aceptación en navegador (Playwright), comprobaciones en vivo y rendimiento (`tests/perf/`). |
 | `docs/` | Guía de alojamiento, manual de usuario, documentación técnica e informe de pruebas. |
 
 ## Puesta en marcha rápida

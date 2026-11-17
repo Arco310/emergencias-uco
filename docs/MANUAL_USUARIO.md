@@ -76,6 +76,7 @@
 - **Cerrar preventivo**: muestra las advertencias (avisos pendientes o activos, unidades ocupadas, descansos, conflictos, cambios sin sincronizar) con enlaces para resolverlas. Puedes cerrar igualmente; las advertencias quedan registradas. Se crea un punto de restauración, se genera el informe y se archiva.
 
 ## 12. Modalidad compartida
+- **Servidor**: para sincronizar por Internet hace falta un servidor de sincronización. Con un PC con Windows, `servidor-uco-windows.zip` lo instala con doble clic y muestra su dirección (`https://….ts.net/`). Pégala en *Sistema → Configuración general → «Servidor por defecto para preventivos compartidos»* antes de crear el preventivo compartido.
 - Al crear un preventivo compartido se muestra el **código de incorporación** (*Más → Sincronización*). Compártelo solo con dispositivos autorizados.
 - En otro dispositivo: **Unirse a un preventivo compartido** y pegar el código.
 - Sin red, cada dispositivo sigue trabajando. Al volver la conexión se sincroniza solo. Sin servidor o sin Internet: **Exportar paquete** e **Importar paquete**.

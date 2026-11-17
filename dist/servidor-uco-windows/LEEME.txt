@@ -1,0 +1,35 @@
+SERVIDOR DE SINCRONIZACIÓN · GESTOR DE EMERGENCIAS UCO (Windows 10 y 11)
+
+Qué hace
+Deja este PC como servidor de sincronización de los preventivos compartidos, con una
+dirección HTTPS fija y gratuita (Tailscale Funnel). Arranca solo al encender el PC,
+aunque nadie inicie sesión en Windows.
+
+Instalar
+1. Descomprime el ZIP en el PC que hará de servidor (no lo ejecutes desde dentro del ZIP).
+2. Doble clic en instalar-servidor.bat y acepta el aviso de administrador. Si Windows
+   muestra «Windows protegió su PC», pulsa «Más información» → «Ejecutar de todas formas».
+3. Si faltan, se instalan Node.js y Tailscale automáticamente (winget).
+4. Se abre el navegador para entrar en Tailscale: crea una cuenta gratuita o entra
+   con Google, Microsoft o GitHub. Solo hace falta en este PC, no en los móviles.
+5. Si aparece un enlace para activar «Funnel» o «HTTPS», ábrelo, actívalo y pulsa Intro.
+6. Al terminar verás la dirección del servidor, por ejemplo
+   https://nombre-del-pc.tail1234.ts.net/ (queda guardada en
+   C:\ProgramData\GestorUCO\DIRECCION.txt).
+
+En la aplicación (en cada dispositivo)
+Sistema → Configuración general → «Servidor por defecto para preventivos compartidos»
+→ pega la dirección. También se puede indicar al crear un preventivo compartido.
+
+Comprobar y desinstalar
+- estado-servidor.bat: muestra si funciona en el PC y si responde desde Internet.
+- desinstalar-servidor.bat: lo detiene y quita el arranque automático (conserva los datos).
+
+A tener en cuenta
+- El PC debe estar encendido y con Internet durante los preventivos. Si se apaga, los
+  dispositivos siguen trabajando sin conexión y se sincronizan cuando vuelve.
+- El instalador pregunta si se evita la suspensión del PC cuando está enchufado.
+- Tailscale es gratuito en su plan Personal, solo para uso no comercial. Si lo usa una
+  empresa o se cobra por el servicio, revisa sus condiciones (plan de pago).
+- Los datos que guarda el servidor están cifrados de extremo a extremo: el servidor no
+  puede leerlos. Copia de seguridad: carpeta C:\ProgramData\GestorUCO\datos.

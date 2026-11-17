@@ -58,6 +58,18 @@ fs.copyFileSync(path.join(ROOT, 'pwa/manifest.webmanifest'), path.join(APP, 'man
 for (const f of fs.readdirSync(path.join(ROOT, 'pwa/icons'))) fs.copyFileSync(path.join(ROOT, 'pwa/icons', f), path.join(APP, 'icons', f));
 fs.writeFileSync(path.join(APP, '.nojekyll'), '');
 fs.writeFileSync(path.join(DIST, 'preview.html'), html({ js: await bundle(true), preview: true }));
+// Paquete del servidor de sincronización para Windows: dist/servidor-uco-windows/ y su ZIP
+const { zipStore } = await import('./src/core/zip.js');
+const PW = path.join(DIST, 'servidor-uco-windows');
+fs.cpSync(path.join(ROOT, 'servidor-windows'), PW, { recursive: true });
+fs.mkdirSync(path.join(PW, 'servidor'), { recursive: true });
+fs.copyFileSync(path.join(ROOT, 'server/server.mjs'), path.join(PW, 'servidor', 'server.mjs'));
+fs.cpSync(APP, path.join(PW, 'app'), { recursive: true });
+const zfiles = [];
+const addDir = (dir, prefix) => { for (const f of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const p = path.join(dir, f.name); if (f.isDirectory()) addDir(p, prefix + f.name + '/'); else zfiles.push({ name: prefix + f.name, data: fs.readFileSync(p) }); } };
+addDir(PW, 'servidor-uco-windows/');
+fs.writeFileSync(path.join(DIST, 'servidor-uco-windows.zip'), zipStore(zfiles, new Date(2026, 0, 1, 12, 0, 0)));
 const kb = f => (fs.statSync(f).size / 1024).toFixed(0) + ' KB';
+console.log('Servidor para Windows: dist/servidor-uco-windows.zip (' + kb(path.join(DIST, 'servidor-uco-windows.zip')) + ', ' + zfiles.length + ' archivos)');
 console.log('Aplicación: dist/app/index.html (' + kb(path.join(APP, 'index.html')) + ') versión ' + version);
 console.log('Vista previa: dist/preview.html (' + kb(path.join(DIST, 'preview.html')) + ')');

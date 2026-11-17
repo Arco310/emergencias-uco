@@ -1,0 +1,6 @@
+*.bat -text
+*.cmd -text
+servidor-windows/LEEME.txt -text
+*.zip binary
+*.png binary
+*.pdf binary

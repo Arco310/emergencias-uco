@@ -27,6 +27,19 @@ El servidor de sincronización también sirve la aplicación (`--static`), así 
 
 ## 2. Servidor de sincronización (modalidad compartida)
 
+### Opción recomendada: un PC con Windows, gratis (instalador incluido)
+`dist/servidor-uco-windows.zip` deja un PC con Windows 10 u 11 como servidor, con una **dirección HTTPS fija y gratuita** mediante **Tailscale Funnel** y **arranque automático** al encender el equipo (sin iniciar sesión en Windows).
+1. Descomprime el ZIP en ese PC y haz doble clic en `instalar-servidor.bat` (pide permisos de administrador).
+2. Instala Node.js y Tailscale si faltan (winget), copia el servidor a `C:\ProgramData\GestorUCO`, crea la tarea programada «GestorUCO Servidor» y lo arranca.
+3. Pide iniciar sesión en Tailscale (cuenta gratuita; con Google, Microsoft o GitHub) y, la primera vez, activar Funnel con un enlace.
+4. Muestra la dirección (`https://nombre-del-pc.xxxx.ts.net/`) y la guarda en `C:\ProgramData\GestorUCO\DIRECCION.txt`. Pregunta si se evita la suspensión del PC enchufado.
+5. En la aplicación: *Sistema → Configuración general → «Servidor por defecto para preventivos compartidos»* → pega la dirección.
+
+`estado-servidor.bat` comprueba si funciona en el PC y desde Internet; `desinstalar-servidor.bat` lo detiene y quita el arranque automático (conserva los datos). Instrucciones completas en `LEEME.txt`.
+
+**Condiciones de Tailscale**: el plan Personal es gratuito y solo para uso **no comercial** (hasta 6 usuarios; aquí solo se necesita uno, el del PC servidor; los móviles no instalan nada). Para uso comercial, el plan de pago más barato es Standard (8 USD por usuario y mes, según su web). Alternativa sin esa restricción: Cloudflare Tunnel con un dominio propio (tabla de abajo).
+
+### Instalación manual
 Requisitos: un equipo con Node.js 18+ accesible por **HTTPS** desde los dispositivos.
 
 ```bash
@@ -39,7 +52,8 @@ Formas de exponerlo con HTTPS:
 
 | Opción | Coste | Notas |
 |---|---|---|
-| PC u ordenador de la base + **Cloudflare Tunnel** | Gratis | `cloudflared tunnel --url http://localhost:8443` crea una dirección HTTPS. El PC debe estar encendido y con Internet. |
+| PC con Windows + **Tailscale Funnel** (instalador incluido) | Gratis (uso no comercial) | Dirección HTTPS fija `*.ts.net`. El PC debe estar encendido y con Internet. |
+| PC u ordenador de la base + **Cloudflare Tunnel** | Gratis (dominio ~10 €/año para dirección fija) | `cloudflared tunnel --url http://localhost:8443` crea una dirección HTTPS temporal que cambia en cada arranque; para una fija hace falta un dominio. |
 | **VPS** (Hetzner, OVH, Contabo…) + **Caddy** | ~4–6 €/mes | Caddy obtiene el certificado automáticamente: `sync.tudominio.es { reverse_proxy localhost:8443 }`. Necesitas un dominio (~10 €/año). |
 | Certificado propio | — | `--cert cert.pem --key key.pem`. |
 
