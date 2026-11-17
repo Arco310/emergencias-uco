@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha de generación: 17/11/2026 21:29 (hora peninsular) · Versión 1.0.2 · compilación final
+Fecha de generación: 17/11/2026 21:31 (hora peninsular) · Versión 1.0.2 · compilación final
 
 | Bloque | Pruebas | Superadas | Fallidas |
 |---|---:|---:|---:|
@@ -140,7 +140,7 @@ URL: http://127.0.0.1:8660/emergencias-uco/ · 2026-11-17 21:27
 | Alta, preventivo y unidad se guardan y siguen tras recargar | CORRECTA | datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades) |
 
 ## 3 quinquies. Plataforma publicada (`tests/checks/subruta_pages.py URL`, en vivo)
-URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 19:21 · Chrome a través de Internet; los archivos publicados coinciden byte a byte con `dist/app/`
+URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 21:30 · Chrome a través de Internet; los archivos publicados coinciden byte a byte con `dist/app/`
 
 | Comprobación | Resultado | Detalle |
 |---|---|---|
@@ -153,7 +153,7 @@ URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 19:21 · Chrome a 
 | Alta, preventivo y unidad se guardan y siguen tras recargar | CORRECTA | datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades) |
 
 ## 3 sexies. Mapas en vivo (`tests/checks/mapas_en_vivo.py`)
-URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 19:22 · capturas en `tests/checks/capturas-mapas/`
+URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 21:31 · capturas en `tests/checks/capturas-mapas/`
 
 | Comprobación | Resultado | Detalle |
 |---|---|---|
