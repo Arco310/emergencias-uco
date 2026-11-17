@@ -1,6 +1,6 @@
 // Service worker del Gestor de Emergencias UCO: permite abrir y usar la aplicación
 // sin conexión (modo avión). Los datos están en IndexedDB; aquí solo se guarda la aplicación.
-const VERSION = '4004e641768b';
+const VERSION = 'c9a351902eb2';
 const CACHE = 'uco-app-' + VERSION;
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/favicon-64.png'];
 
@@ -9,6 +9,16 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('uco-app-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+// Al tocar un aviso (por ejemplo, fin de descanso) se enfoca la aplicación o se abre si estaba cerrada
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const w = wins.find(c => c.url.startsWith(self.registration.scope));
+    if (w) { try { return await w.focus(); } catch { } }
+    return self.clients.openWindow((e.notification.data && e.notification.data.url) || self.registration.scope);
+  })());
 });
 self.addEventListener('fetch', e => {
   const req = e.request;
