@@ -1,0 +1,19 @@
+{
+  "name": "Gestor de Emergencias UCO",
+  "short_name": "Emergencias UCO",
+  "description": "Gestión de preventivos, unidades, avisos, descansos, planos y estadísticas. Funciona sin conexión.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14181C",
+  "theme_color": "#14181C",
+  "categories": ["productivity", "utilities", "medical"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
