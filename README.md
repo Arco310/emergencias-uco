@@ -6,6 +6,8 @@ Aplicación para gestionar preventivos y operaciones de emergencia desde teléfo
 - **Se usa desde el navegador** (URL) y **se instala como aplicación** (PWA) en Android, sin tienda ni APK.
 - **Sin servicios de pago**: mapas de Google sin clave de API, búsqueda de coordenadas de OpenStreetMap y servidor de sincronización propio incluido.
 
+**Aplicación publicada:** https://arco310.github.io/emergencias-uco/ (ábrela en Chrome para Android y elige *Instalar aplicación*).
+
 ## Contenido del paquete
 
 | Carpeta | Contenido |

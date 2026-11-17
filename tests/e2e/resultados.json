@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-17 17:42:20",
+ "fecha": "2026-11-17 19:19:42",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave 98GQY…"
+   "detalle": "clave 3HM07…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",

@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha de ejecución: 17/11/2026 17:43 (UTC) · Versión 1.0.0 · compilación final
+Fecha de ejecución: 17/11/2026 19:22 (hora peninsular) · Versión 1.0.1 · compilación final
 
 | Bloque | Pruebas | Superadas | Fallidas |
 |---|---:|---:|---:|
@@ -8,9 +8,12 @@ Fecha de ejecución: 17/11/2026 17:43 (UTC) · Versión 1.0.0 · compilación fi
 | Servidor de sincronización e integración completa (`node:test`, servidor real) | 14 | 14 | 0 |
 | Aceptación en navegador (Chrome 153 + Playwright) | 31 | 31 | 0 |
 | Comprobaciones de calidad (instalabilidad, accesibilidad, seguridad, HTTPS) | 12 | 12 | 0 |
-| **Total** | **83** | **83** | **0** |
+| Publicación en subcarpeta como en GitHub Pages (local) | 7 | 7 | 0 |
+| Plataforma publicada en GitHub Pages (en vivo, por Internet) | 7 | 7 | 0 |
+| Mapas y búsqueda de coordenadas en vivo (Google y OpenStreetMap) | 5 | 5 | 0 |
+| **Total** | **102** | **102** | **0** |
 
-Todas las pruebas listadas se han **ejecutado realmente**; las salidas completas están en `tests/resultados-node.tap`, `tests/e2e/resultados.json` y `tests/checks/resultados.json`, y las capturas en `tests/e2e/capturas/`.
+Todas las pruebas listadas se han **ejecutado realmente**; las salidas completas están en `tests/resultados-node.tap`, `tests/e2e/resultados.json`, `tests/checks/resultados.json`, `tests/checks/resultados-subcarpeta.json`, `tests/checks/resultados-en-vivo.json` y `tests/checks/resultados-mapas.json`, y las capturas en `tests/e2e/capturas/` y `tests/checks/capturas-mapas/`.
 
 ## 1. Pruebas de unidad (reglas críticas)
 - ✔ preventivo: creación, activación y unidades desde la creación
@@ -109,6 +112,48 @@ Entorno: Google Chrome 153 (sin interfaz) controlado con Playwright, con la apli
 | Servidor con HTTPS (certificado propio) | CORRECTA | API y aplicación servidas por HTTPS |
 | Servidor: rechaza datos no válidos, envíos enormes, rutas fuera de la carpeta y accesos sin credenciales | CORRECTA | JSON roto 400, 26 MB -1, ruta 403, sin token 404 |
 
+## 3 ter. Publicación en subcarpeta (`tests/checks/subruta_pages.py`, local)
+URL: http://127.0.0.1:8660/emergencias-uco/ · 2026-11-17 19:22
+
+| Comprobación | Resultado | Detalle |
+|---|---|---|
+| Service worker registrado en la subcarpeta | CORRECTA | ámbito http://127.0.0.1:8660/emergencias-uco/ |
+| Service worker controla la página | CORRECTA |  |
+| Instalable como aplicación desde la subcarpeta | CORRECTA | sin errores de instalabilidad |
+| Manifiesto encontrado y válido | CORRECTA | http://127.0.0.1:8660/emergencias-uco/manifest.webmanifest |
+| Abre sin conexión (modo avión) | CORRECTA | pantalla de alta visible sin red |
+| Sin errores de JavaScript | CORRECTA |  |
+| Alta, preventivo y unidad se guardan y siguen tras recargar | CORRECTA | datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades) |
+
+## 3 quater. Plataforma publicada (`tests/checks/subruta_pages.py URL`, en vivo)
+URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 19:21 · Chrome 153 a través de Internet; los 8 archivos publicados coinciden byte a byte con `dist/app/`
+
+| Comprobación | Resultado | Detalle |
+|---|---|---|
+| Service worker registrado en la subcarpeta | CORRECTA | ámbito https://arco310.github.io/emergencias-uco/ |
+| Service worker controla la página | CORRECTA |  |
+| Instalable como aplicación desde la subcarpeta | CORRECTA | sin errores de instalabilidad |
+| Manifiesto encontrado y válido | CORRECTA | https://arco310.github.io/emergencias-uco/manifest.webmanifest |
+| Abre sin conexión (modo avión) | CORRECTA | pantalla de alta visible sin red |
+| Sin errores de JavaScript | CORRECTA |  |
+| Alta, preventivo y unidad se guardan y siguen tras recargar | CORRECTA | datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades) |
+
+## 3 quinquies. Mapas en vivo (`tests/checks/mapas_en_vivo.py`)
+URL: https://arco310.github.io/emergencias-uco/ · 2026-11-17 19:22 · capturas en `tests/checks/capturas-mapas/`
+
+| Comprobación | Resultado | Detalle |
+|---|---|---|
+| Búsqueda de coordenadas (OpenStreetMap, gratuita) | CORRECTA | Mezquita-Catedral de Córdoba, 1, Calle del Cardenal Herrero, Catedral, Distrito Centro, Có |
+| Mapa de Google sin clave dentro de la aplicación | CORRECTA | https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s37.879026,-… · 279 elementos, 38 imágenes, 0 lienzos · texto: «Combinaciones de teclas / Datos del mapa ©2026 Inst. Geogr. Nacional» |
+| Mapa de OpenStreetMap dentro de la aplicación | CORRECTA | mapa vectorial 606x378, marcador visible |
+| Lugar del preventivo guardado y mostrado en «Mapa» | CORRECTA | Mezquita-Catedral de Córdoba (37.879026, -4.779453) · enlace https://www.google.com/maps/search/?api=1&query=37.879026%2C-4.779453 |
+| Sin errores de JavaScript | CORRECTA |  |
+
+### Correcciones derivadas de estas comprobaciones
+- **Pantalla tras recargar:** al recargar e iniciar sesión, la aplicación volvía unas veces a la pantalla en uso y otras al Centro de control (dependía de la velocidad del dispositivo). Ahora vuelve siempre a la pantalla en uso. Comprobado 5 veces seguidas en local y de nuevo en vivo.
+- **Selector de mapa:** los botones Google Maps / OpenStreetMap se veían enormes y el texto se partía en tres líneas. Corregido el estilo de los botones de opción.
+- **OpenStreetMap:** su mapa incrustado usa ahora MapLibre (mapa vectorial) en lugar de teselas; la comprobación admite ambos formatos.
+
 ## 4. Correspondencia con las pruebas de aceptación del pliego (sección 25)
 | Pliego | Cubierto por |
 |---|---|
@@ -126,7 +171,7 @@ Entorno: Google Chrome 153 (sin interfaz) controlado con Playwright, con la apli
 
 ## 5. No verificado en este entorno (pendiente de prueba en campo)
 - **Dispositivos Android físicos**: las pruebas usan Chrome con emulación táctil de teléfono y tablet, no terminales reales. Se recomienda una prueba en campo con los modelos que se vayan a usar (instalación como aplicación, modo avión, rotación de pantalla).
-- **Google Maps y OpenStreetMap en vivo**: el entorno de pruebas no tiene acceso a Internet y ambos servicios bloquean la descarga automática, así que el mapa incrustado y la búsqueda de coordenadas no se han podido abrir en vivo. Los formatos de enlace están cubiertos por pruebas de unidad; el formato de Google sin clave no es oficial y podría dejar de funcionar, por eso la aplicación ofrece también el mapa de OpenStreetMap y el botón «Abrir en Google Maps». El GPS sí se ha probado, con posición simulada.
-- **Servidor publicado con HTTPS real** (Cloudflare Tunnel, VPS): probado en local por HTTP.
+- **Mapas en terminales Android reales**: el mapa de Google sin clave, el de OpenStreetMap y la búsqueda de coordenadas se han comprobado en vivo por Internet con Chrome (emulación de tablet), no en un terminal físico. El formato de Google sin clave no es oficial y podría dejar de funcionar; por eso la aplicación ofrece también el mapa de OpenStreetMap y el botón «Abrir en Google Maps». El GPS se ha probado con posición simulada.
+- **Servidor de sincronización publicado con HTTPS real** (Cloudflare Tunnel, VPS): probado en local por HTTP y HTTPS con certificado propio; no hay ningún servidor de sincronización publicado. La aplicación sí está publicada con HTTPS real (GitHub Pages).
 - **Notificaciones del sistema, vibración y pantalla siempre encendida**: dependen del dispositivo; no se han verificado.
 - **Rendimiento con volúmenes grandes** (cientos de unidades y miles de avisos): no medido.

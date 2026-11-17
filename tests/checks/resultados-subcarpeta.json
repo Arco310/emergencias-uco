@@ -1,6 +1,6 @@
 {
  "url": "http://127.0.0.1:8660/emergencias-uco/",
- "fecha": "2026-11-17 18:42",
+ "fecha": "2026-11-17 19:22",
  "resultados": [
   {
    "comprobacion": "Service worker registrado en la subcarpeta",
@@ -35,7 +35,7 @@
   {
    "comprobacion": "Alta, preventivo y unidad se guardan y siguen tras recargar",
    "resultado": "CORRECTA",
-   "detalle": "datos cifrados en el dispositivo"
+   "detalle": "datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades)"
   }
  ]
 }

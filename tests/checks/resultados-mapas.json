@@ -1,0 +1,31 @@
+{
+ "url": "https://arco310.github.io/emergencias-uco/",
+ "fecha": "2026-11-17 19:22",
+ "resultados": [
+  {
+   "comprobacion": "Búsqueda de coordenadas (OpenStreetMap, gratuita)",
+   "resultado": "CORRECTA",
+   "detalle": "Mezquita-Catedral de Córdoba, 1, Calle del Cardenal Herrero, Catedral, Distrito Centro, Có"
+  },
+  {
+   "comprobacion": "Mapa de Google sin clave dentro de la aplicación",
+   "resultado": "CORRECTA",
+   "detalle": "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s37.879026,-… · 279 elementos, 38 imágenes, 0 lienzos · texto: 'Combinaciones de teclas\\nDatos del mapa ©2026 Inst. Geogr. Nacional\\nTérminos'"
+  },
+  {
+   "comprobacion": "Mapa de OpenStreetMap dentro de la aplicación",
+   "resultado": "CORRECTA",
+   "detalle": "mapa vectorial 606x378, marcador visible"
+  },
+  {
+   "comprobacion": "Lugar del preventivo guardado y mostrado en «Mapa»",
+   "resultado": "CORRECTA",
+   "detalle": "Mezquita-Catedral de Córdoba (37.879026, -4.779453) · enlace https://www.google.com/maps/search/?api=1&query=37.879026%2C-4.779453"
+  },
+  {
+   "comprobacion": "Sin errores de JavaScript",
+   "resultado": "CORRECTA",
+   "detalle": ""
+  }
+ ]
+}

@@ -252,7 +252,7 @@ async function boot() {
   setInterval(tick, 1000);
   setInterval(restWatch, 2000);
   setInterval(lockWatch, 15000);
-  const h = location.hash.slice(1); if (VIEWS[h]) G.ui.route = h;
+  const h = location.hash.slice(1); if (VIEWS[h]) G.ui.route = G.ui.bootRoute = h; // pantalla a recuperar tras recargar e iniciar sesión
   render();
   if (!G.preview && 'serviceWorker' in navigator && location.protocol !== 'file:') {
     try {
@@ -264,7 +264,9 @@ async function boot() {
 }
 /** Tras iniciar sesión: abre el último preventivo usado */
 export async function afterLogin() {
-  try { const last = localStorage.getItem('uco:last'); if (last && (G.core.summaries || []).some(s => s.id === last)) { await G.core.openPrev(last); go(['panel', 'unidades', 'avisos', 'plano'].includes(G.ui.route) ? G.ui.route : 'panel'); return; } } catch (e) { console.warn(e); }
+  // La ruta se fija antes de abrir el preventivo: un repintado intermedio (sin preventivo abierto) no debe cambiarla
+  const want = G.ui.bootRoute || G.ui.route; G.ui.bootRoute = null;
+  try { const last = localStorage.getItem('uco:last'); if (last && (G.core.summaries || []).some(s => s.id === last)) { await G.core.openPrev(last); go(['panel', 'unidades', 'avisos', 'plano'].includes(want) ? want : 'panel'); return; } } catch (e) { console.warn(e); }
   go('inicio');
   if (navigator.storage && navigator.storage.persist && !G.preview) { try { G.persisted = await navigator.storage.persist(); } catch { } }
 }

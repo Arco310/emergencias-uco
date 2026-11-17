@@ -7,6 +7,9 @@ La aplicación es una web instalable (PWA). Para que funcione **sin conexión**,
 
 ## 1. Publicar la aplicación (gratis)
 
+> **Ya publicada:** https://arco310.github.io/emergencias-uco/ (repositorio `Arco310/emergencias-uco`: código en la rama `main`, aplicación compilada en la rama `gh-pages`).
+> **Para publicar una versión nueva:** ejecuta `node build.mjs` y sustituye el contenido de la rama `gh-pages` por el de `dist/app/`. GitHub Pages la sirve en 1–2 minutos; los móviles pueden tardar hasta 10 minutos en verla (caché) y avisan con «Nueva versión disponible», que se aplica al volver a abrir la aplicación.
+
 ### Opción A — GitHub Pages (recomendada)
 1. Crea una cuenta en github.com y un repositorio nuevo (por ejemplo `emergencias-uco`).
 2. Sube **el contenido** de la carpeta `dist/app/` a la raíz del repositorio (botón *Add file → Upload files*; incluye `index.html`, `sw.js`, `manifest.webmanifest`, la carpeta `icons/` y el archivo `.nojekyll`).

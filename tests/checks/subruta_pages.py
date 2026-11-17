@@ -28,10 +28,13 @@ def main():
             except Exception: time.sleep(0.2)
     if not url.endswith('/'): url += '/'
     print('URL comprobada:', url)
+    # Para una URL de Internet se usa el proxy del entorno, si lo hay (HTTPS_PROXY)
+    px = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+    px = {'proxy': {'server': px}} if px and not url.startswith(('http://127.0.0.1', 'http://localhost')) else {}
     try:
         with sync_playwright() as p:
             udir = tempfile.mkdtemp(prefix='uco-perfil-')
-            ctx = p.chromium.launch_persistent_context(udir, executable_path=E.CHROME, args=['--no-sandbox'], locale='es-ES', **E.PHONE)
+            ctx = p.chromium.launch_persistent_context(udir, executable_path=E.CHROME, args=['--no-sandbox'], locale='es-ES', **px, **E.PHONE)
             pg = ctx.pages[0] if ctx.pages else ctx.new_page()
             errores = []
             pg.on('pageerror', lambda e: errores.append(str(e)))
@@ -54,20 +57,29 @@ def main():
             ctx.close(); shutil.rmtree(udir, ignore_errors=True)
             # Flujo básico en la subcarpeta: alta, preventivo, unidad y persistencia tras recargar
             E.URL = url
-            b = p.chromium.launch(executable_path=E.CHROME, args=['--no-sandbox'])
+            b = p.chromium.launch(executable_path=E.CHROME, args=['--no-sandbox'], **px)
             A = E.App(b, 'pages', E.PHONE)
-            A.setup('Ana', 'ana', 'secreto1', 'Móvil', 'M1'); A.perms(False)
-            A.new_prev('Prueba Pages'); A.new_unit('U1', 'Uno', 'rt_svb', 'sec_1')
-            A.pg.reload(); A.login('ana', 'secreto1'); A.pg.wait_for_selector('.kpis', timeout=20000)
-            n = A.state("return s.prev.nombre === 'Prueba Pages' && Object.values(s.units).some(u => u.ind === 'U1');")
-            res('Alta, preventivo y unidad se guardan y siguen tras recargar', bool(n) and not A.errors, 'datos cifrados en el dispositivo' + ('; ' + '; '.join(A.errors)[:150] if A.errors else ''))
+            paso = 'alta'
+            try:
+                A.setup('Ana', 'ana', 'secreto1', 'Móvil', 'M1'); A.perms(False)
+                paso = 'preventivo'; A.new_prev('Prueba Pages')
+                paso = 'unidad'; A.new_unit('U1', 'Uno', 'rt_svb', 'sec_1')
+                paso = 'recarga'; A.pg.reload(); A.login('ana', 'secreto1')
+                A.pg.wait_for_function("() => { const G = window.__UCO; return G && G.core && G.core.cur && G.core.state && G.ui.route === 'unidades'; }", timeout=20000)
+                n = A.state("return s.prev.nombre === 'Prueba Pages' && Object.values(s.units).some(u => u.ind === 'U1');")
+                res('Alta, preventivo y unidad se guardan y siguen tras recargar', bool(n) and not A.errors, 'datos cifrados en el dispositivo; vuelve a la pantalla en uso (Unidades)' + ('; ' + '; '.join(A.errors)[:150] if A.errors else ''))
+            except Exception as e:
+                A.pg.screenshot(path=os.path.join(os.path.dirname(__file__), 'fallo-subcarpeta.png'))
+                txt = A.pg.evaluate("() => document.body.innerText.replace(/\\s+/g, ' ').slice(0, 300)")
+                res('Alta, preventivo y unidad se guardan y siguen tras recargar', False, f'falla en el paso «{paso}»: ' + str(e).splitlines()[0][:120] + ' · pantalla: ' + txt + ' · errores: ' + '; '.join(A.errors)[:200])
             b.close()
     finally:
         if srv: srv.terminate()
         if tmp: shutil.rmtree(tmp, ignore_errors=True)
     ok = all(r['resultado'] == 'CORRECTA' for r in OUT)
     print(f"\n{sum(r['resultado'] == 'CORRECTA' for r in OUT)}/{len(OUT)} comprobaciones correctas")
-    with open(os.path.join(os.path.dirname(__file__), 'resultados-subcarpeta.json'), 'w', encoding='utf-8') as f:
+    nombre = 'resultados-subcarpeta.json' if url.startswith('http://127.0.0.1') else 'resultados-en-vivo.json'
+    with open(os.path.join(os.path.dirname(__file__), nombre), 'w', encoding='utf-8') as f:
         json.dump({'url': url, 'fecha': time.strftime('%Y-%m-%d %H:%M'), 'resultados': OUT}, f, ensure_ascii=False, indent=1)
     sys.exit(0 if ok else 1)
 
