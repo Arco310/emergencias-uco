@@ -177,10 +177,31 @@ export function readForm(form) {
   return out;
 }
 
+// ---------------- avisos del sistema ----------------
+/**
+ * Muestra un aviso del sistema. Chrome para Android no permite `new Notification()`
+ * (lanza «Illegal constructor»): allí el aviso debe mostrarlo el service worker.
+ * El constructor solo se usa como alternativa en escritorio. Devuelve true si se mostró.
+ */
+export async function systemNotify(title, opts = {}) {
+  if (!window.Notification || Notification.permission !== 'granted') return false;
+  const o = { icon: 'icons/icon-192.png', lang: 'es', data: { url: location.href }, ...opts };
+  try {
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if (reg && reg.active) { await reg.showNotification(title, o); return true; }
+  } catch (e) { console.warn('Aviso del sistema:', e); }
+  try { new Notification(title, o); return true; } catch { return false; }
+}
+
 // ---------------- archivos ----------------
+/** En Android el selector no reconoce extensiones propias (.ucosync, .ucobak) y deja esos
+ * archivos en gris; allí se muestran todos y el contenido se valida al leerlo. */
+export function fileAccept(accept, ua = navigator.userAgent) {
+  return /Android/i.test(ua) && accept.split(',').some(t => t.trim().startsWith('.')) ? '' : accept;
+}
 export function pickFile(accept = '*/*') {
   return new Promise(resolve => {
-    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept;
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = fileAccept(accept);
     inp.onchange = () => resolve(inp.files && inp.files[0] ? inp.files[0] : null);
     inp.click();
   });

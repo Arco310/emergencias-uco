@@ -2,7 +2,7 @@
 import { openStorage } from '../data/idb.js';
 import { AppCore } from '../app/core.js';
 import { G, A, F, CH } from './state.js';
-import { esc, $, $$, toast, closeSheet, handlePop, refreshSheets, drawLayer, dialogSubmit, sheets, openSheet, confirmDlg } from './dom.js';
+import { esc, $, $$, toast, closeSheet, handlePop, refreshSheets, drawLayer, dialogSubmit, sheets, openSheet, confirmDlg, systemNotify } from './dom.js';
 import { icon } from './icons.js';
 import { fmtClock, fmtDur, now, AppError } from '../core/util.js';
 import { APP_NAME, APP_VERSION } from '../core/defaults.js';
@@ -132,7 +132,8 @@ async function runAction(fn, el, ev) {
   try { await fn(el, ev); }
   catch (e) {
     if (e && e.name === 'AbortError') return;
-    console.error(e);
+    // Los avisos de validación para el usuario (AppError) no son fallos del programa
+    if (e instanceof AppError) console.warn(e.message); else console.error(e);
     toast(e instanceof AppError || (e && e.code) ? e.message : 'Error: ' + (e && e.message ? e.message : e), 'error', 6000);
   }
 }
@@ -184,7 +185,7 @@ function restWatch() {
         ended = true;
         toast('Fin del descanso: ' + (u.ind || u.nombre), 'info', 8000);
         try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch { }
-        try { if (window.Notification && Notification.permission === 'granted') new Notification('Fin del descanso', { body: (u.ind || '') + ' ' + (u.nombre || ''), tag: key }); } catch { }
+        systemNotify('Fin del descanso', { body: ((u.ind || '') + ' ' + (u.nombre || '')).trim(), tag: key, vibrate: [200, 100, 200] }).catch(() => { });
       }
     } else if (t < d.finPrev) restSeen.delete(key);
   }

@@ -194,11 +194,15 @@ export class Repo {
   }
   async loadOps(pid) {
     const recs = await this.db.getAll('ops', 'p', pid);
-    const out = [];
-    for (const r of recs) {
-      const op = await this.dec(r.enc);
-      op.num = r.num; op.ref = r.ref || op.ref || null; op.sq = r.sq;
-      out.push(op);
+    // Se descifran por lotes en paralelo: el cifrado del navegador trabaja fuera del hilo
+    // principal y así un preventivo grande abre varias veces más rápido que de uno en uno
+    const out = new Array(recs.length);
+    for (let i = 0; i < recs.length; i += 512) {
+      await Promise.all(recs.slice(i, i + 512).map(async (r, j) => {
+        const op = await this.dec(r.enc);
+        op.num = r.num; op.ref = r.ref || op.ref || null; op.sq = r.sq;
+        out[i + j] = op;
+      }));
     }
     return out;
   }

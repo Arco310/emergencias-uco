@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-17 19:19:42",
+ "fecha": "2026-11-17 21:26:56",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave 3HM07…"
+   "detalle": "clave XGNKV…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -95,7 +95,7 @@
   {
    "prueba": "Informes: PDF, JSON y CSV con contenido real",
    "resultado": "SUPERADA",
-   "detalle": "PDF 40 KB, JSON con 18 operaciones, ZIP con 8 CSV"
+   "detalle": "PDF 7 KB, JSON con 18 operaciones, ZIP con 8 CSV"
   },
   {
    "prueba": "Funcionamiento sin conexión (modo avión)",
@@ -156,6 +156,31 @@
    "prueba": "Sin errores de JavaScript (multidispositivo)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
+  },
+  {
+   "prueba": "Android: «Probar» notificaciones muestra un aviso real",
+   "resultado": "SUPERADA",
+   "detalle": "aviso mostrado por el service worker; el constructor prohibido en Android no se usa"
+  },
+  {
+   "prueba": "Android: botón «Probar» de vibración visible",
+   "resultado": "SUPERADA",
+   "detalle": "botón «Probar» visible con la vibración disponible"
+  },
+  {
+   "prueba": "Android: pantalla encendida se recupera al volver a la aplicación",
+   "resultado": "SUPERADA",
+   "detalle": "tras salir y volver 3 veces la pantalla sigue encendida (3 de 3 recuperaciones)"
+  },
+  {
+   "prueba": "Android: importar copias y paquetes sin archivos en gris",
+   "resultado": "SUPERADA",
+   "detalle": "el selector muestra todos los archivos (sin filtro) y uno erróneo se rechaza: «El archivo no es una copia válida»"
+  },
+  {
+   "prueba": "Android: aviso de fin de descanso",
+   "resultado": "SUPERADA",
+   "detalle": "aviso «Fin del descanso: AND-1 Android uno» mostrado por el service worker"
   }
  ]
 }

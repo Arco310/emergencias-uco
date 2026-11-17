@@ -36,7 +36,7 @@ server/server.mjs Servidor de sincronización
 pwa/             service worker, manifiesto e iconos
 build.mjs        compilación (esbuild) → dist/app y dist/preview.html
 ```
-Separación de capas: la interfaz nunca modifica datos directamente; llama a `AppCore.exec(comando)`, que valida en seco (`dryRun`), guarda de forma atómica y aplica. Los permisos y las reglas críticas se comprueban en `commands.js` y las invariantes, además, en `engine.js` (también para operaciones recibidas de otros dispositivos).
+Separación de capas: la interfaz nunca modifica datos directamente; llama a `AppCore.exec(comando)`, que valida en seco (`dryRun`), guarda de forma atómica y aplica. La validación en seco trabaja sobre una **copia perezosa** del estado (`lazyCopy`: cada unidad, aviso o conflicto se copia al consultarlo por primera vez), de modo que su coste no crece con el tamaño del preventivo. Los permisos y las reglas críticas se comprueban en `commands.js` y las invariantes, además, en `engine.js` (también para operaciones recibidas de otros dispositivos).
 
 ## 3. Esquema de datos
 
@@ -139,3 +139,19 @@ Ver la tabla de la guía de alojamiento. Sin servicios de pago. Google Maps se u
 - La pantalla siempre encendida depende del soporte del navegador (Chrome para Android lo admite).
 - En modalidad compartida sin servidor, los avisos conservan su referencia por dispositivo (`T1-3`); la numeración global correlativa requiere el servidor.
 - La vista previa publicada en Claude no guarda datos de forma fiable ni permite modo sin conexión, sincronización, GPS ni descargas.
+
+## Rendimiento y escalabilidad
+Medido con preventivos de hasta 300 unidades, 3.000 avisos y 22.928 operaciones (`tests/perf/`, resultados en el informe de pruebas, apartado 6):
+- **Validación de acciones** con copia perezosa del estado (`engine.js`, `lazyCopy`): 0,1 ms por acción con independencia del tamaño.
+- **Índice de números de aviso** (`state.numAviso`): la detección de duplicados no recorre todos los avisos; la reconstrucción completa es lineal (54 ms con 22.928 operaciones en Node).
+- **Número definitivo del servidor** (`Engine.setNumber`): si el aviso no tenía número y el número está libre, se actualiza en el sitio; en cualquier otro caso se reconstruye el registro. Una prueba compara ambos caminos con la reconstrucción completa.
+- **Apertura**: las operaciones cifradas se descifran por lotes de 512 en paralelo (`repo.loadOps`) y los paquetes de sincronización se importan por lotes de 256.
+- **Interfaz**: los avisos se muestran por tandas de 100 («Mostrar más») y la bitácora por tandas de 200.
+- **Informe PDF**: contenido de las páginas comprimido con `CompressionStream('deflate')` (FlateDecode); 853 páginas ocupan 2,3 MB en lugar de 21 MB. `buildReport` es asíncrono.
+
+## Particularidades de Chrome para Android
+- `new Notification()` no está permitido: los avisos se muestran con `ServiceWorkerRegistration.showNotification()` (`systemNotify` en `dom.js`) y el service worker abre o enfoca la aplicación al tocarlos (`notificationclick`).
+- La pantalla encendida (Wake Lock) la libera el sistema al salir de la aplicación; se vuelve a pedir en cada `visibilitychange` (`acquireWake` en `admin.js`).
+- El selector de archivos no reconoce extensiones propias (`.ucosync`, `.ucobak`): en Android no se filtra (`fileAccept`) y el contenido se valida al leerlo.
+- El escenario 3 de `tests/e2e/run_e2e.py` reproduce estas restricciones en Chrome de escritorio.
+

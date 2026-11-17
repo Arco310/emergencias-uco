@@ -393,6 +393,71 @@ def scenario_shared(browser):
     check('Sin errores de JavaScript (multidispositivo)', lambda: (_ for _ in ()).throw(Exception('; '.join((T.errors + M.errors)[:5]))) if (T.errors + M.errors) else 'ninguno')
     T.ctx.close(); M.ctx.close()
 
+# ---------------- Escenario 3: comportamiento propio de Chrome para Android ----------------
+ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
+# Reproduce en el navegador de pruebas tres particularidades de Chrome para Android:
+#  1) new Notification() está prohibido («Illegal constructor»): los avisos deben mostrarse con el service worker;
+#  2) la pantalla encendida (Wake Lock) la libera el sistema cada vez que se sale de la aplicación;
+#  3) el agente de usuario es de Android (el selector de archivos se adapta).
+ANDROID_INIT = r"""(() => {
+  const N = window.Notification;
+  if (N) window.Notification = new Proxy(N, { construct() { window.__illegal = (window.__illegal || 0) + 1; throw new TypeError("Failed to construct 'Notification': Illegal constructor. Use ServiceWorkerRegistration.showNotification() instead."); } });
+  let n = 0; const locks = [];
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async t => { n++; const l = new EventTarget(); l.type = t; l.released = false;
+    l.release = async () => { if (!l.released) { l.released = true; l.dispatchEvent(new Event('release')); } }; locks.push(l); return l; } } });
+  let hidden = false;
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' });
+  window.__wake = { count: () => n, activos: () => locks.filter(l => !l.released).length };
+  window.__salirYVolver = () => { hidden = true; locks.forEach(l => l.release()); document.dispatchEvent(new Event('visibilitychange')); hidden = false; document.dispatchEvent(new Event('visibilitychange')); };
+})();"""
+
+def scenario_android(b):
+    print('\nEscenario 3: particularidades de Chrome para Android (avisos, selector de archivos, pantalla encendida)')
+    A = App(b, 'android', dict(TABLET, user_agent=ANDROID_UA))
+    A.ctx.add_init_script(ANDROID_INIT)
+    A.setup('Eva', 'eva', 'secreto1', 'Tablet Android', 'TA'); A.perms(True)
+    notifs = "() => navigator.serviceWorker.ready.then(r => r.getNotifications()).then(ns => ns.map(n => n.title + (n.body ? ': ' + n.body : '')))"
+    def notif_test():
+        A.nav('sistema'); A.a('nav', v='permisos'); A.pg.wait_for_selector('.perm-row'); A.pg.wait_for_timeout(500)
+        A.pg.locator('.perm-row', has_text='Notificaciones').locator('[data-a="perm.notifTest"]').click(); A.pg.wait_for_timeout(1200)
+        tit = A.pg.evaluate(notifs); ill = A.pg.evaluate('() => window.__illegal || 0'); t = A.toast_text()
+        assert any(x.startswith('Prueba de aviso') for x in tit) and ill == 0 and 'enviado' in t, (tit, ill, t)
+        A.shot('01-permisos-android')
+        return 'aviso mostrado por el service worker; el constructor prohibido en Android no se usa'
+    check('Android: «Probar» notificaciones muestra un aviso real', notif_test)
+    def vib_button():
+        n = A.pg.locator('.perm-row', has_text='Vibración').locator('[data-a="perm.vibrate"]').count()
+        assert n == 1, n
+        return 'botón «Probar» visible con la vibración disponible'
+    check('Android: botón «Probar» de vibración visible', vib_button)
+    def wake():
+        n0 = A.pg.evaluate('() => window.__wake.count()')
+        for _ in range(3): A.pg.evaluate('() => window.__salirYVolver()'); A.pg.wait_for_timeout(300)
+        n1, act = A.pg.evaluate('() => [window.__wake.count(), window.__wake.activos()]')
+        assert n0 >= 1 and n1 == n0 + 3 and act == 1, (n0, n1, act)
+        return 'tras salir y volver 3 veces la pantalla sigue encendida (3 de 3 recuperaciones)'
+    check('Android: pantalla encendida se recupera al volver a la aplicación', wake)
+    def picker():
+        A.nav('sistema'); A.a('nav', v='copias'); A.pg.wait_for_timeout(400)
+        with A.pg.expect_file_chooser() as fc: A.a('bk.import')
+        acc = fc.value.element.get_attribute('accept')
+        bad = os.path.join(tempfile.mkdtemp(prefix='uco-and-'), 'no-es-una-copia.ucobak'); open(bad, 'w').write('hola')
+        fc.value.set_files(bad); A.pg.wait_for_timeout(800); t = ' | '.join(x for x in A.pg.locator('#toasts .toast').all_inner_texts() if 'copia' in x)
+        assert acc in ('', None) and 'no es una copia válida' in t, (acc, t)
+        return 'el selector muestra todos los archivos (sin filtro) y uno erróneo se rechaza: «' + t + '»'
+    check('Android: importar copias y paquetes sin archivos en gris', picker)
+    def rest_notif():
+        A.new_prev('Prueba Android'); A.new_unit('AND-1', 'Android uno')
+        A.open_unit('AND-1'); A.a('u.rest'); A.sheet().locator('input[name=d]').fill('1'); A.dlg_ok(); A.close_sheets()
+        A.pg.wait_for_timeout(64000)
+        tit = A.pg.evaluate(notifs); ill = A.pg.evaluate('() => window.__illegal || 0')
+        fin = [x for x in tit if x.startswith('Fin del descanso')]
+        assert fin and ill == 0 and not A.errors, (tit, ill, A.errors)
+        return 'aviso «' + fin[0] + '» mostrado por el service worker'
+    check('Android: aviso de fin de descanso', rest_notif)
+    A.ctx.close()
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -404,6 +469,7 @@ def main():
             only = sys.argv[1] if len(sys.argv) > 1 else ''
             if only in ('', '1'): scenario_standalone(b)
             if only in ('', '2'): scenario_shared(b)
+            if only in ('', '3'): scenario_android(b)
             b.close()
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)

@@ -16,7 +16,7 @@ fs.mkdirSync(path.join(APP, 'icons'), { recursive: true });
 
 async function bundle(preview) {
   const r = await esbuild.build({
-    entryPoints: [path.join(ROOT, 'src/ui/app.js')], bundle: true, format: 'iife', minify: true, write: false,
+    entryPoints: [path.join(ROOT, 'src/ui/app.js')], bundle: true, format: 'iife', minify: !process.env.UCO_SIN_MINIFICAR, write: false,
     target: ['es2020', 'chrome90'], define: { __PREVIEW__: preview ? 'true' : 'false' }, legalComments: 'none', charset: 'utf8',
   });
   return r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');

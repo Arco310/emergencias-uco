@@ -413,6 +413,8 @@ export function renderAvisos() {
   if (f.sector) list = list.filter(a => a.sector === f.sector);
   if (f.q) { const q = norm(f.q); list = list.filter(a => norm([avisoNum(a), a.ref, a.desc, a.loc && a.loc.txt, a.obs, named(p.cat.tiposAviso, a.tipo)].join(' ')).includes(q)); }
   list.sort((x, y) => tab === 'act' ? ((x.estado === 'pendiente' ? 0 : 1) - (y.estado === 'pendiente' ? 0 : 1) || (y.t ?? y.creado) - (x.t ?? x.creado)) : (y.finalizadoEn - x.finalizadoEn));
+  // En preventivos grandes se muestran por tandas: miles de tarjetas a la vez ralentizan el móvil
+  const lim = f.lim || 100; const total = list.length; list = list.slice(0, lim);
   return `
   <div class="toolbar">
     <div class="search">${icon('buscar')}<input id="q_av" type="search" placeholder="Buscar aviso" value="${attr(f.q || '')}" data-c="av.q" data-live="1" aria-label="Buscar aviso"></div>
@@ -423,13 +425,15 @@ export function renderAvisos() {
   </div>
   ${tabs([['act', 'Activos', act.length], ['fin', 'Avisos finalizados', fin.length]], tab, 'av.tab')}
   <div class="alist">${list.map(avisoCard).join('') || empty(tab === 'act' ? 'No hay avisos activos' : 'Todavía no hay avisos finalizados')}</div>
+  ${total > lim ? `<div class="row center">${btn('Mostrar más (quedan ' + (total - lim) + ')', 'av.more')}</div>` : ''}
   ${activo() && can('avisos.crear') ? `<button class="fab" data-a="a.new" aria-label="Nuevo aviso">${icon('mas_add')}</button>` : ''}`;
 }
-CH['av.q'] = el => { filt('avisos').q = el.value; G.render(); };
-CH['av.estado'] = el => { filt('avisos').estado = el.value; G.render(); };
-CH['av.tipo'] = el => { filt('avisos').tipo = el.value; G.render(); };
-CH['av.sector'] = el => { filt('avisos').sector = el.value; G.render(); };
-A['av.tab'] = el => { filt('avisos').tab = el.dataset.v; filt('avisos').estado = ''; G.render(); };
+CH['av.q'] = el => { filt('avisos').q = el.value; filt('avisos').lim = 0; G.render(); };
+CH['av.estado'] = el => { filt('avisos').estado = el.value; filt('avisos').lim = 0; G.render(); };
+CH['av.tipo'] = el => { filt('avisos').tipo = el.value; filt('avisos').lim = 0; G.render(); };
+CH['av.sector'] = el => { filt('avisos').sector = el.value; filt('avisos').lim = 0; G.render(); };
+A['av.tab'] = el => { filt('avisos').tab = el.dataset.v; filt('avisos').estado = ''; filt('avisos').lim = 0; G.render(); };
+A['av.more'] = () => { const f = filt('avisos'); f.lim = (f.lim || 100) + 200; G.render(); };
 
 function avisoFields(p) {
   return [

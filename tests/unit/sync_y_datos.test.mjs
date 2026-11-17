@@ -1,6 +1,7 @@
 // Pruebas de convergencia multidispositivo, conflictos, plantillas, estadísticas,
 // exportaciones, PDF, cifrado y sugerencias.
 import test from 'node:test';
+import { inflateSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { Device, createPrev, unitByInd, makeClock, mkUser, C, MIN, T0 } from './helpers.mjs';
 import { Engine, isResting } from '../../src/core/engine.js';
@@ -198,7 +199,7 @@ test('estadísticas: tiempos verificados con datos conocidos', () => {
   assert.equal(c3.dur, 20 * MIN);
 });
 
-test('exportación: CSV, JSON, ZIP y PDF con contenido real', () => {
+test('exportación: CSV, JSON, ZIP y PDF con contenido real', async () => {
   const { clock, A } = pair();
   const u1 = unitByInd(A, 'U1');
   A.run(C.unitUpdate, u1.id, { obs: 'Texto; con "comillas"\ny salto' });
@@ -220,13 +221,19 @@ test('exportación: CSV, JSON, ZIP y PDF con contenido real', () => {
   const z = csvZip(A.engine, clock.now());
   assert.equal(z[0], 0x50); assert.equal(z[1], 0x4B);
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xCBF43926);
-  const pdf = buildReport(A.engine, { usuario: 'Ana' });
+  const pdf = await buildReport(A.engine, { usuario: 'Ana' });
   const txt = Buffer.from(pdf).toString('latin1');
   assert.ok(txt.startsWith('%PDF-1.4'));
   assert.ok(txt.trimEnd().endsWith('%%EOF'));
   assert.match(txt, /\/Type \/Page /);
-  assert.ok(txt.includes('(Informe del preventivo)'));
-  assert.ok(txt.includes('Ca\\355da en grada'), 'texto en español codificado en WinAnsi');
+  // El contenido de las páginas va comprimido (FlateDecode): se descomprime para comprobar el texto
+  const streams = [...txt.matchAll(/<< \/Length (\d+) \/Filter \/FlateDecode >>\nstream\n/g)];
+  assert.ok(streams.length >= 1, 'páginas comprimidas');
+  const plano = streams.map(m => { const ini = m.index + m[0].length; const n = Number(m[1]);
+    assert.equal(txt.slice(ini + n, ini + n + 10), '\nendstream', 'longitud declarada exacta');
+    return inflateSync(Buffer.from(txt.slice(ini, ini + n), 'latin1')).toString('latin1'); }).join('\n');
+  assert.ok(plano.includes('(Informe del preventivo)'));
+  assert.ok(plano.includes('Ca\\355da en grada'), 'texto en español codificado en WinAnsi');
   const xref = Number(txt.match(/startxref\n(\d+)/)[1]);
   assert.equal(txt.slice(xref, xref + 4), 'xref', 'tabla xref en la posición declarada');
   assert.deepEqual(toWinAnsi('ñ€→'), [0xF1, 0x80, 45, 62]);

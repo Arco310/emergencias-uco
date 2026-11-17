@@ -1,7 +1,7 @@
 // Configuración (global y del preventivo), sincronización, cierre e informes,
 // usuarios y roles, copias de seguridad, auditoría y permisos del dispositivo.
 import { G, A, F, CH, filt } from '../state.js';
-import { esc, attr, openSheet, closeSheet, refreshSheets, toast, confirmDlg, fieldsHtml, readForm, chip, empty, btn, tabs, copyText, saveFile, pickFile, readText, fileStamp, safeName } from '../dom.js';
+import { esc, attr, openSheet, closeSheet, refreshSheets, toast, confirmDlg, fieldsHtml, readForm, chip, empty, btn, tabs, copyText, saveFile, pickFile, readText, fileStamp, safeName, systemNotify } from '../dom.js';
 import { icon } from '../icons.js';
 import { now, fmtDateTime, fmtTime, fmtDur, clone, AppError } from '../../core/util.js';
 import { APP_NAME, APP_VERSION, KPIS, CAMPOS_TARJETA, ICONOS } from '../../core/defaults.js';
@@ -177,7 +177,10 @@ export async function exportReport(kind, { share = false } = {}) {
   if (!can('exportar')) throw new AppError('No tienes permiso para exportar', 'permiso');
   const e = core().engine(); const base = safeName(P().nombre) + '-' + fileStamp();
   const who = { usuario: core().user.nombre, dispositivo: core().device.nombre };
-  if (kind === 'pdf') return saveFile(base + '.pdf', buildReport(e, who), 'application/pdf', { share });
+  if (kind === 'pdf') {
+    toast('Generando el informe PDF…', 'info', 20000); await new Promise(r => setTimeout(r, 60)); // deja pintar el aviso antes del trabajo pesado
+    return saveFile(base + '.pdf', await buildReport(e, who), 'application/pdf', { share });
+  }
   if (kind === 'json') return saveFile(base + '.json', JSON.stringify(prevJSON(e, who), null, 1), 'application/json', { share });
   if (kind === 'csv') return saveFile(base + '-csv.zip', csvZip(e), 'application/zip', { share });
 }
@@ -412,7 +415,7 @@ async function refreshPerms() {
   try { const e = await navigator.storage.estimate(); PERMS.usage = e.usage; PERMS.quota = e.quota; } catch { }
   PERMS.geo = navigator.geolocation ? await q('geolocation') : 'no disponible';
   PERMS.notif = window.Notification ? Notification.permission : 'no disponible';
-  PERMS.wake = 'wakeLock' in navigator ? (G.wakeLock ? 'granted' : 'prompt') : 'no disponible';
+  PERMS.wake = 'wakeLock' in navigator ? (G.wakeLock && !G.wakeLock.released ? 'granted' : 'prompt') : 'no disponible';
   PERMS.share = navigator.canShare ? 'granted' : 'no disponible';
   PERMS.vibrate = navigator.vibrate ? 'granted' : 'no disponible';
   PERMS.installed = matchMedia('(display-mode: standalone)').matches ? 'granted' : G.installPrompt ? 'prompt' : 'manual';
@@ -421,17 +424,18 @@ async function refreshPerms() {
 const ST = { granted: ['Concedido', 'ok'], denied: ['Denegado', 'bad'], prompt: ['Pendiente', 'warn'], default: ['Pendiente', 'warn'], 'no disponible': ['No disponible', 'muted'], desconocido: ['Desconocido', 'muted'], manual: ['Manual', 'warn'] };
 export function renderDevicePerms() {
   if (!PERMS.loaded) { refreshPerms(); return '<p class="muted">Comprobando permisos…</p>'; }
-  const row = (k, title, desc, action, label) => { const [l, c] = ST[PERMS[k]] || [PERMS[k], 'muted']; return `<div class="perm-row"><div class="grow"><b>${esc(title)}</b><p class="muted small">${esc(desc)}</p></div><span class="chip ${c}">${esc(l)}</span>${action && PERMS[k] !== 'granted' && PERMS[k] !== 'no disponible' ? btn(label || 'Solicitar', action, { cls: 'primary sm' }) : ''}</div>`; };
+  // action: botón para conceder (si falta); test: botón «Probar» (si ya está concedido)
+  const row = (k, title, desc, action, label, test) => { const [l, c] = ST[PERMS[k]] || [PERMS[k], 'muted']; return `<div class="perm-row"><div class="grow"><b>${esc(title)}</b><p class="muted small">${esc(desc)}</p></div><span class="chip ${c}">${esc(l)}</span>${action && PERMS[k] !== 'granted' && PERMS[k] !== 'no disponible' ? btn(label || 'Solicitar', action, { cls: 'primary sm' }) : ''}${test && PERMS[k] === 'granted' ? btn('Probar', test, { cls: 'sm' }) : ''}</div>`; };
   return `<p class="muted">Permisos que la aplicación necesita para funcionar plenamente en este dispositivo. Ninguno es obligatorio para la operativa básica sin conexión.</p>
   ${G.preview ? `<p class="note warn">${icon('info')} En la vista previa el visor de Claude no permite conceder estos permisos. Solicítalos desde la aplicación publicada.</p>` : ''}
   <div class="row end">${btn('Solicitar todos los permisos', 'perm.all', { cls: 'primary', ic: 'escudo' })}</div>
   <div class="card">${row('storage', 'Almacenamiento persistente', 'Evita que el navegador borre los datos si falta espacio. Muy recomendable.' + (PERMS.usage != null ? ' Uso: ' + Math.round(PERMS.usage / 1048576) + ' MB de ' + Math.round(PERMS.quota / 1048576) + ' MB.' : ''), 'perm.storage')}
   ${row('geo', 'Ubicación (GPS)', 'Para registrar la posición de unidades y avisos con un toque. La ubicación manual funciona sin GPS.', 'perm.geo')}
-  ${row('notif', 'Notificaciones', 'Avisa del fin de los descansos mientras la aplicación está abierta.', 'perm.notif')}
+  ${row('notif', 'Notificaciones', 'Avisa del fin de los descansos mientras la aplicación está abierta.', 'perm.notif', null, 'perm.notifTest')}
   ${row('wake', 'Pantalla siempre encendida', 'Mantiene la pantalla activa durante el servicio (mientras la aplicación esté visible).', 'perm.wake', 'Activar')}
   ${row('installed', 'Instalar como aplicación', PERMS.installed === 'manual' ? 'En Chrome para Android: menú ⋮ → "Instalar aplicación" o "Añadir a pantalla de inicio".' : 'Abre la aplicación a pantalla completa y sin barra del navegador.', PERMS.installed === 'prompt' ? 'perm.install' : null, 'Instalar')}
   ${row('share', 'Compartir archivos', 'Enviar informes y paquetes por WhatsApp, correo o Drive.', null)}
-  ${row('vibrate', 'Vibración', 'Alerta táctil al terminar un descanso.', 'perm.vibrate', 'Probar')}</div>
+  ${row('vibrate', 'Vibración', 'Alerta táctil al terminar un descanso.', null, null, 'perm.vibrate')}</div>
   <div class="row end">${btn('Comprobar de nuevo', 'perm.refresh', { ic: 'sync' })}</div>`;
 }
 A['perm.refresh'] = () => { PERMS.loaded = false; G.render(); };
@@ -457,7 +461,7 @@ export async function requestAllPerms() {
     try { add('Almacenamiento persistente', await navigator.storage.persist(), 'el navegador lo concede al instalar la aplicación o usarla a menudo'); } catch { add('Almacenamiento persistente', false); }
   }
   if ('wakeLock' in navigator) {
-    try { G.wakeWanted = true; if (!G.wakeLock) { G.wakeLock = await navigator.wakeLock.request('screen'); G.wakeLock.addEventListener('release', () => { G.wakeLock = null; }); } add('Pantalla encendida', true); } catch { add('Pantalla encendida', false); }
+    try { G.wakeWanted = true; await acquireWake(); add('Pantalla encendida', true); } catch { add('Pantalla encendida', false); }
   }
   try { localStorage.setItem('uco:permisos', String(Date.now())); } catch { }
   try { await core().repo.audit('Solicitud de permisos del dispositivo', 'Dispositivo', '', res.map(r => r.n + ': ' + (r.ok ? 'concedido' : 'no concedido')).join(' | ')); } catch { }
@@ -491,13 +495,24 @@ A['perm.geo'] = () => new Promise(res => navigator.geolocation.getCurrentPositio
 A['perm.notif'] = async () => { const r = await Notification.requestPermission(); toast('Notificaciones: ' + (ST[r] || [r])[0], r === 'granted' ? 'ok' : 'info'); PERMS.loaded = false; G.render(); };
 A['perm.wake'] = async () => {
   G.wakeWanted = true;
-  try { G.wakeLock = await navigator.wakeLock.request('screen'); G.wakeLock.addEventListener('release', () => { G.wakeLock = null; }); toast('La pantalla permanecerá encendida', 'ok'); }
+  try { await acquireWake(); toast('La pantalla permanecerá encendida', 'ok'); }
   catch (e) { toast('No se pudo activar: ' + e.message, 'error'); }
   PERMS.loaded = false; G.render();
 };
 A['perm.install'] = async () => { const p = G.installPrompt; if (!p) return; p.prompt(); const r = await p.userChoice; G.installPrompt = null; toast(r.outcome === 'accepted' ? 'Aplicación instalada' : 'Instalación cancelada'); PERMS.loaded = false; G.render(); };
 A['perm.vibrate'] = () => { navigator.vibrate([200, 100, 200]); };
-document.addEventListener('visibilitychange', async () => { if (!document.hidden && G.wakeWanted && !G.wakeLock) { try { G.wakeLock = await navigator.wakeLock.request('screen'); } catch { } } });
+A['perm.notifTest'] = async () => {
+  const ok = await systemNotify('Prueba de aviso', { body: 'Así se avisará del fin de los descansos.', tag: 'uco-prueba' });
+  toast(ok ? 'Aviso de prueba enviado: debe aparecer en la barra de notificaciones' : 'No se pudo mostrar el aviso en este dispositivo', ok ? 'ok' : 'error', 6000);
+};
+/** Pantalla encendida: el sistema la libera al salir de la aplicación; se recupera al volver */
+async function acquireWake() {
+  if (G.wakeLock && !G.wakeLock.released) return G.wakeLock;
+  const l = await navigator.wakeLock.request('screen');
+  l.addEventListener('release', () => { if (G.wakeLock === l) G.wakeLock = null; });
+  return (G.wakeLock = l);
+}
+document.addEventListener('visibilitychange', async () => { if (!document.hidden && G.wakeWanted && 'wakeLock' in navigator) { try { await acquireWake(); } catch { } } });
 
 // ---------- cuenta ----------
 export function renderAccount() {

@@ -198,11 +198,20 @@ export class SyncManager {
     if (b.formato !== 'uco-sync') throw new AppError('El archivo no es un paquete de sincronización del Gestor UCO');
     const pid = b.pid; const k = await this.keys(pid);
     const nuevos = []; const nums = [];
-    for (const x of b.ops) {
-      const m = await this.h.repo.opMeta(x.id);
-      if (m) { if (x.num != null && m.num == null) { await this.h.repo.setOpServerMeta(x.id, m.sq ?? x.sq, x.num); nums.push([x.id, x.num]); } continue; }
-      let op; try { op = await open(k.key, x.c); } catch { throw new AppError('El paquete pertenece a otro preventivo o la clave no coincide'); }
-      op.num = x.num ?? null; op.sq = x.sq ?? null; nuevos.push(op);
+    for (let i = 0; i < b.ops.length; i += 256) {
+      const lote = b.ops.slice(i, i + 256);
+      const metas = await Promise.all(lote.map(x => this.h.repo.opMeta(x.id)));
+      const abiertos = await Promise.all(lote.map(async (x, j) => {
+        if (metas[j]) return null;
+        try { return await open(k.key, x.c); } catch { return undefined; }
+      }));
+      for (let j = 0; j < lote.length; j++) {
+        const x = lote[j], m = metas[j];
+        if (m) { if (x.num != null && m.num == null) { await this.h.repo.setOpServerMeta(x.id, m.sq ?? x.sq, x.num); nums.push([x.id, x.num]); } continue; }
+        const op = abiertos[j];
+        if (!op) throw new AppError('El paquete pertenece a otro preventivo o la clave no coincide');
+        op.num = x.num ?? null; op.sq = x.sq ?? null; nuevos.push(op);
+      }
     }
     if (nuevos.length) { await this.h.repo.storeRemoteOps(pid, nuevos); await this.h.onRemoteOps(pid, nuevos); }
     for (const [id, n] of nums) this.h.onNumber(pid, id, n);

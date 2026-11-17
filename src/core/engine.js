@@ -21,7 +21,8 @@ const AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|cierre\.[a-z]+)$/;
 export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tiposRecurso'];
 
 export function emptyState() {
-  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0 };
+  // numAviso: índice número → aviso, para detectar duplicados sin recorrer todos los avisos
+  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {} };
 }
 
 // ---------- utilidades de consulta ----------
@@ -322,9 +323,10 @@ H['aviso.create'] = (s, op) => {
   };
   s.avisos[a.id] = a;
   if (a.num != null) {
-    const dup = Object.values(s.avisos).find(x => x !== a && x.num === a.num);
+    const otro = s.numAviso[a.num];
     s.maxNum = Math.max(s.maxNum, a.num);
-    if (dup) return { warning: 'Número de aviso duplicado: ' + a.num };
+    if (otro && otro !== a.id) return { warning: 'Número de aviso duplicado: ' + a.num };
+    s.numAviso[a.num] = a.id;
   }
 };
 
@@ -461,6 +463,28 @@ export function applyOp(s, op, ctx = {}) {
 
 export const cmpOps = (a, b) => (a.h < b.h ? -1 : a.h > b.h ? 1 : 0);
 
+/**
+ * Copia perezosa del estado para validar acciones sin tocar el original: cada unidad, aviso o
+ * conflicto se copia la primera vez que se consulta (lectura o escritura) y el resto no se copia.
+ * Evita copiar el estado completo en cada pulsación, cuyo coste crece con el tamaño del preventivo.
+ */
+function lazyMap(src) {
+  const cache = Object.create(null);
+  const has = k => typeof k === 'string' && (k in cache || Object.prototype.hasOwnProperty.call(src, k));
+  const get = k => (typeof k !== 'string' ? undefined : k in cache ? cache[k] : Object.prototype.hasOwnProperty.call(src, k) ? (cache[k] = clone(src[k])) : undefined);
+  return new Proxy({}, {
+    get: (_, k) => get(k),
+    set: (_, k, v) => { cache[k] = v; return true; },
+    has: (_, k) => has(k),
+    deleteProperty: () => { throw new Error('No se admite borrar durante la validación'); },
+    ownKeys: () => [...new Set([...Object.keys(src), ...Object.keys(cache)])],
+    getOwnPropertyDescriptor: (_, k) => (has(k) ? { value: get(k), writable: true, enumerable: true, configurable: true } : undefined),
+  });
+}
+export function lazyCopy(s) {
+  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso } };
+}
+
 /** Motor de un preventivo: registro ordenado + estado derivado */
 export class Engine {
   constructor(ops = []) {
@@ -494,7 +518,7 @@ export class Engine {
   }
   /** Valida un lote sobre una copia del estado, sin modificar nada */
   dryRun(ops) {
-    const s = clone(this.state);
+    const s = lazyCopy(this.state);
     for (const op of ops) {
       const r = applyOp(s, op, { strict: true, lookup: id => this.byId.get(id) });
       if (r.status === 'conflict') return { ok: false, reason: r.reason, op };
@@ -504,7 +528,14 @@ export class Engine {
   /** Número definitivo asignado por el servidor (o localmente) */
   setNumber(opId, num) {
     const op = this.byId.get(opId); if (!op || op.num === num) return false;
-    op.num = num; this.replay(); return true;
+    const antes = op.num; op.num = num;
+    // Caso habitual (el servidor numera un aviso que aún no tenía número y el número está libre):
+    // se actualiza en el sitio con el mismo resultado que reconstruir todo el registro
+    const s = this.state; const a = op.k === 'aviso.create' ? s.avisos[op.e] : null;
+    if (antes == null && a && a.num == null && !s.numAviso[num] && !s.conflicts[opId]) {
+      a.num = num; s.numAviso[num] = a.id; s.maxNum = Math.max(s.maxNum, num); this.version++; return true;
+    }
+    this.replay(); return true;
   }
   applied() { return this.ops.filter(o => { const r = this.status.get(o.id); return r && r.status === 'ok'; }); }
   pendingConflicts() { return Object.values(this.state.conflicts).filter(c => c.estado === 'pendiente'); }

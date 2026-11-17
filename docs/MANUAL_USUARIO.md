@@ -4,7 +4,7 @@
 1. Abre la aplicación (dirección HTTPS o aplicación instalada).
 2. **Configuración inicial**: nombre del administrador, usuario y contraseña (mínimo 6 caracteres), nombre del dispositivo y código corto (p. ej. `T1`).
 3. Se muestra la **clave de recuperación**. Guárdala fuera del dispositivo: es la única forma de recuperar el acceso si se olvidan todas las contraseñas.
-4. En *Sistema → Permisos del dispositivo* concede almacenamiento persistente, ubicación, notificaciones y pantalla encendida, e instala la aplicación.
+4. En *Sistema → Permisos del dispositivo* concede almacenamiento persistente, ubicación, notificaciones y pantalla encendida, e instala la aplicación. Con los botones **Probar** de Notificaciones y Vibración comprueba en cada móvil que el aviso de fin de descanso se ve y se nota.
 
 ¿Vienes de otro dispositivo? En la pantalla inicial pulsa **Restaurar copia de seguridad** y elige un archivo `.ucobak` con su contraseña.
 
@@ -50,7 +50,7 @@
 ## 7. Avisos
 - **Nuevo aviso**: tipo, descripción, hora (por defecto, la actual), ubicación, sector y observaciones. Al crearlo se abre con las **unidades sugeridas** (distancia, compatibilidad, sector, disponibilidad).
 - La asignación resuelve los casos especiales preguntando: unidad en descanso, en clave especial, de tipo no compatible u ocupada en otro aviso.
-- Estados: **Pendiente → Asignado → En curso → Finalizado**. Los finalizados están en la pestaña **Avisos finalizados**.
+- Estados: **Pendiente → Asignado → En curso → Finalizado**. Los finalizados están en la pestaña **Avisos finalizados** (se muestran de 100 en 100; pulsa **Mostrar más** o usa el buscador y los filtros).
 - **Numeración**: correlativa y única. En modalidad compartida, un aviso creado sin conexión lleva una referencia provisional (p. ej. `M-2`) hasta recibir su número definitivo del servidor.
 - Al **finalizar** con unidades todavía ocupadas, quedan liberadas y vuelven a C0 (se avisa antes).
 - Tiempos: **asignación** (hora del aviso → primera asignación), **respuesta** (→ primera llegada al punto), **intervención** (llegada → última salida del punto), **resolución** (→ finalización).
@@ -72,7 +72,7 @@
 - **Tiempos y estadísticas**: por preventivo (avisos por hora, evolución, tiempo por clave, distribución por tipo y sector), por unidad (servicio, tiempo por clave, avisos, descansos) y por aviso (tiempos con media y mediana). Sin datos suficientes se muestra "—".
 
 ## 11. Cierre e informes
-- *Más → Cierre e informes*: genera en cualquier momento el **informe PDF**, los **datos JSON** y las **tablas CSV** (ZIP). En Android también se pueden **compartir**.
+- *Más → Cierre e informes*: genera en cualquier momento el **informe PDF**, los **datos JSON** y las **tablas CSV** (ZIP). En Android también se pueden **compartir**. En preventivos muy grandes el PDF tarda unos segundos (aparece «Generando el informe PDF…»).
 - **Cerrar preventivo**: muestra las advertencias (avisos pendientes o activos, unidades ocupadas, descansos, conflictos, cambios sin sincronizar) con enlaces para resolverlas. Puedes cerrar igualmente; las advertencias quedan registradas. Se crea un punto de restauración, se genera el informe y se archiva.
 
 ## 12. Modalidad compartida

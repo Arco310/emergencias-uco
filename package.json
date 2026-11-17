@@ -1,6 +1,6 @@
 {
   "name": "gestor-emergencias-uco",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Gestor de Emergencias UCO: gestión de preventivos, unidades, avisos, descansos, planos y estadísticas. PWA offline-first con sincronización multidispositivo.",
   "private": true,
   "type": "module",

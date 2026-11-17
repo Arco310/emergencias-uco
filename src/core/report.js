@@ -10,7 +10,7 @@ import { APP_NAME, APP_VERSION } from './defaults.js';
 const named = (list, id) => ((list || []).find(x => x.id === id) || {}).nombre || '—';
 const PEST = { preparacion: 'En preparación', activo: 'Activo', cerrado: 'Cerrado' };
 
-export function buildReport(engine, { usuario = '', dispositivo = '' } = {}) {
+export async function buildReport(engine, { usuario = '', dispositivo = '' } = {}) {
   const s = engine.state; const p = s.prev; const t = now();
   const st = prevStats(s, t);
   const doc = new PDFDoc({ title: 'Informe del preventivo: ' + p.nombre, author: usuario });
@@ -112,5 +112,5 @@ export function buildReport(engine, { usuario = '', dispositivo = '' } = {}) {
     doc.table([{ label: 'Hora', w: 1 }, { label: 'Usuario', w: 1 }, { label: 'Motivo', w: 3 }, { label: 'Estado', w: 1 }, { label: 'Resuelto por', w: 1 }],
       conf.map(x => [fmtDateTime(x.t), x.usuario, x.motivo, x.estado, x.resueltoPor || '']), { size: 7 });
   }
-  return doc.build();
+  return doc.buildCompressed();
 }

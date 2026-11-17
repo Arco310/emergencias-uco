@@ -10,6 +10,16 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('uco-app-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
+// Al tocar un aviso (por ejemplo, fin de descanso) se enfoca la aplicación o se abre si estaba cerrada
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const w = wins.find(c => c.url.startsWith(self.registration.scope));
+    if (w) { try { return await w.focus(); } catch { } }
+    return self.clients.openWindow((e.notification.data && e.notification.data.url) || self.registration.scope);
+  })());
+});
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;

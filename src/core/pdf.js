@@ -184,7 +184,23 @@ export class PDFDoc {
     });
     this.y = base + 16;
   }
-  build() {
+  /** PDF sin comprimir (síncrono) */
+  build() { this._footers(); return this._assemble(this.pages.map(p => ({ data: p.join('\n') }))); }
+  /**
+   * PDF con el contenido de cada página comprimido (FlateDecode): ocupa varias veces menos,
+   * lo que importa en preventivos grandes (informes de cientos de páginas que se envían por correo).
+   * Si el entorno no puede comprimir, se genera igual pero sin comprimir.
+   */
+  async buildCompressed() {
+    this._footers();
+    const contents = this.pages.map(p => p.join('\n'));
+    if (typeof CompressionStream !== 'function') return this._assemble(contents.map(data => ({ data })));
+    const streams = [];
+    for (const c of contents) streams.push({ data: bytesToLatin1(await deflate(latin1ToBytes(c))), filter: '/FlateDecode' });
+    return this._assemble(streams);
+  }
+  _footers() {
+    if (this._pie) return; this._pie = true;
     const total = this.pages.length;
     this.pages.forEach((p, i) => {
       const y = this.H - this.m + 6;
@@ -192,6 +208,8 @@ export class PDFDoc {
       const pg = 'Página ' + (i + 1) + ' de ' + total;
       p.push('BT 0.45 0.45 0.45 rg /F1 7.5 Tf 1 0 0 1 ' + n2(this.W - this.m - this.textWidth(pg, 7.5)) + ' ' + n2(this.H - y - 6) + ' Tm ' + pdfStr(toWinAnsi(pg)) + ' Tj ET');
     });
+  }
+  _assemble(streams) {
     const objs = [];
     const add = s => { objs.push(s); return objs.length; };
     add('<< /Type /Catalog /Pages 2 0 R >>');
@@ -202,9 +220,8 @@ export class PDFDoc {
     const date = 'D:' + d.getFullYear() + pd(d.getMonth() + 1) + pd(d.getDate()) + pd(d.getHours()) + pd(d.getMinutes()) + pd(d.getSeconds());
     const info = add('<< /Title ' + pdfStr(toWinAnsi(this.title)) + ' /Author ' + pdfStr(toWinAnsi(this.author)) + ' /Producer (Gestor de Emergencias UCO) /CreationDate (' + date + ') >>');
     const kids = [];
-    for (const p of this.pages) {
-      const content = p.join('\n');
-      const c = add('<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream');
+    for (const st of streams) {
+      const c = add('<< /Length ' + st.data.length + (st.filter ? ' /Filter ' + st.filter : '') + ' >>\nstream\n' + st.data + '\nendstream');
       kids.push(add('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + n2(this.W) + ' ' + n2(this.H) + '] /Resources << /Font << /F1 ' + f1 + ' 0 R /F2 ' + f2 + ' 0 R >> >> /Contents ' + c + ' 0 R >>'));
     }
     objs[1] = '<< /Type /Pages /Kids [' + kids.map(k => k + ' 0 R').join(' ') + '] /Count ' + kids.length + ' >>';
@@ -219,5 +236,12 @@ export class PDFDoc {
     for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 0xFF;
     return bytes;
   }
+}
+// Conversión entre texto Latin-1 (un carácter = un byte) y bytes, y compresión zlib nativa
+function latin1ToBytes(str) { const b = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) b[i] = str.charCodeAt(i) & 0xFF; return b; }
+function bytesToLatin1(b) { let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return s; }
+async function deflate(bytes) {
+  const st = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
 }
 export { enc };
