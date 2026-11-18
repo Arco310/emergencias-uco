@@ -312,6 +312,7 @@ export function renderCentral() {
   if (!meta) {
     if (!consultado) { c.consultarCentral(); return '<p class="muted">Comprobando el servidor central…</p>'; }
     const intro = `<div class="note">Con el servidor central, los preventivos compartidos y los usuarios son los mismos en todos los dispositivos. No hay que escribir direcciones ni códigos: en cada dispositivo basta con iniciar sesión. Los datos viajan cifrados de extremo a extremo; el servidor no puede leerlos.</div>`;
+    if (remoto && remoto.antiguo) return `${intro}<section class="card pad"><h3>El servidor necesita actualizarse</h3><p class="muted small">${esc(servidor)} tiene la versión ${esc(remoto.version || '?')}. El servidor central necesita la 1.1.0 o posterior: ejecuta el instalador nuevo en el PC servidor (guarda una copia de los datos y vuelve atrás solo si algo falla).</p>${btn('Reintentar', 'central.retry', { ic: 'sync' })}</section>`;
     if (!remoto) return `${intro}<section class="card pad"><h3>Sin conexión con el servidor central</h3><p class="muted small">No se ha podido contactar con ${esc(servidor)}. Este dispositivo sigue funcionando en local.</p>${btn('Reintentar', 'central.retry', { ic: 'sync' })}</section>`;
     if (remoto.org) return `${intro}<section class="card pad"><h3>Conectar este dispositivo</h3>
       <p class="muted small">El servidor central <b>${esc(remoto.nombre || servidor)}</b> ya está activo. Inicia sesión con tu usuario y contraseña del servidor central (los mismos que en cualquier otro dispositivo conectado).</p>

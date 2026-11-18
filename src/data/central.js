@@ -71,7 +71,13 @@ export class CentralSync {
   /** Espacio central principal que publica el servidor para este entorno: { org, nombre } (org null si aún no existe) */
   async consultar(server) {
     server = normServer(server);
-    const j = await this._req(server, '/central?entorno=' + (this.h.pruebas ? 'pruebas' : 'produccion'), { timeout: 8000 });
+    let j;
+    try { j = await this._req(server, '/central?entorno=' + (this.h.pruebas ? 'pruebas' : 'produccion'), { timeout: 8000 }); }
+    catch (e) {
+      // Servidor anterior a la 1.1.0: responde, pero aún no tiene servidor central
+      if (e.status === 404) return { server, org: null, nombre: '', pruebas: false, version: await this.detectar(server), antiguo: true };
+      throw e;
+    }
     return { server, org: (j && j.org) || null, nombre: (j && j.nombre) || '', pruebas: !!(j && j.pruebas), version: j && j.version };
   }
 

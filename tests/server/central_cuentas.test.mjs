@@ -212,3 +212,22 @@ test('cuenta con el coste de derivación real (600.000 iteraciones PBKDF2)', asy
   assert.equal(E.user.usuario, 'medico');
   assert.ok(Date.now() - t < 15000, 'el acceso tarda un tiempo razonable');
 });
+
+test('servidor anterior a la 1.1.0: la app lo detecta y sigue funcionando como antes', async () => {
+  const http = await import('node:http');
+  const viejo = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/api/v1/salud')) return res.end(JSON.stringify({ ok: true, servicio: 'gestor-emergencias-uco', version: '1.0.3' }));
+    res.statusCode = 404; res.end(JSON.stringify({ error: 'No encontrado' }));
+  });
+  await new Promise(r => viejo.listen(0, '127.0.0.1', r));
+  try {
+    const c = new AppCore(new MemoryAdapter(), { servidor: 'http://127.0.0.1:' + viejo.address().port });
+    await c.boot(); cores.push(c);
+    const r = await c.consultarCentral();
+    assert.equal(r.antiguo, true); assert.equal(r.org, null); assert.equal(r.version, '1.0.3');
+    await c.setup({ usuario: 'admin', nombre: 'Admin', password: 'clave-admin-1' });
+    const pid = await c.createPrev({ datos: { nombre: 'Sin servidor central', modalidad: 'independiente', activar: true }, seed: c.seedFromConfig() });
+    assert.ok(pid);
+  } finally { viejo.close(); }
+});

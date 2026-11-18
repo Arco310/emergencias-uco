@@ -73,7 +73,7 @@ function setupView(r) {
         { name: 'p1', label: 'Contraseña (mínimo ' + min + ' caracteres)', type: 'password', required: true, autocomplete: 'new-password' },
         { name: 'p2', label: 'Repite la contraseña', type: 'password', required: true, autocomplete: 'new-password' },
       ])}
-      ${r && !r.org ? `<h2>Servidor central</h2>${fieldsHtml([{ name: 'codigo', label: 'Código de administración del servidor (opcional)', placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX', attrs: 'autocomplete="off" autocapitalize="characters"', help: 'Actívalo aquí una sola vez para toda la organización: después, en los demás dispositivos bastará con iniciar sesión. También puede hacerse más tarde.' }])}` : ''}
+      ${r && !r.org && !r.antiguo ? `<h2>Servidor central</h2>${fieldsHtml([{ name: 'codigo', label: 'Código de administración del servidor (opcional)', placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX', attrs: 'autocomplete="off" autocapitalize="characters"', help: 'Actívalo aquí una sola vez para toda la organización: después, en los demás dispositivos bastará con iniciar sesión. También puede hacerse más tarde.' }])}` : ''}
       <h2>Dispositivo</h2>
       ${fieldsHtml([
         { name: 'dev', label: 'Nombre del dispositivo', value: 'Tablet 1', required: true },
