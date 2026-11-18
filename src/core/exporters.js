@@ -1,6 +1,6 @@
 // Exportación JSON y CSV de un preventivo (datos reales del registro de operaciones).
 import { fmtDateTime, fmtDur, now, enc } from './util.js';
-import { claveDef, unitLabel, avisoLabel, SITUACION_LABEL, unitSituation, restEnd } from './engine.js';
+import { claveDef, unitLabel, avisoLabel, SITUACION_LABEL, unitSituation, restEnd, sectorNombre } from './engine.js';
 import { unitStats, avisoTimes, prevStats } from './stats.js';
 import { logEntries, AVISO_ESTADO } from './timeline.js';
 import { fmtCoords } from './geo.js';
@@ -26,7 +26,7 @@ export function csvTables(engine, until = now()) {
   const units = Object.values(s.units).filter(u => !u.eliminada);
   T.unidades = toCSV(
     ['Identificador', 'Nombre', 'Denominación', 'Tipo', 'Subtipo', 'Categoría', 'Sector', 'Clave', 'Situación', 'Color C0', 'Ubicación', 'Coordenadas', 'Equipamiento', 'Características', 'Observaciones', 'Nº avisos', 'Tiempo en avisos (min)', 'Nº descansos', 'Tiempo en descanso (min)', 'Tiempo de servicio (min)'],
-    units.map(u => { const st = unitStats(s, u, until); return [u.ind, u.nombre, u.denom, named(p.cat.tiposRecurso, u.tipo), u.subtipo, u.categoria, named(p.cat.sectores, u.sector), u.clave, SITUACION_LABEL[unitSituation(s, u, until)], u.colorC0, u.loc ? u.loc.txt : '', fmtCoords(u.loc), (u.equip || []).join(', '), (u.caract || []).join(', '), u.obs, st.nAvisos, mins(st.enAvisos), st.nDescansos, mins(st.enDescanso), mins(st.servicio)]; }));
+    units.map(u => { const st = unitStats(s, u, until); return [u.ind, u.nombre, u.denom, named(p.cat.tiposRecurso, u.tipo), u.subtipo, u.categoria, sectorNombre(p, u, 'Pendiente de asignación'), u.clave, SITUACION_LABEL[unitSituation(s, u, until)], u.colorC0, u.loc ? u.loc.txt : '', fmtCoords(u.loc), (u.equip || []).join(', '), (u.caract || []).join(', '), u.obs, st.nAvisos, mins(st.enAvisos), st.nDescansos, mins(st.enDescanso), mins(st.servicio)]; }));
   T.tiempos_por_clave = toCSV(['Identificador', ...claves.map(c => c + ' (min)')],
     units.map(u => { const st = unitStats(s, u, until); return [u.ind, ...claves.map(c => mins(st.porClave[c] || 0))]; }));
   const avisos = Object.values(s.avisos).sort((a, b) => (a.t ?? a.creado) - (b.t ?? b.creado));

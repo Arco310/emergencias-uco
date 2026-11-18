@@ -3,12 +3,12 @@
 import { Repo } from '../data/repo.js';
 import { SyncManager, newSecret, decodeJoinCode, encodeJoinCode, normServer } from '../data/sync.js';
 import { CentralSync } from '../data/central.js';
-import { APP_VERSION } from '../core/defaults.js';
+import { APP_VERSION, DEFAULT_TIPOS_RECURSO, DEFAULT_PLANTILLAS_UNIDAD } from '../core/defaults.js';
 import { SERVIDOR_CENTRAL } from '../config/servidor.js';
 import { Engine } from '../core/engine.js';
 import { HLC } from '../core/hlc.js';
 import * as C from '../core/commands.js';
-import { uid, now, b64, unb64, AppError, clone } from '../core/util.js';
+import { uid, now, b64, unb64, AppError, clone, same, isHexColor } from '../core/util.js';
 import { contentFromPrev, seedFromTemplate, newTemplate, contentFromConfig } from '../core/templates.js';
 import { counts } from '../core/engine.js';
 
@@ -60,7 +60,7 @@ export class AppCore {
   async setup(data) { const r = await this.repo.setup(data); await this._afterLogin(); return r; }
   async recover(code, u, p) { await this.repo.recover(code, u, p); await this._afterLogin(); }
   async _afterLogin() {
-    this.cfg = await this.repo.getCfg();
+    this.cfg = this._migrarCfg(await this.repo.getCfg());
     this.sync.intervalMs = Math.max(2, Number(this.cfg.syncIntervaloSeg) || 5) * 1000;
     this.summaries = await this.repo.listSummaries();
     clearInterval(this._bk);
@@ -82,9 +82,97 @@ export class AppCore {
     this.dirty = false;
     try { return await this.repo.createBackup('auto', 'Copia automática'); } catch (e) { console.warn('Copia automática fallida', e); return null; }
   }
+  /** Migraciones de la configuración general: unidades plantilla de ejemplo y los tipos que usan */
+  _migrarCfg(cfg) {
+    if (!Array.isArray(cfg.plantillasUnidad)) cfg.plantillasUnidad = clone(DEFAULT_PLANTILLAS_UNIDAD);
+    const tipos = cfg.catalogos.tiposRecurso;
+    for (const p of cfg.plantillasUnidad) if (p.tipo && !tipos.some(t => t.id === p.tipo)) { const d = DEFAULT_TIPOS_RECURSO.find(t => t.id === p.tipo); if (d) tipos.push(clone(d)); }
+    return cfg;
+  }
+
+  // ------------- tipos de recurso y unidades plantilla (configuración general, comunes a todos los dispositivos) -------------
+  _needRecursos() { if (!this.can('recursos.gestionar')) throw new AppError('No tienes permiso para gestionar tipos de recurso y unidades plantilla', 'permiso'); }
+  tiposRecursoGenerales({ activos = false } = {}) { return (this.cfg.catalogos.tiposRecurso || []).filter(t => !activos || t.activo !== false); }
+  plantillasUnidad({ activas = false } = {}) { return (this.cfg.plantillasUnidad || []).filter(p => !activas || p.activo !== false); }
+  /** Guarda la lista completa de tipos de recurso generales. Nunca se elimina un tipo que use una
+   *  unidad plantilla (se puede desactivar); los preventivos guardan su propia copia del catálogo. */
+  async guardarTiposRecurso(lista) {
+    this._needRecursos();
+    C.validateCatalog('tiposRecurso', lista, null);
+    const ids = new Set(lista.map(t => t.id));
+    for (const p of this.cfg.plantillasUnidad || []) if (p.tipo && !ids.has(p.tipo)) throw new AppError('No se puede eliminar el tipo: lo usa la unidad plantilla «' + p.nombre + '». Puedes desactivarlo.');
+    const ant = this.cfg.catalogos.tiposRecurso || [];
+    const cfg = clone(this.cfg); cfg.catalogos.tiposRecurso = clone(lista);
+    await this.repo.saveCfg(cfg, 'Tipos de recurso'); this.cfg = await this.repo.getCfg(); this.emit('cfg', {});
+    if (this.centralMeta) {
+      for (const [i, t] of lista.entries()) { const a = ant.find(x => x.id === t.id); if (!a || !same(a, t) || ant.indexOf(a) !== i) await this.central.guardarConfig('tipo:' + t.id, { ...t, orden: i }); }
+      for (const a of ant) if (!ids.has(a.id)) await this.central.guardarConfig('tipo:' + a.id, null, { borrado: true });
+    }
+  }
+  /** Crea un tipo de recurso general (p. ej. desde el formulario de una unidad nueva) */
+  async crearTipoRecurso(t) {
+    const nuevo = { id: t.id || uid('rt_'), nombre: String(t.nombre || '').trim(), categoria: t.categoria || '', subtipos: t.subtipos || [], caracteristicas: t.caracteristicas || [], color: isHexColor(t.color) ? t.color : '#2E7D32', vis: { icono: 'ambulancia', forma: 'circulo', tam: 'm', ...(t.vis || {}) } };
+    await this.guardarTiposRecurso([...this.tiposRecursoGenerales(), nuevo]);
+    return nuevo;
+  }
+  _validarPlantilla(p) {
+    if (!String(p.nombre || '').trim()) throw new AppError('La plantilla necesita un nombre');
+    if (!String(p.prefijo || '').trim() && !(p.campos || []).length) throw new AppError('Indica un prefijo del indicativo');
+    if (p.tipo && !this.tiposRecursoGenerales().some(t => t.id === p.tipo)) throw new AppError('El tipo de recurso de la plantilla no existe');
+    if (p.color && !isHexColor(p.color)) throw new AppError('Color no válido');
+    const dup = this.plantillasUnidad().find(x => x.id !== p.id && x.nombre.trim().toLowerCase() === p.nombre.trim().toLowerCase());
+    if (dup) throw new AppError('Ya existe una plantilla con ese nombre');
+  }
+  async _guardarPlantillas(lista, detalle, cambiadas = [], borradas = []) {
+    const cfg = clone(this.cfg); cfg.plantillasUnidad = lista;
+    await this.repo.saveCfg(cfg, detalle); this.cfg = await this.repo.getCfg(); this.emit('cfg', {});
+    if (this.centralMeta) {
+      for (const p of cambiadas) await this.central.guardarConfig('plt:' + p.id, { ...p, orden: lista.findIndex(x => x.id === p.id) });
+      for (const id of borradas) await this.central.guardarConfig('plt:' + id, null, { borrado: true });
+    }
+  }
+  async guardarPlantillaUnidad(p) {
+    this._needRecursos();
+    const lista = clone(this.plantillasUnidad()); const i = lista.findIndex(x => x.id === p.id);
+    const prev = i >= 0 ? lista[i] : null;
+    const it = { activo: true, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] }, vis: {}, ...(prev || {}), ...clone(p), id: p.id || uid('plt_'), usada: !!(prev && prev.usada) };
+    it.nombre = String(it.nombre || '').trim(); it.prefijo = String(it.prefijo || '').trim().toUpperCase();
+    it.obligatorios = (it.obligatorios || []).filter(k => (it.campos || []).includes(k));
+    this._validarPlantilla(it);
+    if (i >= 0) lista[i] = it; else lista.push(it);
+    await this._guardarPlantillas(lista, 'Unidad plantilla: ' + it.nombre, [it]);
+    return it;
+  }
+  async duplicarPlantillaUnidad(id) {
+    const p = this.plantillasUnidad().find(x => x.id === id); if (!p) throw new AppError('Plantilla no encontrada');
+    let nombre = p.nombre + ' (copia)'; for (let n = 2; this.plantillasUnidad().some(x => x.nombre === nombre); n++) nombre = p.nombre + ' (copia ' + n + ')';
+    return this.guardarPlantillaUnidad({ ...clone(p), id: null, nombre, usada: false });
+  }
+  async activarPlantillaUnidad(id, activo) { const p = this.plantillasUnidad().find(x => x.id === id); if (!p) throw new AppError('Plantilla no encontrada'); return this.guardarPlantillaUnidad({ ...p, activo: !!activo }); }
+  /** Solo se eliminan las plantillas que no se han usado nunca (si no, se desactivan) */
+  async borrarPlantillaUnidad(id) {
+    this._needRecursos();
+    const p = this.plantillasUnidad().find(x => x.id === id); if (!p) throw new AppError('Plantilla no encontrada');
+    if (p.usada) throw new AppError('La plantilla «' + p.nombre + '» ya se ha usado para crear unidades: desactívala en lugar de eliminarla');
+    await this._guardarPlantillas(this.plantillasUnidad().filter(x => x.id !== id), 'Unidad plantilla eliminada: ' + p.nombre, [], [id]);
+  }
+  /** Crea una unidad en el preventivo abierto a partir de una unidad plantilla */
+  async crearUnidadDesdePlantilla(id, valores) {
+    const p = this.plantillasUnidad().find(x => x.id === id); if (!p) throw new AppError('Plantilla no encontrada');
+    const tipoDef = this.tiposRecursoGenerales().find(t => t.id === p.tipo) || null;
+    const ops = await this.exec(C.unitFromTemplate, { ...p, tipoDef }, valores);
+    if (!p.usada) {
+      // Queda marcada como usada (ya no se puede eliminar, solo desactivar). Sin permiso para gestionar plantillas
+      // la marca se guarda igualmente: es un dato de uso, no un cambio de configuración.
+      const lista = clone(this.plantillasUnidad()); const it = lista.find(x => x.id === id); it.usada = true;
+      await this._guardarPlantillas(lista, 'Unidad plantilla usada: ' + p.nombre, [it]).catch(() => { });
+    }
+    return ops;
+  }
+
   async saveCfg(cfg, detalle) {
     if (!this.can('config.editar')) throw new AppError('No tienes permiso para editar la configuración', 'permiso');
-    await this.repo.saveCfg(cfg, detalle); this.cfg = await this.repo.getCfg();
+    await this.repo.saveCfg(cfg, detalle); this.cfg = this._migrarCfg(await this.repo.getCfg());
     this.sync.intervalMs = Math.max(2, Number(this.cfg.syncIntervaloSeg) || 5) * 1000;
     this.emit('cfg', {});
   }
@@ -324,10 +412,30 @@ export class AppCore {
       if (soloNuevos && d.items['usr:' + p.id]) continue;
       await this.central.guardarConfig('usr:' + p.id, p);
     }
+    // Tipos de recurso y unidades plantilla de este dispositivo que aún no estén en el espacio
+    for (const [i, t] of this.tiposRecursoGenerales().entries()) if (!d.items['tipo:' + t.id]) await this.central.guardarConfig('tipo:' + t.id, { ...t, orden: i });
+    for (const [i, p] of this.plantillasUnidad().entries()) if (!d.items['plt:' + p.id]) await this.central.guardarConfig('plt:' + p.id, { ...p, orden: i });
   }
   /** Aplica cambios de configuración recibidos del espacio central (usuarios, roles…) */
   async _centralConfig(ids) {
     const d = await this.central.datos(); let usuarios = false;
+    if (!this.cfg && this.repo.dek) this.cfg = this._migrarCfg(await this.repo.getCfg());
+    const lista = (actual, pref) => {
+      // Aplica los elementos recibidos (tipo:… / plt:…) sobre la lista local, respetando el orden común
+      const m = new Map(actual.map((x, i) => [x.id, { ...x, orden: x.orden ?? i }]));
+      let cambio = false;
+      for (const id of ids) if (id.startsWith(pref)) {
+        const it = d.items[id]; const k = id.slice(pref.length); if (!it) continue;
+        if (it.borrado || !it.data) { cambio = m.delete(k) || cambio; } else { m.set(k, clone(it.data)); cambio = true; }
+      }
+      return cambio ? [...m.values()].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)).map(x => { const y = { ...x }; delete y.orden; return y; }) : null;
+    };
+    const tipos = this.cfg ? lista(this.cfg.catalogos.tiposRecurso || [], 'tipo:') : null;
+    const plts = this.cfg ? lista(this.cfg.plantillasUnidad || [], 'plt:') : null;
+    if ((tipos || plts) && this.repo.dek) {
+      const cfg = clone(this.cfg); if (tipos) cfg.catalogos.tiposRecurso = tipos; if (plts) cfg.plantillasUnidad = plts;
+      await this.repo.saveCfg(cfg, 'Configuración recibida del servidor central'); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
+    }
     for (const id of ids) {
       const it = d.items[id]; if (!it) continue;
       if (id === 'roles') { if (Array.isArray(it.data) && !it.borrado) { await this.repo.putDoc('roles', it.data); usuarios = true; } }

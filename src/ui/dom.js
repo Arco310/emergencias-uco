@@ -143,7 +143,7 @@ export function field(f, values = {}) {
   switch (f.type) {
     case 'hidden': return `<input type="hidden" name="${attr(f.name)}" value="${attr(v)}"${da}>`;
     case 'textarea': return `<div class="fld">${lab}<textarea id="${id}" name="${attr(f.name)}" rows="${f.rows || 3}"${req}${dis}${ph}${da}>${esc(v)}</textarea>${help}</div>`;
-    case 'select': return `<div class="fld">${lab}<select id="${id}" name="${attr(f.name)}"${req}${dis}${da}>${(f.options || []).map(([ov, ol]) => `<option value="${attr(ov)}"${String(ov) === String(v ?? '') ? ' selected' : ''}>${esc(ol)}</option>`).join('')}</select>${help}</div>`;
+    case 'select': return `<div class="fld">${lab}<select id="${id}" name="${attr(f.name)}"${req}${dis}${f.attrs ? ' ' + f.attrs : ''}${da}>${(f.options || []).map(([ov, ol]) => `<option value="${attr(ov)}"${String(ov) === String(v ?? '') ? ' selected' : ''}>${esc(ol)}</option>`).join('')}</select>${help}</div>`;
     case 'checkbox': return `<div class="fld check"><label class="switch"><input type="checkbox" name="${attr(f.name)}"${v === true || v === 'true' ? ' checked' : ''}${dis}${da}><span>${esc(f.label)}</span></label>${help}</div>`;
     case 'checks': {
       const set = new Set(Array.isArray(v) ? v : []);

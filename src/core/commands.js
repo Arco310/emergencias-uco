@@ -2,7 +2,7 @@
 // y genera las operaciones. Ninguna pantalla modifica datos sin pasar por aquí.
 import { uid, now, clone, same, AppError, isHexColor, getPath } from './util.js';
 import { require as needPerm, can } from './perms.js';
-import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS } from './engine.js';
+import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
   return {
@@ -166,7 +166,7 @@ export function validateCatalog(cat, lista, s) {
     }
     if (s) {
       if (cat === 'sectores') {
-        for (const u of Object.values(s.units)) if (!u.eliminada && u.sector && !ids.has(u.sector)) fail('El sector está en uso por ' + unitLabel(u));
+        for (const u of Object.values(s.units)) if (!u.eliminada && u.sector && u.sector !== SECTOR_OTROS && !ids.has(u.sector)) fail('El sector está en uso por ' + unitLabel(u));
         for (const a of Object.values(s.avisos)) if (a.sector && !ids.has(a.sector)) fail('El sector está en uso por el aviso ' + avisoLabel(a));
       }
       if (cat === 'tiposRecurso') for (const u of Object.values(s.units)) if (!u.eliminada && u.tipo && !ids.has(u.tipo)) fail('El tipo está en uso por ' + unitLabel(u));
@@ -184,31 +184,80 @@ export function planoSet(ctx, meta) {
 }
 
 // ---------------- Unidades ----------------
-const UNIT_EDIT = ['ind', 'nombre', 'denom', 'tipo', 'subtipo', 'categoria', 'sector', 'desc', 'obs', 'equip', 'caract', 'vis'];
+const UNIT_EDIT = ['ind', 'nombre', 'denom', 'tipo', 'subtipo', 'categoria', 'sector', 'sectorOtro', 'desc', 'obs', 'equip', 'caract', 'vis'];
+
+/** Un tipo de recurso de la configuración general que aún no está en el catálogo del preventivo se
+ *  incorpora a él al usarlo (sin modificar ni quitar ninguno de los existentes). */
+function incorporarTipo(ctx, s, tipoId, tipoDef) {
+  if (!tipoId || s.prev.cat.tiposRecurso.some(t => t.id === tipoId)) return { ops: [], tipo: s.prev.cat.tiposRecurso.find(t => t.id === tipoId) || null };
+  if (!tipoDef || tipoDef.id !== tipoId || !String(tipoDef.nombre || '').trim()) fail('El tipo de recurso no existe en este preventivo');
+  const def = clone(tipoDef); delete def.activo; delete def.orden;
+  const n = [...s.prev.cat.tiposRecurso, def];
+  return { ops: [mkOp(ctx, 'prev.cat', ctx.pid, { cat: 'tiposRecurso', o: s.prev.cat.tiposRecurso, n }, uid('b_'))], tipo: def };
+}
+function checkSector(s, sector, sectorOtro) {
+  if (!sector) return;
+  if (sector === SECTOR_OTROS) { if (!String(sectorOtro || '').trim()) fail('Indica la ubicación o sector personalizado'); return; }
+  if (!s.prev.cat.sectores.some(x => x.id === sector)) fail('El sector no existe en este preventivo');
+}
 
 export function unitCreate(ctx, d) {
   needPerm(ctx.user, 'unidades.crear');
   const s = editable(ctx);
   const ind = checkInd(s, d.ind);
-  const tipo = d.tipo ? s.prev.cat.tiposRecurso.find(t => t.id === d.tipo) : null;
+  const inc = incorporarTipo(ctx, s, d.tipo, d.tipoDef);
+  const tipo = inc.tipo;
+  checkSector(s, d.sector, d.sectorOtro);
   const color = isHexColor(d.colorC0) ? d.colorC0 : (tipo && isHexColor(tipo.color) ? tipo.color : '#2E7D32');
   const u = {
     ind, nombre: d.nombre || '', denom: d.denom || '', tipo: d.tipo || null, subtipo: d.subtipo || '',
     categoria: d.categoria || (tipo ? tipo.categoria : ''), sector: d.sector || null, desc: d.desc || '', obs: d.obs || '',
     equip: d.equip || [], caract: d.caract || [], vis: d.vis || {}, colorC0: color, loc: d.loc || null,
   };
-  return [mkOp(ctx, 'unit.create', uid('u_'), { u }, uid('b_'))];
+  if (d.sector === SECTOR_OTROS) u.sectorOtro = String(d.sectorOtro).trim();
+  if (d.plantilla) u.plantilla = { id: d.plantilla.id, nombre: d.plantilla.nombre };
+  return [...inc.ops, mkOp(ctx, 'unit.create', uid('u_'), { u }, uid('b_'))];
+}
+
+/** Unidad a partir de una unidad plantilla: solo se piden los campos que indica la plantilla.
+ *  Modificar después la plantilla no cambia las unidades ya creadas (se copian sus valores). */
+export function unitFromTemplate(ctx, p, v = {}) {
+  if (!p || p.activo === false) fail('La unidad plantilla no está disponible');
+  const num = String(v.numero ?? '').trim();
+  if (!num) fail('Indica el número de la unidad');
+  for (const k of p.obligatorios || []) if ((p.campos || []).includes(k) && !String(Array.isArray(v[k]) ? v[k].join('') : v[k] ?? '').trim()) fail('Falta un dato obligatorio: ' + k);
+  const pide = new Set(p.campos || []); const val = p.valores || {};
+  const vis = {}; for (const k of ['forma', 'icono', 'tam']) if (p.vis && p.vis[k]) vis[k] = p.vis[k];
+  return unitCreate(ctx, {
+    ind: [String(p.prefijo || '').trim(), num].filter(Boolean).join(' '),
+    tipo: p.tipo || null, tipoDef: p.tipoDef || null,
+    nombre: pide.has('nombre') ? v.nombre : '', denom: pide.has('denom') ? v.denom : '',
+    subtipo: pide.has('subtipo') && v.subtipo ? v.subtipo : val.subtipo || '',
+    caract: pide.has('caract') && v.caract && v.caract.length ? v.caract : val.caract || [],
+    obs: pide.has('obs') ? v.obs : '',
+    // Ubicación: pendiente de asignación salvo que la plantilla pida el sector
+    sector: pide.has('sector') ? v.sector || null : null, sectorOtro: pide.has('sector') ? v.sectorOtro : '',
+    vis, colorC0: isHexColor(p.color) ? p.color : undefined, plantilla: { id: p.id, nombre: p.nombre },
+  });
 }
 
 export function unitUpdate(ctx, id, cambios) {
   needPerm(ctx.user, 'unidades.editar');
   const s = editable(ctx); const u = unit(s, id);
+  cambios = { ...cambios }; const tipoDef = cambios.tipoDef; delete cambios.tipoDef;
   for (const k of Object.keys(cambios)) if (!UNIT_EDIT.includes(k.split('.')[0])) fail('Campo no editable: ' + k);
   if ('ind' in cambios) cambios.ind = checkInd(s, cambios.ind, id);
-  if ('tipo' in cambios && (cambios.tipo || null) !== (u.tipo || null)) needPerm(ctx.user, 'unidades.tipos');
+  let pre = [];
+  if ('tipo' in cambios && (cambios.tipo || null) !== (u.tipo || null)) { needPerm(ctx.user, 'unidades.tipos'); pre = incorporarTipo(ctx, s, cambios.tipo, tipoDef).ops; }
+  if ('sector' in cambios || 'sectorOtro' in cambios) {
+    const sec = 'sector' in cambios ? cambios.sector : u.sector;
+    if (sec !== SECTOR_OTROS) { if (u.sectorOtro) cambios.sectorOtro = ''; else delete cambios.sectorOtro; }
+    else if ('sectorOtro' in cambios) cambios.sectorOtro = String(cambios.sectorOtro || '').trim();
+    checkSector(s, sec, 'sectorOtro' in cambios ? cambios.sectorOtro : u.sectorOtro);
+  }
   const f = fieldsDiff(u, cambios);
   if (!Object.keys(f).length) return [];
-  return [mkOp(ctx, 'unit.update', id, { f }, uid('b_'))];
+  return [...pre, mkOp(ctx, 'unit.update', id, { f }, uid('b_'))];
 }
 
 /** Claves a las que puede pasar la unidad (transiciones permitidas) */

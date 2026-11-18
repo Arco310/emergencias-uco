@@ -3,14 +3,15 @@ import { G, A, F, CH, filt } from '../state.js';
 import { esc, attr, openSheet, closeSheet, refreshSheets, toast, confirmDlg, fieldsHtml, readForm, chip, empty, btn, tabs, copyText, $, toLocalInput } from '../dom.js';
 import { icon, unitSvg } from '../icons.js';
 import { now, fmtTime, fmtDateTime, fmtDur, norm, clone, contrastText } from '../../core/util.js';
-import { claveDef, baseClave, isResting, restEnd, unitSituation, SITUACION_LABEL, counts, liveUnits, unitLabel, avisoLabel, activeParts } from '../../core/engine.js';
+import { claveDef, baseClave, isResting, restEnd, unitSituation, SITUACION_LABEL, counts, liveUnits, unitLabel, avisoLabel, activeParts, sectorNombre, SECTOR_OTROS } from '../../core/engine.js';
+import { nuevoTipoRecurso } from './catalogs.js';
 import { unitVisual, effectiveVis, overriddenVis, tipoDe } from '../../core/visual.js';
 import * as C from '../../core/commands.js';
 import { suggestUnits } from '../../core/suggest.js';
 import { avisoTimes, TIEMPOS_AVISO } from '../../core/stats.js';
 import { avisoHistory, AVISO_ESTADO } from '../../core/timeline.js';
 import { hasCoords, fmtCoords, googleMapsUrl, googleEmbedUrl, embedUrl, osmUrl, nominatimUrl, parseCoords, round6, fmtKm } from '../../core/geo.js';
-import { ICONOS, FORMAS, TAMANOS, BORDES, ETIQUETAS, TARJETAS, CAMPOS_TARJETA, KPIS } from '../../core/defaults.js';
+import { ICONOS, FORMAS, TAMANOS, BORDES, ETIQUETAS, TARJETAS, CAMPOS_TARJETA, KPIS, CAMPOS_PLANTILLA } from '../../core/defaults.js';
 
 const core = () => G.core;
 const S = () => G.core.state;
@@ -40,7 +41,7 @@ export function unitCard(u, { compact = false, extra = '' } = {}) {
   if (campos.includes('nombre') && u.nombre) lines.push(esc(u.nombre));
   if (campos.includes('denominacion') && u.denom) lines.push(esc(u.denom));
   if (campos.includes('tipo') && u.tipo) lines.push(esc(named(p.cat.tiposRecurso, u.tipo)) + (u.subtipo ? ' · ' + esc(u.subtipo) : ''));
-  if (campos.includes('sector') && u.sector) lines.push(icon('mapa') + esc(named(p.cat.sectores, u.sector)));
+  if (campos.includes('sector')) lines.push(icon('mapa') + (u.sector ? esc(sectorNombre(p, u)) : '<i class="muted">Pendiente de asignación</i>'));
   if (campos.includes('aviso') && a) lines.push(icon('avisos') + 'Aviso ' + esc(avisoNum(a)) + (a.desc ? ' · ' + esc(a.desc) : ''));
   if (campos.includes('ubicacion') && u.loc && (u.loc.txt || hasCoords(u.loc))) lines.push(icon('pin') + esc(u.loc.txt || fmtCoords(u.loc)));
   if (campos.includes('descanso') && v.resting) lines.push(`${icon('cafe')}Descanso · quedan <b data-cd="${u.descanso.finPrev}"></b>`);
@@ -102,10 +103,11 @@ export function renderPanel() {
 }
 function sectorTable(s, c) {
   const p = P(); const rows = (p.cat.sectores || []).map(sec => ({ sec, d: c.porSector[sec.id] || { total: 0, disponibles: 0 } }));
-  const sin = c.porSector._;
+  const sin = c.porSector._; const otros = c.porSector[SECTOR_OTROS];
   return `<div class="card pad-s"><h3>Recursos por sector</h3><table class="tbl"><thead><tr><th>Sector</th><th class="num">Disponibles</th><th class="num">Total</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td><span class="swatch" style="background:${attr(r.sec.color)}"></span>${esc(r.sec.nombre)}</td><td class="num">${r.d.disponibles}</td><td class="num">${r.d.total}</td></tr>`).join('')}
-    ${sin ? `<tr><td class="muted">Sin sector</td><td class="num">${sin.disponibles}</td><td class="num">${sin.total}</td></tr>` : ''}</tbody></table></div>`;
+    ${otros ? `<tr><td>Otros (ubicaciones personalizadas)</td><td class="num">${otros.disponibles}</td><td class="num">${otros.total}</td></tr>` : ''}
+    ${sin ? `<tr><td class="muted">Pendiente de asignación</td><td class="num">${sin.disponibles}</td><td class="num">${sin.total}</td></tr>` : ''}</tbody></table></div>`;
 }
 function panelAlerts(s, t, c) {
   const out = []; const core0 = core();
@@ -138,13 +140,13 @@ export function renderUnits() {
   const all = Object.values(s.units).filter(u => !u.eliminada);
   const countOf = k => all.filter(u => (k === 'todas' ? u.sit !== 'archivada' : k === 'archivada' ? u.sit === 'archivada' : u.sit !== 'archivada' && unitSituation(s, u, t) === k)).length;
   let list = all.filter(u => (sit === 'todas' ? u.sit !== 'archivada' : sit === 'archivada' ? u.sit === 'archivada' : u.sit !== 'archivada' && unitSituation(s, u, t) === sit));
-  if (f.sector) list = list.filter(u => u.sector === f.sector);
+  if (f.sector) list = list.filter(u => (f.sector === '_' ? !u.sector : u.sector === f.sector));
   if (f.tipo) list = list.filter(u => u.tipo === f.tipo);
   if (f.q) { const q = norm(f.q); list = list.filter(u => norm([u.ind, u.nombre, u.denom, named(p.cat.tiposRecurso, u.tipo), u.loc && u.loc.txt].join(' ')).includes(q)); }
   return `
   <div class="toolbar">
     <div class="search">${icon('buscar')}<input id="q_units" type="search" placeholder="Buscar unidad" value="${attr(f.q || '')}" data-c="units.q" data-live="1" aria-label="Buscar unidad"></div>
-    <select data-c="units.sector" aria-label="Sector"><option value="">Todos los sectores</option>${(p.cat.sectores || []).map(x => `<option value="${x.id}"${f.sector === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
+    <select data-c="units.sector" aria-label="Sector"><option value="">Todos los sectores</option>${[...(p.cat.sectores || []).map(x => [x.id, x.nombre]), [SECTOR_OTROS, 'Otros (personalizados)'], ['_', 'Pendientes de asignación']].map(([id, n]) => `<option value="${id}"${f.sector === id ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
     <select data-c="units.tipo" aria-label="Tipo"><option value="">Todos los tipos</option>${(p.cat.tiposRecurso || []).map(x => `<option value="${x.id}"${f.tipo === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
     ${can('unidades.crear') && editable() ? btn('Nueva unidad', 'u.new', { cls: 'primary fab-dup', ic: 'mas_add' }) : ''}
   </div>
@@ -182,7 +184,7 @@ function unitSheet(id) {
     <div class="usym-big">${unitSvg(v, { px: 64, title: unitLabel(u) })}</div>
     <div class="grow">
       <div class="row gap-s wrap">${claveChip(u.clave, u.motivoEsp)} ${sitChip(s, u, t)}</div>
-      <p class="muted small">${esc(named(p.cat.tiposRecurso, u.tipo) || 'Sin tipo')}${u.subtipo ? ' · ' + esc(u.subtipo) : ''}${u.sector ? ' · ' + esc(named(p.cat.sectores, u.sector)) : ''} · en ${esc(u.clave)} desde ${fmtTime(u.claveDesde)} (<span data-since="${u.claveDesde}"></span>)</p>
+      <p class="muted small">${esc(named(p.cat.tiposRecurso, u.tipo) || 'Sin tipo')}${u.subtipo ? ' · ' + esc(u.subtipo) : ''} · ${u.sector ? esc(sectorNombre(p, u)) : 'pendiente de asignación'} · en ${esc(u.clave)} desde ${fmtTime(u.claveDesde)} (<span data-since="${u.claveDesde}"></span>)</p>
       ${v.resting ? `<p class="rest-box">${icon('cafe')} En descanso desde las ${fmtTime(rest.ini)} (${rest.dur} min) · fin previsto ${fmtTime(rest.finPrev)} · quedan <b data-cd="${rest.finPrev}"></b></p>` : ''}
       ${a ? `<button class="link" data-a="a.open" data-id="${a.id}">${icon('avisos')} Aviso ${esc(avisoNum(a))}${a.desc ? ' · ' + esc(a.desc) : ''}</button>` : ''}
     </div>
@@ -333,18 +335,23 @@ A['u.inplan'] = el => { closeSheet(); filt('plano').focus = el.dataset.id; G.go(
 
 // ---------- formulario de unidad ----------
 export function unitFields(cat, u = {}, { create = false, tipoEditable = true, colorField = create } = {}) {
-  const tipos = cat.tiposRecurso || [];
+  // Tipos del preventivo y, además, los tipos generales activos (comunes a todos los dispositivos)
+  const generales = core().tiposRecursoGenerales({ activos: true }).filter(g => !(cat.tiposRecurso || []).some(x => x.id === g.id));
+  const tipos = [...(cat.tiposRecurso || []), ...generales];
   const t = tipos.find(x => x.id === u.tipo);
+  const usados = [...new Set(liveUnits(S()).filter(x => x.sector === SECTOR_OTROS && x.sectorOtro).map(x => x.sectorOtro))].sort();
   const inh = (k, map) => `(heredar del tipo${t && t.vis && t.vis[k] ? ': ' + (map[t.vis[k]] || t.vis[k]) : ''})`;
   return [
     '<h3>Identificación</h3>',
     { name: 'ind', label: 'Identificador (indicativo)', required: true, placeholder: 'AMB-01' },
     { name: 'nombre', label: 'Nombre' }, { name: 'denom', label: 'Denominación' },
     '<h3>Clasificación</h3>',
-    { name: 'tipo', label: 'Tipo de recurso', type: 'select', options: [['', 'Sin tipo'], ...tipos.map(x => [x.id, x.nombre])], disabled: !tipoEditable, help: tipoEditable ? '' : 'Cambiar el tipo requiere permiso específico' },
+    { name: 'tipo', label: 'Tipo de recurso', type: 'select', options: [['', 'Sin tipo'], ...(cat.tiposRecurso || []).map(x => [x.id, x.nombre]), ...generales.map(x => [x.id, x.nombre + ' (configuración general)'])], disabled: !tipoEditable, help: tipoEditable ? '' : 'Cambiar el tipo requiere permiso específico' },
+    ...(tipoEditable && can('recursos.gestionar') ? [`<div class="row end"><button type="button" class="btn sm ghost" data-a="u.nuevoTipo">${icon('mas_add')}<span>Nuevo tipo de recurso</span></button></div>`] : []),
     { name: 'subtipo', label: 'Subtipo', placeholder: t && t.subtipos && t.subtipos.length ? t.subtipos.join(', ') : '' },
     { name: 'categoria', label: 'Categoría', placeholder: t ? t.categoria : '' },
-    { name: 'sector', label: 'Sector', type: 'select', options: [['', 'Sin sector'], ...(cat.sectores || []).map(x => [x.id, x.nombre])] },
+    { name: 'sector', label: 'Sector o ubicación', type: 'select', options: [['', 'Pendiente de asignación'], ...(cat.sectores || []).map(x => [x.id, x.nombre]), [SECTOR_OTROS, 'OTROS (ubicación personalizada)']], attrs: 'data-c="u.sectorSel"' },
+    `<div class="fld" data-otros${u.sector === SECTOR_OTROS ? '' : ' hidden'}><label for="f_sectorOtro">Ubicación o sector personalizado</label><input id="f_sectorOtro" name="sectorOtro" list="dl_otros" value="${attr(u.sectorOtro || '')}" placeholder="p. ej. Puerta 7, Carpa VIP" data-field="1" data-type="text"><datalist id="dl_otros">${usados.map(x => `<option value="${attr(x)}">`).join('')}</datalist><small class="help">Solo para este preventivo: no se crea un sector nuevo en la configuración.</small></div>`,
     '<h3>Descripción</h3>',
     { name: 'desc', label: 'Descripción', type: 'textarea', rows: 2 }, { name: 'obs', label: 'Observaciones', type: 'textarea', rows: 2 },
     { name: 'equip', label: 'Equipamiento', type: 'tags' }, { name: 'caract', label: 'Características', type: 'tags', placeholder: t ? (t.caracteristicas || []).join(', ') : '' },
@@ -364,7 +371,7 @@ export function unitFields(cat, u = {}, { create = false, tipoEditable = true, c
 export function unitValues(u) {
   const vis = u.vis || {};
   return {
-    ind: u.ind, nombre: u.nombre, denom: u.denom, tipo: u.tipo || '', subtipo: u.subtipo, categoria: u.categoria, sector: u.sector || '', desc: u.desc, obs: u.obs,
+    ind: u.ind, nombre: u.nombre, denom: u.denom, tipo: u.tipo || '', subtipo: u.subtipo, categoria: u.categoria, sector: u.sector || '', sectorOtro: u.sectorOtro || '', desc: u.desc, obs: u.obs,
     equip: u.equip || [], caract: u.caract || [], colorC0: u.colorC0, v_icono: vis.icono || '', v_forma: vis.forma || '', v_tam: vis.tam || '', v_borde: vis.borde || '',
     v_etiqueta: vis.etiqueta || '', v_tarjeta: vis.tarjeta || '', v_enPlano: vis.enPlano === true ? 'si' : vis.enPlano === false ? 'no' : '',
     v_camposOwn: !!(vis.campos && vis.campos.length), v_campos: vis.campos || (P() ? P().cfg.camposTarjeta : []) || [],
@@ -376,27 +383,72 @@ export function unitFromForm(v) {
   for (const k of ['icono', 'forma', 'tam', 'borde', 'etiqueta', 'tarjeta']) if (v['v_' + k]) vis[k] = v['v_' + k];
   if (v.v_enPlano) vis.enPlano = v.v_enPlano === 'si';
   if (v.v_camposOwn) vis.campos = v.v_campos;
-  const out = { ind: v.ind, nombre: v.nombre || '', denom: v.denom || '', tipo: v.tipo || null, subtipo: v.subtipo || '', categoria: v.categoria || '', sector: v.sector || null, desc: v.desc || '', obs: v.obs || '', equip: v.equip || [], caract: v.caract || [], vis };
+  const out = { ind: v.ind, nombre: v.nombre || '', denom: v.denom || '', tipo: v.tipo || null, subtipo: v.subtipo || '', categoria: v.categoria || '', sector: v.sector || null, sectorOtro: v.sector === SECTOR_OTROS ? String(v.sectorOtro || '').trim() : '', desc: v.desc || '', obs: v.obs || '', equip: v.equip || [], caract: v.caract || [], vis };
   if (v.colorC0) out.colorC0 = v.colorC0.toUpperCase();
+  // Tipo de la configuración general que aún no está en el preventivo: viaja su definición para incorporarlo
+  if (out.tipo && !(P().cat.tiposRecurso || []).some(t => t.id === out.tipo)) out.tipoDef = core().tiposRecursoGenerales().find(t => t.id === out.tipo) || null;
   return out;
 }
+CH['u.sectorSel'] = el => { const f = el.closest('form'); const b = f && f.querySelector('[data-otros]'); if (b) { b.hidden = el.value !== SECTOR_OTROS; if (!b.hidden) b.querySelector('input').focus(); } };
+// Valores del formulario de unidad mientras se crea un tipo nuevo (para no perder lo escrito)
+let UFORM = null;
+A['u.nuevoTipo'] = el => {
+  const form = el.closest('form'); UFORM = { ...readForm(form) };
+  nuevoTipoRecurso(t => { UFORM = { ...UFORM, tipo: t.id }; refreshSheets(); });
+};
+/** Añadir unidad: primero las unidades plantilla (solo piden el número); después, una unidad personalizada */
 A['u.new'] = () => {
-  const p = P();
-  openSheet({ title: 'Nueva unidad', size: 'l', render: () => `<form data-f="u.save">${fieldsHtml(unitFields(p.cat, {}, { create: true }), { ...unitValues({ vis: {} }), colorC0: '' })}
+  const plts = core().plantillasUnidad({ activas: true });
+  if (!plts.length) return abrirFormUnidad();
+  const tipos = core().tiposRecursoGenerales();
+  openSheet({
+    title: 'Añadir unidad', size: 'm', render: () => `<h3>Unidades plantilla</h3><p class="muted small">Solo se pide el número: tipo, icono, color e indicativo los pone la plantilla.</p>
+      <div class="tpl-grid">${plts.map(pl => { const t = tipos.find(x => x.id === pl.tipo); const col = pl.color || (t && t.color) || '#2E7D32';
+        const v = { icono: (pl.vis && pl.vis.icono) || (t && t.vis && t.vis.icono), forma: (pl.vis && pl.vis.forma) || (t && t.vis && t.vis.forma), fill: col, border: col, text: contrastText(col) };
+        return `<button type="button" class="tile tpl" data-a="u.fromTpl" data-id="${attr(pl.id)}">${unitSvg(v, { px: 40 })}<span><b>${esc(pl.nombre)}</b><small class="muted">${esc([pl.prefijo, '…'].filter(Boolean).join(' '))}${t ? ' · ' + esc(t.nombre) : ''}</small></span></button>`; }).join('')}</div>
+      <h3>Otra unidad</h3><button type="button" class="btn" data-a="u.newBlank">${icon('mas_add')}<span>Unidad personalizada</span></button>`,
+  });
+};
+A['u.newBlank'] = () => { closeSheet(); abrirFormUnidad(); };
+function abrirFormUnidad() {
+  const p = P(); UFORM = null;
+  openSheet({ title: 'Nueva unidad', size: 'l', onClose: () => { UFORM = null; }, render: () => `<form data-f="u.save">${fieldsHtml(unitFields(p.cat, UFORM ? { tipo: UFORM.tipo, sector: UFORM.sector } : {}, { create: true }), UFORM || { ...unitValues({ vis: {} }), colorC0: '' })}
     <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear unidad</button></div></form>` });
+}
+A['u.fromTpl'] = el => {
+  const pl = core().plantillasUnidad().find(x => x.id === el.dataset.id); if (!pl) return;
+  closeSheet();
+  const campos = (pl.campos || []).filter(k => CAMPOS_PLANTILLA[k]); const ob = new Set(pl.obligatorios || []);
+  const cat = P().cat;
+  const f = k => k === 'sector' ? { name: 'sector', label: CAMPOS_PLANTILLA[k], type: 'select', required: ob.has(k), options: [['', 'Pendiente de asignación'], ...(cat.sectores || []).map(x => [x.id, x.nombre]), [SECTOR_OTROS, 'OTROS (ubicación personalizada)']], attrs: 'data-c="u.sectorSel"' }
+    : { name: k, label: CAMPOS_PLANTILLA[k], required: ob.has(k), type: k === 'caract' ? 'tags' : k === 'obs' ? 'textarea' : 'text' };
+  openSheet({
+    title: 'Nueva unidad · ' + pl.nombre, size: 's', render: () => `<form data-f="u.tplSave" data-id="${attr(pl.id)}">
+      ${fieldsHtml([{ name: 'numero', label: 'Número de la unidad', required: true, placeholder: 'p. ej. 8025', attrs: 'autofocus inputmode="numeric" autocomplete="off" data-c="u.tplNum" data-live="1"', help: 'Indicativo resultante: ' + [pl.prefijo, '…'].filter(Boolean).join(' ') }, ...campos.map(f),
+        ...(campos.includes('sector') ? [`<div class="fld" data-otros hidden><label for="f_sectorOtro">Ubicación o sector personalizado</label><input id="f_sectorOtro" name="sectorOtro" data-field="1" data-type="text"></div>`] : [])])}
+      <p class="muted small">Se crea en C0${campos.includes('sector') ? '' : ' y pendiente de asignación (aparece en el plano, en «Unidades pendientes de asignación»)'}.</p>
+      <div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear unidad</button></div></form>`,
+  });
+};
+CH['u.tplNum'] = el => { const pl = core().plantillasUnidad().find(x => x.id === el.closest('form').dataset.id); const h = el.parentNode.querySelector('.help'); if (pl && h) h.textContent = 'Indicativo resultante: ' + [pl.prefijo, el.value.trim() || '…'].filter(Boolean).join(' '); };
+F['u.tplSave'] = async form => {
+  const v = readForm(form); const pl = core().plantillasUnidad().find(x => x.id === form.dataset.id);
+  await core().crearUnidadDesdePlantilla(form.dataset.id, v);
+  toast('Unidad ' + [pl.prefijo, String(v.numero).trim()].filter(Boolean).join(' ') + ' creada en C0' + (v.sector ? '' : ', pendiente de asignación'), 'ok', 5000);
+  closeSheet();
 };
 A['u.edit'] = el => {
-  const u = S().units[el.dataset.id]; const p = P();
-  openSheet({ title: 'Editar ' + unitLabel(u), size: 'l', render: () => `<form data-f="u.save" data-id="${u.id}">${fieldsHtml(unitFields(p.cat, u, { tipoEditable: can('unidades.tipos') }), unitValues(u))}
+  const u = S().units[el.dataset.id]; const p = P(); UFORM = null;
+  openSheet({ title: 'Editar ' + unitLabel(u), size: 'l', onClose: () => { UFORM = null; }, render: () => `<form data-f="u.save" data-id="${u.id}">${fieldsHtml(unitFields(p.cat, UFORM ? { ...u, tipo: UFORM.tipo, sector: UFORM.sector, sectorOtro: UFORM.sectorOtro } : u, { tipoEditable: can('unidades.tipos') }), UFORM || unitValues(u))}
     <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar</button></div></form>` });
 };
 F['u.save'] = async form => {
   const v = readForm(form); const d = unitFromForm(v);
-  if (!form.dataset.id) { await exec(C.unitCreate, d); toast('Unidad creada', 'ok'); closeSheet(); return; }
+  if (!form.dataset.id) { await exec(C.unitCreate, d); UFORM = null; toast('Unidad creada', 'ok'); closeSheet(); return; }
   const u = S().units[form.dataset.id];
   const cambios = {};
-  for (const k of ['ind', 'nombre', 'denom', 'subtipo', 'categoria', 'sector', 'desc', 'obs', 'equip', 'caract']) cambios[k] = d[k];
-  if (can('unidades.tipos')) cambios.tipo = d.tipo;
+  for (const k of ['ind', 'nombre', 'denom', 'subtipo', 'categoria', 'sector', 'sectorOtro', 'desc', 'obs', 'equip', 'caract']) cambios[k] = d[k];
+  if (can('unidades.tipos')) { cambios.tipo = d.tipo; if (d.tipoDef) cambios.tipoDef = d.tipoDef; }
   const keys = new Set([...Object.keys(u.vis || {}), ...Object.keys(d.vis)]);
   for (const k of keys) cambios['vis.' + k] = d.vis[k] ?? null;
   await exec(C.unitUpdate, u.id, cambios); toast('Cambios guardados', 'ok'); closeSheet();

@@ -130,7 +130,7 @@ function statsPrev() {
     <section class="card pad"><h3>Avisos por tipo</h3>${hbars(Object.entries(tot.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : named(p.cat.tiposAviso, k), value: v, color: (p.cat.tiposAviso.find(x => x.id === k) || {}).color })))}</section>
     <section class="card pad"><h3>Avisos por sector</h3>${hbars(Object.entries(tot.porSector).map(([k, v]) => ({ label: k === '_' ? 'Sin sector' : named(p.cat.sectores, k), value: v, color: (p.cat.sectores.find(x => x.id === k) || {}).color })))}</section>
     <section class="card pad"><h3>Recursos por tipo</h3>${hbars(Object.entries(st.recursos.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : named(p.cat.tiposRecurso, k), value: v, color: (p.cat.tiposRecurso.find(x => x.id === k) || {}).color })))}</section>
-    <section class="card pad"><h3>Recursos por sector</h3>${hbars(Object.entries(st.recursos.porSector).map(([k, v]) => ({ label: k === '_' ? 'Sin sector' : named(p.cat.sectores, k), value: v, color: (p.cat.sectores.find(x => x.id === k) || {}).color })))}</section>
+    <section class="card pad"><h3>Recursos por sector</h3>${hbars(Object.entries(st.recursos.porSector).map(([k, v]) => ({ label: k === '_' ? 'Pendiente de asignación' : k === 'otros' ? 'Otros (ubicaciones personalizadas)' : named(p.cat.sectores, k), value: v, color: (p.cat.sectores.find(x => x.id === k) || {}).color })))}</section>
     <section class="card pad"><h3>Unidades ocupadas y en descanso por hora</h3>${cols(st.serie.map(b => ({ label: fmtTime(b.t), value: b.ocupadas })), '#1565C0')}${cols(st.serie.map(b => ({ label: fmtTime(b.t), value: b.descansos })), '#9E9E9E')}</section>
   </div>`;
 }

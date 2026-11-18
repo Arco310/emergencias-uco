@@ -289,3 +289,7 @@ fieldset.checks{border:1px solid var(--line);border-radius:var(--r-s);padding:.5
 dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:.35rem .9rem;margin:.4rem 0 .8rem}
 dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;overflow-wrap:anywhere}
 .pcard-central{border-style:dashed}
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem;margin:.4rem 0 1rem}
+.tile.tpl{flex-direction:row;justify-content:flex-start;gap:.6rem;text-align:left;min-height:64px;padding:.5rem .7rem}
+.tile.tpl span{display:flex;flex-direction:column;align-items:flex-start}
+.cat-row.off{opacity:.6}

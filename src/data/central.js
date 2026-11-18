@@ -120,37 +120,49 @@ export class CentralSync {
     const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado');
     const salt = randomBytes(16); const dd = await cuentaDerivar(password, salt, iter);
     const rec = { salt: b64(salt), iter, verif: dd.verif, wrap: await seal(dd.envKey, { s: meta.secret }) };
-    const d = await this.datos(); d.pendCuentas[await cuentaUid(meta.org, usuario)] = rec;
-    await this._saveDatos(d); this.kick();
+    const uid = await cuentaUid(meta.org, usuario);
+    await this._conDatos(d => { d.pendCuentas[uid] = rec; }); this.kick();
   }
   /** Retira la cuenta del servidor (usuario desactivado o renombrado): ya no podrá entrar en dispositivos nuevos */
   async borrarCuenta(usuario) {
     const meta = await this.meta(); if (!meta) return;
-    const d = await this.datos(); d.pendCuentas[await cuentaUid(meta.org, usuario)] = null;
-    await this._saveDatos(d); this.kick();
+    const uid = await cuentaUid(meta.org, usuario);
+    await this._conDatos(d => { d.pendCuentas[uid] = null; }); this.kick();
   }
   async olvidar() { this.stop(); await this.h.repo.delDoc('central'); await this.h.repo.delDoc('central:datos'); this._k = null; this._set({ estado: 'sin_configurar', error: null }); }
   codigoAlta(meta) { return encodeAltaCode({ server: meta.server, org: meta.org, secret: unb64(meta.secret), nombre: meta.nombre, pruebas: meta.pruebas }); }
 
   // ---------------- datos compartidos ----------------
+  /** Toda modificación de los datos del espacio pasa por aquí, de una en una: así ninguna se pierde
+   *  aunque se hagan cambios mientras se sincroniza (antes, la sincronización guardaba una copia antigua). */
+  _conDatos(fn) {
+    const run = (this._mutex || Promise.resolve()).then(async () => { const d = await this.datos(); const r = await fn(d); await this._saveDatos(d); return r; });
+    this._mutex = run.catch(() => { });
+    return run;
+  }
   async registrarPrev(pid, info) {
-    const d = await this.datos(); d.pendPrevs[pid] = info; d.registro[pid] = { ...(d.registro[pid] || {}), ...info, pid };
-    await this._saveDatos(d); this.kick();
+    await this._conDatos(d => { d.pendPrevs[pid] = info; d.registro[pid] = { ...(d.registro[pid] || {}), ...info, pid }; });
+    this.kick();
   }
   /** Guarda un elemento de la configuración general; se envía con la versión en la que se basaba */
   async guardarConfig(id, data, { borrado = false } = {}) {
-    const d = await this.datos(); const cur = d.items[id];
-    const base = d.pendCfg[id] ? d.pendCfg[id].base : cur ? cur.v : 0;
-    d.pendCfg[id] = { base, data, borrado }; d.items[id] = { ...(cur || { v: 0 }), data, borrado, local: true };
-    await this._saveDatos(d); this.kick();
-    return d.items[id];
+    const r = await this._conDatos(d => {
+      const cur = d.items[id];
+      const base = d.pendCfg[id] ? d.pendCfg[id].base : cur ? cur.v : 0;
+      d.pendCfg[id] = { base, data, borrado, t: now() + Math.random() }; d.items[id] = { ...(cur || { v: 0 }), data, borrado, local: true };
+      return d.items[id];
+    });
+    this.kick(); return r;
   }
   /** Resolver un conflicto de configuración: conservar la versión de este dispositivo o la del servidor */
   async resolverConfig(id, quedarse) {
-    const d = await this.datos(); const c = d.conflictos[id]; if (!c) return;
-    if (quedarse === 'mio') d.pendCfg[id] = { base: c.v, data: c.mio, borrado: !!c.mioBorrado };
-    else { d.items[id] = { v: c.v, data: c.suyo, borrado: !!c.suyoBorrado }; delete d.pendCfg[id]; }
-    delete d.conflictos[id]; await this._saveDatos(d); this.kick();
+    await this._conDatos(d => {
+      const c = d.conflictos[id]; if (!c) return;
+      if (quedarse === 'mio') d.pendCfg[id] = { base: c.v, data: c.mio, borrado: !!c.mioBorrado, t: now() + Math.random() };
+      else { d.items[id] = { v: c.v, data: c.suyo, borrado: !!c.suyoBorrado }; delete d.pendCfg[id]; }
+      delete d.conflictos[id];
+    });
+    this.kick();
   }
 
   // ---------------- sincronización ----------------
@@ -169,42 +181,53 @@ export class CentralSync {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return this._set({ estado: 'sin_conexion', server: meta.server });
       this._set({ estado: 'sincronizando', server: meta.server });
       const k = await this.keys(meta); const tok = k.token; const base = '/org/' + encodeURIComponent(meta.org);
-      const d = await this.datos(); const cambiados = [];
-      // 1. Enviar registros de preventivos, cuentas y configuración pendientes
-      for (const [pid, info] of Object.entries(d.pendPrevs)) {
+      const pend = await this.datos(); const cambiados = [];
+      // 1. Enviar registros de preventivos, cuentas y configuración pendientes. Un pendiente solo se da por
+      //    enviado si no ha cambiado mientras tanto (si cambió, se enviará la versión nueva en la siguiente vuelta).
+      for (const [pid, info] of Object.entries(pend.pendPrevs)) {
         await this._req(meta.server, base + '/prevs/' + encodeURIComponent(pid), { method: 'PUT', token: tok, body: { w: await seal(k.key, { ...info, pid }) } });
-        delete d.pendPrevs[pid];
+        await this._conDatos(d => { if (stableStringify(d.pendPrevs[pid]) === stableStringify(info)) delete d.pendPrevs[pid]; });
       }
-      for (const [uid, rec] of Object.entries(d.pendCuentas || {})) {
+      for (const [uid, rec] of Object.entries(pend.pendCuentas || {})) {
         await this._req(meta.server, base + '/cuentas/' + uid, rec ? { method: 'PUT', token: tok, body: rec } : { method: 'DELETE', token: tok });
-        delete d.pendCuentas[uid];
+        await this._conDatos(d => { if (stableStringify(d.pendCuentas[uid]) === stableStringify(rec)) delete d.pendCuentas[uid]; });
       }
-      for (const [id, p] of Object.entries(d.pendCfg)) {
+      for (const [id, p] of Object.entries(pend.pendCfg)) {
+        const mismo = d => d.pendCfg[id] && d.pendCfg[id].t === p.t && stableStringify(d.pendCfg[id].data) === stableStringify(p.data);
         try {
           const r = await this._req(meta.server, base + '/config/' + encodeURIComponent(id), { method: 'PUT', token: tok, body: { base: p.base, c: await seal(k.key, { id, data: p.data }), borrado: !!p.borrado } });
-          d.items[id] = { v: r.v, data: p.data, borrado: !!p.borrado, sq: r.sq }; cambiados.push(id);
+          await this._conDatos(d => {
+            if (mismo(d)) { d.items[id] = { v: r.v, data: p.data, borrado: !!p.borrado, sq: r.sq }; delete d.pendCfg[id]; cambiados.push(id); }
+            else if (d.pendCfg[id]) d.pendCfg[id].base = r.v; // cambiado de nuevo: se envía después sobre esta versión
+          });
         } catch (e) {
           if (e.status !== 409) throw e;
           const a = e.body && e.body.actual;
           const suyo = a ? (await open(k.key, a.c)).data : null;
-          // Si el otro dispositivo guardó exactamente lo mismo no hay conflicto real
-          if (!(a && !!a.borrado === !!p.borrado && stableStringify(suyo) === stableStringify(p.data))) d.conflictos[id] = { v: a ? a.v : 0, mio: p.data, mioBorrado: !!p.borrado, suyo, suyoBorrado: a ? !!a.borrado : true, t: now() };
-          if (a) { d.items[id] = { v: a.v, data: suyo, borrado: !!a.borrado, sq: a.sq }; cambiados.push(id); }
+          await this._conDatos(d => {
+            if (!mismo(d)) return;
+            // Si el otro dispositivo guardó exactamente lo mismo no hay conflicto real
+            if (!(a && !!a.borrado === !!p.borrado && stableStringify(suyo) === stableStringify(p.data))) d.conflictos[id] = { v: a ? a.v : 0, mio: p.data, mioBorrado: !!p.borrado, suyo, suyoBorrado: a ? !!a.borrado : true, t: now() };
+            if (a) { d.items[id] = { v: a.v, data: suyo, borrado: !!a.borrado, sq: a.sq }; cambiados.push(id); }
+            delete d.pendCfg[id];
+          });
         }
-        delete d.pendCfg[id];
       }
       // 2. Recibir cambios de otros dispositivos
       const r = await this._req(meta.server, base + '/cambios?desde=' + (meta.lastSeq || 0), { token: tok });
+      const regs = []; const cfgs = [];
+      for (const x of r.prevs) { try { regs.push({ ...(await open(k.key, x.w)), pid: x.pid, sq: x.sq }); } catch { /* entrada de otra clave: se ignora */ } }
+      for (const x of r.config) { try { cfgs.push({ id: x.id, v: x.v, data: (await open(k.key, x.c)).data, borrado: !!x.borrado, sq: x.sq }); } catch { } }
       const entradas = [];
-      for (const x of r.prevs) {
-        try { const info = await open(k.key, x.w); d.registro[x.pid] = { ...info, pid: x.pid, sq: x.sq }; entradas.push(d.registro[x.pid]); } catch { /* entrada de otra clave: se ignora */ }
-      }
-      for (const x of r.config) {
-        if (d.pendCfg[x.id]) continue; // hay un cambio local en vuelo: se resolverá al enviarlo
-        try { const o = await open(k.key, x.c); d.items[x.id] = { v: x.v, data: o.data, borrado: !!x.borrado, sq: x.sq }; cambiados.push(x.id); } catch { }
-      }
-      meta.lastSeq = r.last; meta.ultimo = now();
-      await this.h.repo.putDoc('central', meta); await this._saveDatos(d);
+      const resto = await this._conDatos(d => {
+        for (const e of regs) { d.registro[e.pid] = e; entradas.push(e); }
+        for (const x of cfgs) {
+          if (d.pendCfg[x.id]) continue; // hay un cambio local en vuelo: se resolverá al enviarlo
+          const { id, ...it } = x; d.items[id] = it; cambiados.push(id);
+        }
+        return { pend: Object.keys(d.pendPrevs).length + Object.keys(d.pendCfg).length + Object.keys(d.pendCuentas || {}).length, conflictos: Object.keys(d.conflictos).length };
+      });
+      const m2 = await this.meta(); if (m2 && m2.org === meta.org) { m2.lastSeq = r.last; m2.ultimo = now(); await this.h.repo.putDoc('central', m2); }
       if (entradas.length) await this.h.onPrevs(entradas);
       if (cambiados.length && this.h.onConfig) await this.h.onConfig([...new Set(cambiados)]);
       // 3. Latido (versión y última comunicación) como mucho cada minuto
@@ -213,8 +236,7 @@ export class CentralSync {
         await this._req(meta.server, base + '/latido', { method: 'POST', token: tok, body: { dev: dev.id, nombre: dev.nombre || '', version: this.h.version } }).catch(() => { });
         this._latido = Date.now();
       }
-      const pend = Object.keys(d.pendPrevs).length + Object.keys(d.pendCfg).length + Object.keys(d.pendCuentas || {}).length;
-      return this._set({ estado: pend ? 'pendiente' : 'conectado', ultimo: now(), error: null, conflictos: Object.keys(d.conflictos).length });
+      return this._set({ estado: resto.pend ? 'pendiente' : 'conectado', ultimo: now(), error: null, conflictos: resto.conflictos });
     } catch (e) {
       return this._set({ estado: e.code === 'red' ? 'sin_conexion' : 'error', error: e.message, ultimoIntento: now() });
     }

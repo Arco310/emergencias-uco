@@ -54,7 +54,7 @@ function itemPreview(cat, it) {
 }
 function itemSummary(cat, it) {
   if (cat === 'claves') return [CATEGORIAS_CLAVE[it.categoria], it.especial && 'especial', it.requiereAviso && 'requiere aviso', it.alAsignar && 'al asignar', it.requiereMotivo && 'pide motivo', it.liberaAviso && 'libera el aviso', '→ ' + (it.transiciones || []).join(', ')].filter(Boolean).join(' · ');
-  if (cat === 'tiposRecurso') return [it.categoria, (it.subtipos || []).join('/'), (it.caracteristicas || []).join(', '), ICONOS[(it.vis || {}).icono], FORMAS[(it.vis || {}).forma]].filter(Boolean).join(' · ');
+  if (cat === 'tiposRecurso') return [it.activo === false && 'DESACTIVADO', it.categoria, (it.subtipos || []).join('/'), (it.caracteristicas || []).join(', '), ICONOS[(it.vis || {}).icono], FORMAS[(it.vis || {}).forma]].filter(Boolean).join(' · ');
   if (cat === 'tiposAviso') { const tr = ED.catalogs.tiposRecurso || []; return it.compatibles && it.compatibles.length ? 'Compatibles: ' + it.compatibles.map(id => (tr.find(t => t.id === id) || {}).nombre || id).join(', ') : 'Compatible con todos los recursos'; }
   return '';
 }
@@ -87,9 +87,29 @@ function itemFields(cat, it) {
     { name: 'icono', label: 'Icono', type: 'select', options: Object.entries(ICONOS) },
     { name: 'forma', label: 'Forma', type: 'select', options: Object.entries(FORMAS) },
     { name: 'tam', label: 'Tamaño', type: 'select', options: Object.entries(TAMANOS) },
+    { name: 'activo', label: 'Activo (se ofrece al crear unidades)', type: 'checkbox', help: 'Desactivar no cambia las unidades que ya lo usan ni los preventivos existentes.' },
   ];
   return [];
 }
+/** Alta de un tipo de recurso general sin abrir el catálogo completo (p. ej. desde el formulario de unidad) */
+export function nuevoTipoRecurso(onCreated) {
+  const it = { ...defaultItemTipo(), activo: true };
+  openSheet({
+    title: 'Nuevo tipo de recurso', size: 'm',
+    render: () => `<p class="muted small">Se guarda en la configuración general: queda disponible en todos los preventivos y en todos los dispositivos conectados.</p>
+      <form data-f="cat.nuevoTipo">${fieldsHtml(itemFields('tiposRecurso', it), { ...it, ...it.vis })}
+      <div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear tipo</button></div></form>`,
+  });
+  NUEVO_TIPO_CB = onCreated;
+}
+let NUEVO_TIPO_CB = null;
+F['cat.nuevoTipo'] = async form => {
+  const v = readForm(form); const { icono, forma, tam, ...rest } = v;
+  const t = await G.core.crearTipoRecurso({ ...rest, vis: { icono, forma, tam } });
+  closeSheet(); toast('Tipo «' + t.nombre + '» creado y guardado en la configuración general', 'ok');
+  if (NUEVO_TIPO_CB) { const cb = NUEVO_TIPO_CB; NUEVO_TIPO_CB = null; cb(t); }
+};
+const defaultItemTipo = () => ({ id: uid('rt_'), nombre: '', categoria: '', subtipos: [], caracteristicas: [], color: '#2E7D32', vis: { icono: 'ambulancia', forma: 'circulo', tam: 'm' } });
 
 function openItem(i) {
   const cat = ED.cat; const isNew = i == null;
@@ -105,7 +125,7 @@ function defaultItem(cat) {
   if (cat === 'claves') return { codigo: 'C' + ED.list.length, nombre: '', descripcion: '', color: '#607D8B', categoria: 'ocupada', transiciones: [ED.list.find(c => c.base).codigo] };
   if (cat === 'sectores') return { id: uid('sec_'), nombre: '', color: '#1E88E5' };
   if (cat === 'tiposAviso') return { id: uid('ta_'), nombre: '', color: '#C62828', compatibles: [] };
-  return { id: uid('rt_'), nombre: '', categoria: '', subtipos: [], caracteristicas: [], color: '#2E7D32', vis: { icono: 'ambulancia', forma: 'circulo', tam: 'm' } };
+  return { ...defaultItemTipo(), activo: true };
 }
 
 F['cat.item'] = form => {
@@ -113,7 +133,7 @@ F['cat.item'] = form => {
   const i = form.dataset.i === '' ? null : Number(form.dataset.i);
   const base = i == null ? defaultItem(cat) : clone(ED.list[i]);
   let it;
-  if (cat === 'tiposRecurso') { const { icono, forma, tam, ...rest } = v; it = { ...base, ...rest, vis: { ...(base.vis || {}), icono, forma, tam } }; }
+  if (cat === 'tiposRecurso') { const { icono, forma, tam, ...rest } = v; it = { ...base, ...rest, vis: { ...(base.vis || {}), icono, forma, tam } }; if (it.activo !== false) delete it.activo; }
   else it = { ...base, ...v };
   if (cat === 'claves' && base.base) it.codigo = base.codigo;
   if (cat === 'claves') { it.codigo = String(it.codigo || '').trim().toUpperCase(); for (const k of ['especial', 'requiereAviso', 'alAsignar', 'avisoEnCurso', 'llegada', 'liberaAviso', 'requiereMotivo']) if (!it[k]) delete it[k]; }

@@ -75,6 +75,17 @@ export const DEFAULT_TIPOS_RECURSO = [
   { id: 'rt_eqint', nombre: 'Equipo de intervención', categoria: 'Intervención', subtipos: [], caracteristicas: [], color: '#E65100', vis: { icono: 'equipo', forma: 'triangulo', tam: 'm' } },
   { id: 'rt_com', nombre: 'Unidad de comunicaciones', categoria: 'Comunicaciones', subtipos: [], caracteristicas: ['Repetidor'], color: '#455A64', vis: { icono: 'antena', forma: 'escudo', tam: 'm' } },
   { id: 'rt_psa', nombre: 'Puesto sanitario (PSA)', categoria: 'Sanitario', subtipos: [], caracteristicas: ['Camillas'], color: '#AD1457', vis: { icono: 'tienda', forma: 'cuadrado', tam: 'l' } },
+  { id: 'rt_vl', nombre: 'Vehículo ligero', categoria: 'Apoyo', subtipos: [], caracteristicas: [], color: '#1565C0', vis: { icono: 'coche', forma: 'triangulo', tam: 'm' } },
+];
+
+/** Campos que una unidad plantilla puede pedir al crear la unidad (el número se pide siempre) */
+export const CAMPOS_PLANTILLA = { nombre: 'Nombre', denom: 'Denominación', subtipo: 'Subtipo', sector: 'Sector o ubicación', caract: 'Características', obs: 'Observaciones' };
+
+/** Unidades plantilla de ejemplo: datos editables desde Configuración → Unidades plantilla */
+export const DEFAULT_PLANTILLAS_UNIDAD = [
+  { id: 'plt_upr', nombre: 'UPR', activo: true, tipo: 'rt_vl', prefijo: 'UPR', color: '#1565C0', vis: { forma: 'triangulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] } },
+  { id: 'plt_svb', nombre: 'Soporte Vital Básico (SVB)', activo: true, tipo: 'rt_svb', prefijo: 'SVB', color: '#2E7D32', vis: { forma: 'circulo', icono: 'ambulancia' }, campos: [], obligatorios: [], valores: { subtipo: 'SVB', caract: ['Camilla', 'DEA', 'Oxígeno'] } },
+  { id: 'plt_vires', nombre: 'VIRES', activo: true, tipo: 'rt_vir', prefijo: 'VIRES', color: '#00897B', vis: { forma: 'circulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: ['DEA'] } },
 ];
 
 export const DEFAULT_SECTORES = [
@@ -128,6 +139,7 @@ export function defaultGlobalConfig() {
     copiaAutoMin: 10,
     copiasAutoMax: 20,
     catalogos: defaultCatalogs(),
+    plantillasUnidad: clone(DEFAULT_PLANTILLAS_UNIDAD),
     prev: clone(DEFAULT_PREV_CFG),
   };
 }

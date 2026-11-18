@@ -2,16 +2,16 @@
 // usuarios y roles, copias de seguridad, auditoría y permisos del dispositivo.
 import { G, A, F, CH, filt } from '../state.js';
 import { esc, attr, openSheet, closeSheet, refreshSheets, toast, confirmDlg, fieldsHtml, readForm, chip, empty, btn, tabs, copyText, saveFile, pickFile, readText, fileStamp, safeName, systemNotify } from '../dom.js';
-import { icon } from '../icons.js';
-import { now, fmtDateTime, fmtTime, fmtDur, clone, AppError } from '../../core/util.js';
-import { APP_NAME, APP_VERSION, KPIS, CAMPOS_TARJETA, ICONOS } from '../../core/defaults.js';
+import { icon, unitSvg } from '../icons.js';
+import { now, fmtDateTime, fmtTime, fmtDur, clone, AppError, contrastText } from '../../core/util.js';
+import { APP_NAME, APP_VERSION, KPIS, CAMPOS_TARJETA, ICONOS, FORMAS, CAMPOS_PLANTILLA } from '../../core/defaults.js';
 import { PERMISOS } from '../../core/perms.js';
 import * as C from '../../core/commands.js';
 import { unitLabel, avisoLabel, liveUnits } from '../../core/engine.js';
 import { buildReport } from '../../core/report.js';
 import { prevJSON, csvZip } from '../../core/exporters.js';
 import { SYNC_ESTADOS } from '../../data/sync.js';
-import { openCatalog, catalogButtons, CAT_TITLE } from './catalogs.js';
+import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './catalogs.js';
 import { overriddenVis } from '../../core/visual.js';
 
 const core = () => G.core;
@@ -257,6 +257,10 @@ export function renderGlobalConfig() {
     { name: 'copiaAutoMin', label: 'Crear copia local cada (minutos, si hay cambios)', type: 'number', min: 1, max: 240, disabled: ro },
     { name: 'copiasAutoMax', label: 'Copias automáticas a conservar', type: 'number', min: 3, max: 200, disabled: ro },
   ], cfg)}${ro ? '' : '<div class="row end"><button class="btn primary">Guardar</button></div>'}</form></section>
+  <section class="card pad"><h2>Tipos de recurso y unidades plantilla</h2>
+    <p class="muted small">Comunes a todos los preventivos y, con el servidor central, a todos los dispositivos. Se conservan al cerrar la aplicación o reiniciar el equipo.</p>
+    <div class="grid-btns"><button class="tile" data-a="gcat.open" data-cat="tiposRecurso">${icon('unidades')}<span>Tipos de recurso</span></button><button class="tile" data-a="nav" data-v="uplantillas">${icon('plantilla')}<span>Unidades plantilla</span></button></div>
+  </section>
   <section class="card pad"><h2>Valores por defecto de los preventivos nuevos</h2>
     ${catalogButtons('gcat.open')}
     <form data-f="gcfg.prev">${fieldsHtml([
@@ -276,10 +280,64 @@ F['gcfg.basic'] = async form => {
 F['gcfg.sync'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, syncServidor: v.syncServidor ?? core().cfg.syncServidor, syncIntervaloSeg: Number(v.syncIntervaloSeg) || 5 }, 'Sincronización'); toast('Guardado', 'ok'); };
 F['gcfg.backup'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, copiaAutoMin: Number(v.copiaAutoMin) || 10, copiasAutoMax: Number(v.copiasAutoMax) || 20 }, 'Copias automáticas'); toast('Guardado', 'ok'); };
 F['gcfg.prev'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, prev: { ...core().cfg.prev, ...v, descansoMin: Number(v.descansoMin) || 30 } }, 'Valores por defecto de preventivos'); toast('Guardado', 'ok'); };
-A['gcat.open'] = el => openCatalog({
-  cat: el.dataset.cat, catalogs: core().cfg.catalogos, scopeLabel: 'por defecto', readonly: !can('config.editar'),
-  onSave: async list => { const cfg = clone(core().cfg); cfg.catalogos[el.dataset.cat] = list; await core().saveCfg(cfg, 'Catálogo por defecto: ' + CAT_TITLE[el.dataset.cat]); },
-});
+A['gcat.open'] = el => el.dataset.cat === 'tiposRecurso'
+  // Tipos de recurso generales: persistentes y comunes a todos los dispositivos
+  ? openCatalog({ cat: 'tiposRecurso', catalogs: core().cfg.catalogos, scopeLabel: 'configuración general', readonly: !can('recursos.gestionar'), onSave: list => core().guardarTiposRecurso(list) })
+  : openCatalog({
+    cat: el.dataset.cat, catalogs: core().cfg.catalogos, scopeLabel: 'por defecto', readonly: !can('config.editar'),
+    onSave: async list => { const cfg = clone(core().cfg); cfg.catalogos[el.dataset.cat] = list; await core().saveCfg(cfg, 'Catálogo por defecto: ' + CAT_TITLE[el.dataset.cat]); },
+  });
+
+// ======================= unidades plantilla =======================
+const plVis = (pl, tipos) => { const t = tipos.find(x => x.id === pl.tipo); const col = pl.color || (t && t.color) || '#2E7D32'; return { icono: (pl.vis && pl.vis.icono) || (t && t.vis && t.vis.icono), forma: (pl.vis && pl.vis.forma) || (t && t.vis && t.vis.forma), fill: col, border: col, text: contrastText(col) }; };
+export function renderUnitTemplates() {
+  const c = core(); const ro = !can('recursos.gestionar'); const tipos = c.tiposRecursoGenerales(); const list = c.plantillasUnidad();
+  return `<p class="muted">Al añadir una unidad a un preventivo, una plantilla solo pide el número (y los campos que indiques): tipo, icono, color e indicativo salen de ella. La unidad se crea en C0 y pendiente de asignación. Cambiar una plantilla no modifica las unidades ya creadas.</p>
+  ${ro ? `<p class="note">${icon('candado')} Solo consulta: gestionar plantillas requiere el permiso «Gestionar tipos de recurso y unidades plantilla».</p>` : `<div class="row end">${btn('Nueva plantilla', 'upl.edit', { cls: 'primary', ic: 'mas_add' })}</div>`}
+  <ul class="cat-list">${list.map(pl => { const t = tipos.find(x => x.id === pl.tipo);
+    return `<li class="cat-row${pl.activo === false ? ' off' : ''}" data-plantilla="${attr(pl.id)}">${unitSvg(plVis(pl, tipos), { px: 36 })}
+      <div class="grow"><b>${esc(pl.nombre)}</b>${pl.activo === false ? ' ' + chip('Desactivada', '#757575') : ''}<small class="muted">${esc([t ? t.nombre : 'Sin tipo', 'Indicativo: ' + [pl.prefijo, 'nº'].filter(Boolean).join(' '), (pl.campos || []).length ? 'Pide: ' + pl.campos.map(k => CAMPOS_PLANTILLA[k]).join(', ') : 'Solo pide el número', pl.usada ? 'en uso' : ''].filter(Boolean).join(' · '))}</small></div>
+      ${ro ? '' : `<div class="row gap-s">${btn('', 'upl.edit', { cls: 'icon ghost', ic: 'editar', data: { id: pl.id }, title: 'Editar' })}${btn('', 'upl.dup', { cls: 'icon ghost', ic: 'copiar', data: { id: pl.id }, title: 'Duplicar' })}${btn(pl.activo === false ? 'Activar' : 'Desactivar', 'upl.toggle', { cls: 'sm ghost', data: { id: pl.id } })}${btn('', 'upl.del', { cls: 'icon ghost', ic: 'papelera', data: { id: pl.id }, title: pl.usada ? 'En uso: desactívala en lugar de eliminarla' : 'Eliminar' })}</div>`}
+    </li>`; }).join('') || '<li class="muted">No hay unidades plantilla</li>'}</ul>`;
+}
+let UPL = null; // plantilla en edición (para no perder lo escrito al crear un tipo nuevo)
+A['upl.edit'] = el => {
+  const c = core(); const id = el.dataset.id || null;
+  UPL = id ? clone(c.plantillasUnidad().find(x => x.id === id)) : { nombre: '', prefijo: '', tipo: '', color: '#1565C0', vis: { forma: 'circulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] }, activo: true };
+  openSheet({ title: id ? 'Editar plantilla · ' + UPL.nombre : 'Nueva unidad plantilla', size: 'm', onClose: () => { UPL = null; }, render: () => {
+    const tipos = c.tiposRecursoGenerales().filter(t => t.activo !== false || t.id === UPL.tipo);
+    const val = { nombre: UPL.nombre, prefijo: UPL.prefijo, tipo: UPL.tipo || '', color: UPL.color || '#1565C0', forma: (UPL.vis || {}).forma || '', icono: (UPL.vis || {}).icono || '', campos: UPL.campos || [], obligatorios: UPL.obligatorios || [], subtipo: (UPL.valores || {}).subtipo || '', caract: (UPL.valores || {}).caract || [], activo: UPL.activo !== false };
+    return `<form data-f="upl.save" data-id="${attr(id || '')}">${fieldsHtml([
+      { name: 'nombre', label: 'Nombre de la plantilla', required: true, placeholder: 'p. ej. UPR' },
+      { name: 'tipo', label: 'Tipo de recurso', type: 'select', options: [['', 'Sin tipo'], ...tipos.map(t => [t.id, t.nombre + (t.activo === false ? ' (desactivado)' : '')])] },
+      `<div class="row end"><button type="button" class="btn sm ghost" data-a="upl.nuevoTipo">${icon('mas_add')}<span>Nuevo tipo de recurso</span></button></div>`,
+      { name: 'prefijo', label: 'Prefijo del indicativo', placeholder: 'UPR', help: 'Indicativo = prefijo + número (p. ej. UPR 8025)' },
+      { name: 'forma', label: 'Forma o símbolo del icono', type: 'select', options: [['', '(la del tipo)'], ...Object.entries(FORMAS)] },
+      { name: 'icono', label: 'Icono', type: 'select', options: [['', '(el del tipo)'], ...Object.entries(ICONOS)] },
+      { name: 'color', label: 'Color predeterminado (C0)', type: 'color' },
+      { name: 'campos', label: 'Además del número, pedir al crear la unidad', type: 'checks', options: Object.entries(CAMPOS_PLANTILLA) },
+      { name: 'obligatorios', label: 'De esos campos, obligatorios', type: 'checks', options: Object.entries(CAMPOS_PLANTILLA) },
+      '<h3>Valores predeterminados de la unidad</h3>',
+      { name: 'subtipo', label: 'Subtipo' }, { name: 'caract', label: 'Características', type: 'tags' },
+      { name: 'activo', label: 'Activa (se ofrece al añadir unidades)', type: 'checkbox' },
+    ], val)}<div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar</button></div></form>`;
+  } });
+};
+const leerPlantilla = form => { const v = readForm(form); return { ...UPL, nombre: v.nombre, prefijo: v.prefijo, tipo: v.tipo || null, color: v.color, vis: { forma: v.forma || '', icono: v.icono || '' }, campos: v.campos || [], obligatorios: v.obligatorios || [], valores: { subtipo: v.subtipo || '', caract: v.caract || [] }, activo: !!v.activo }; };
+A['upl.nuevoTipo'] = el => { UPL = leerPlantilla(el.closest('form')); nuevoTipoRecurso(t => { UPL.tipo = t.id; refreshSheets(); }); };
+F['upl.save'] = async form => {
+  const p = leerPlantilla(form); p.id = form.dataset.id || null;
+  const r = await core().guardarPlantillaUnidad(p); UPL = null;
+  closeSheet(); toast('Plantilla «' + r.nombre + '» guardada', 'ok'); G.render();
+};
+A['upl.dup'] = async el => { const r = await core().duplicarPlantillaUnidad(el.dataset.id); toast('Plantilla duplicada: ' + r.nombre, 'ok'); G.render(); };
+A['upl.toggle'] = async el => { const pl = core().plantillasUnidad().find(x => x.id === el.dataset.id); await core().activarPlantillaUnidad(el.dataset.id, pl.activo === false); toast(pl.activo === false ? 'Plantilla activada' : 'Plantilla desactivada', 'ok'); G.render(); };
+A['upl.del'] = async el => {
+  const pl = core().plantillasUnidad().find(x => x.id === el.dataset.id);
+  if (pl.usada) { toast('«' + pl.nombre + '» ya se ha usado para crear unidades: desactívala en lugar de eliminarla', 'warn', 6000); return; }
+  if (!(await confirmDlg({ title: 'Eliminar plantilla', text: '¿Eliminar la unidad plantilla «' + pl.nombre + '»?', ok: 'Eliminar', danger: true }))) return;
+  await core().borrarPlantillaUnidad(pl.id); toast('Plantilla eliminada', 'ok'); G.render();
+};
 export function applyTheme() {
   const cfg = core() && core().cfg; if (!cfg) return;
   // "Según el sistema": se respeta el tema del sistema (o el del visor en la vista previa)

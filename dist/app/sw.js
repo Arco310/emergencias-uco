@@ -1,6 +1,6 @@
 // Service worker del Gestor de Emergencias UCO: permite abrir y usar la aplicación
 // sin conexión (modo avión). Los datos están en IndexedDB; aquí solo se guarda la aplicación.
-const VERSION = 'a626b80838d4';
+const VERSION = '9b265a38cd3b';
 const CACHE = 'uco-app-' + VERSION;
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/favicon-64.png'];
 

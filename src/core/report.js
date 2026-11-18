@@ -1,7 +1,7 @@
 // Informe PDF del preventivo (se genera sin Internet).
 import { PDFDoc } from './pdf.js';
 import { fmtDateTime, fmtDur, fmtTime, now } from './util.js';
-import { claveDef, unitLabel, avisoLabel, SITUACION_LABEL, unitSituation, restEnd, counts } from './engine.js';
+import { claveDef, unitLabel, avisoLabel, SITUACION_LABEL, unitSituation, restEnd, counts, sectorNombre } from './engine.js';
 import { prevStats, avisoTimes, TIEMPOS_AVISO } from './stats.js';
 import { logEntries, AVISO_ESTADO } from './timeline.js';
 import { fmtCoords } from './geo.js';
@@ -61,7 +61,7 @@ export async function buildReport(engine, { usuario = '', dispositivo = '' } = {
   const units = Object.values(s.units).filter(u => !u.eliminada).sort((a, b) => unitLabel(a).localeCompare(unitLabel(b)));
   const byU = new Map(st.porUnidad.map(x => [x.u.id, x]));
   doc.table([{ label: 'Identificador', w: 1.2 }, { label: 'Nombre', w: 1.4 }, { label: 'Tipo', w: 1.5 }, { label: 'Sector', w: 1 }, { label: 'Clave final', w: 1.3 }, { label: 'Situación', w: 1 }, { label: 'Avisos', w: 0.7, align: 'right' }, { label: 'En avisos', w: 1, align: 'right' }, { label: 'Descansos', w: 0.9, align: 'right' }, { label: 'Servicio', w: 1, align: 'right' }],
-    units.map(u => { const x = byU.get(u.id); const d = claveDef(p, u.clave); return [u.ind, u.nombre, named(p.cat.tiposRecurso, u.tipo), named(p.cat.sectores, u.sector), u.clave + ' ' + (d ? d.nombre : ''), SITUACION_LABEL[unitSituation(s, u, t)], x.nAvisos, fmtDur(x.enAvisos), x.nDescansos + ' · ' + fmtDur(x.enDescanso), fmtDur(x.servicio)]; }),
+    units.map(u => { const x = byU.get(u.id); const d = claveDef(p, u.clave); return [u.ind, u.nombre, named(p.cat.tiposRecurso, u.tipo), sectorNombre(p, u, 'Pendiente'), u.clave + ' ' + (d ? d.nombre : ''), SITUACION_LABEL[unitSituation(s, u, t)], x.nAvisos, fmtDur(x.enAvisos), x.nDescansos + ' · ' + fmtDur(x.enDescanso), fmtDur(x.servicio)]; }),
     { colorCol: { 0: ri => units[ri].colorC0 } });
 
   // 4. Estados

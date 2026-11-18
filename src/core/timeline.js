@@ -12,7 +12,7 @@ export const CATEGORIAS = {
 const FIELD = {
   nombre: 'Nombre', descripcion: 'Descripción', fecha: 'Fecha', horaInicio: 'Hora de inicio', horaFin: 'Hora de finalización', lugar: 'Lugar',
   participantes: 'Participantes', ind: 'Identificador', denom: 'Denominación', tipo: 'Tipo', subtipo: 'Subtipo', categoria: 'Categoría',
-  sector: 'Sector', desc: 'Descripción', obs: 'Observaciones', equip: 'Equipamiento', caract: 'Características', t: 'Hora del aviso',
+  sector: 'Sector', sectorOtro: 'Ubicación personalizada (OTROS)', desc: 'Descripción', obs: 'Observaciones', equip: 'Equipamiento', caract: 'Características', t: 'Hora del aviso',
   loc: 'Ubicación', 'vis.icono': 'Icono', 'vis.forma': 'Forma', 'vis.tam': 'Tamaño', 'vis.borde': 'Borde', 'vis.etiqueta': 'Etiqueta',
   'vis.tarjeta': 'Diseño de tarjeta', 'vis.campos': 'Campos visibles', 'vis.enPlano': 'Mostrar en plano', vis: 'Apariencia',
   'cfg.descansoMin': 'Duración del descanso (min)', 'cfg.autoFinalizarAviso': 'Finalizar avisos automáticamente', 'cfg.camposTarjeta': 'Campos de tarjeta',
@@ -28,7 +28,7 @@ function named(list, id) { const x = (list || []).find(e => e.id === id); return
 
 export function fmtValue(s, campo, v) {
   if (v == null || v === '') return '—';
-  if (campo === 'sector') return named(s.prev && s.prev.cat.sectores, v);
+  if (campo === 'sector') return v === 'otros' ? 'Otros (ubicación personalizada)' : named(s.prev && s.prev.cat.sectores, v);
   if (campo === 'tipo') return named(s.prev && [...(s.prev.cat.tiposRecurso || []), ...(s.prev.cat.tiposAviso || [])], v);
   if (campo === 'loc' || campo === 'lugar') return [v.txt, fmtCoords(v)].filter(Boolean).join(' · ') || '—';
   if (campo === 't') return fmtDateTime(v);

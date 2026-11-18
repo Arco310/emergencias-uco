@@ -16,7 +16,16 @@ export class Reject extends Error {
 
 const CLOSED_OK = new Set(['prev.estado', 'prev.archivo']);
 const PREV_FIELDS = /^(nombre|descripcion|fecha|horaInicio|horaFin|lugar|participantes|modalidad|cfg\.[A-Za-z0-9_.]+)$/;
-const UNIT_FIELDS = /^(ind|nombre|denom|tipo|subtipo|categoria|sector|desc|obs|equip|caract|vis(\.[A-Za-z0-9_]+)?)$/;
+const UNIT_FIELDS = /^(ind|nombre|denom|tipo|subtipo|categoria|sector|sectorOtro|desc|obs|equip|caract|vis(\.[A-Za-z0-9_]+)?)$/;
+/** Sector «OTROS»: ubicación personalizada de una unidad dentro del preventivo, sin crear categorías globales */
+export const SECTOR_OTROS = 'otros';
+/** Nombre del sector de una unidad (o aviso) teniendo en cuenta OTROS y la ausencia de sector */
+export function sectorNombre(p, x, vacio = '') {
+  if (!x || !x.sector) return vacio;
+  if (x.sector === SECTOR_OTROS) return 'Otros: ' + (x.sectorOtro || 'sin indicar');
+  const sec = ((p && p.cat && p.cat.sectores) || []).find(e => e.id === x.sector);
+  return sec ? sec.nombre : x.sector;
+}
 const AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|cierre\.[a-z]+)$/;
 export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tiposRecurso'];
 
@@ -214,8 +223,8 @@ H['unit.create'] = (s, op) => {
   const base = baseClave(s.prev).codigo;
   const u = {
     id: op.e, ind: d.ind || '', nombre: d.nombre || '', denom: d.denom || '', tipo: d.tipo || null, subtipo: d.subtipo || '',
-    categoria: d.categoria || '', sector: d.sector || null, desc: d.desc || '', obs: d.obs || '',
-    equip: clone(d.equip || []), caract: clone(d.caract || []), vis: clone(d.vis || {}),
+    categoria: d.categoria || '', sector: d.sector || null, sectorOtro: d.sector === SECTOR_OTROS ? String(d.sectorOtro || '') : '', desc: d.desc || '', obs: d.obs || '',
+    equip: clone(d.equip || []), caract: clone(d.caract || []), vis: clone(d.vis || {}), plantilla: d.plantilla ? clone(d.plantilla) : null,
     colorC0: d.colorC0 || '#2E7D32', clave: base, claveDesde: op.t, motivoEsp: null,
     sit: 'activa', aviso: null, descanso: null, loc: d.loc ? { ...clone(d.loc), t: op.t } : null, plan: d.plan ? clone(d.plan) : null,
     creada: op.t, eliminada: false,

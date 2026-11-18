@@ -23,6 +23,7 @@ const VIEWS = {
   inicio: { t: 'Preventivos', ic: 'inicio', scope: 'g', r: home.renderHome },
   plantillas: { t: 'Plantillas', ic: 'plantilla', scope: 'g', r: home.renderTemplates },
   config: { t: 'Configuración general', ic: 'ajustes', scope: 'g', r: admin.renderGlobalConfig },
+  uplantillas: { t: 'Unidades plantilla', ic: 'plantilla', scope: 'g', r: admin.renderUnitTemplates, parent: 'config' },
   sistema: { t: 'Sistema', ic: 'mas', scope: 'g', r: admin.renderSystemMenu },
   usuarios: { t: 'Usuarios y roles', ic: 'usuario', scope: 'g', r: admin.renderUsers, parent: 'sistema' },
   copias: { t: 'Copias de seguridad', ic: 'archivar', scope: 'g', r: admin.renderBackups, parent: 'sistema' },

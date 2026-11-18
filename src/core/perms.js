@@ -9,6 +9,7 @@ export const PERMISOS = [
   ['preventivos.reabrir', 'Reabrir preventivos cerrados', 'Preventivos'],
   ['plantillas.gestionar', 'Gestionar plantillas', 'Preventivos'],
   ['config.editar', 'Editar configuración y catálogos', 'Configuración'],
+  ['recursos.gestionar', 'Gestionar tipos de recurso y unidades plantilla', 'Configuración'],
   ['unidades.crear', 'Crear unidades', 'Unidades'],
   ['unidades.editar', 'Editar y desactivar unidades', 'Unidades'],
   ['unidades.archivar', 'Eliminar o archivar unidades', 'Unidades'],
