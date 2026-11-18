@@ -116,7 +116,11 @@ export class MemoryAdapter {
   }
 }
 
+/** Entorno de pruebas (CLAUDE_TEST): se abre con ?entorno=pruebas y usa una base de datos local distinta */
+export function entornoPruebas() {
+  try { return typeof location !== 'undefined' && new URLSearchParams(location.search).get('entorno') === 'pruebas'; } catch { return false; }
+}
 export async function openStorage() {
-  try { return await IDBAdapter.open(); }
+  try { return await IDBAdapter.open(entornoPruebas() ? DB_NAME + '-pruebas' : DB_NAME); }
   catch (e) { console.warn('IndexedDB no disponible, se usa memoria:', e && e.message); return new MemoryAdapter(); }
 }

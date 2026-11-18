@@ -1,5 +1,5 @@
 // Arranque de la aplicación, navegación, distribución móvil/tablet y eventos globales.
-import { openStorage } from '../data/idb.js';
+import { openStorage, entornoPruebas } from '../data/idb.js';
 import { AppCore } from '../app/core.js';
 import { G, A, F, CH } from './state.js';
 import { esc, $, $$, toast, closeSheet, handlePop, refreshSheets, drawLayer, dialogSubmit, sheets, openSheet, confirmDlg, systemNotify } from './dom.js';
@@ -30,6 +30,7 @@ const VIEWS = {
   permisos: { t: 'Permisos del dispositivo', ic: 'escudo', scope: 'g', r: admin.renderDevicePerms, parent: 'sistema' },
   cuenta: { t: 'Mi cuenta', ic: 'usuario', scope: 'g', r: admin.renderAccount, parent: 'sistema' },
   acerca: { t: 'Acerca de', ic: 'info', scope: 'g', r: admin.renderAbout, parent: 'sistema' },
+  central: { t: 'Servidor central', ic: 'sync', scope: 'g', r: admin.renderCentral, parent: 'sistema' },
   // Dentro de un preventivo
   panel: { t: 'Centro de control', ic: 'panel', scope: 'p', r: ops.renderPanel },
   unidades: { t: 'Unidades', ic: 'unidades', scope: 'p', r: ops.renderUnits },
@@ -59,11 +60,13 @@ A['dlg.cancel'] = () => closeSheet();
 F['dlg.submit'] = form => dialogSubmit(form);
 
 let renderQueued = false;
+/** Entorno de pruebas (CLAUDE_TEST): aviso permanente, datos y espacio central separados de los reales */
+const pruebasBar = () => G.pruebas ? `<div class="pruebas-bar" role="status">${icon('alerta')} ENTORNO DE PRUEBAS · CLAUDE_TEST — datos ficticios, separados de los reales</div>` : '';
 export function render() {
   renderQueued = false;
   const app = $('#app'); if (!app) return;
   const core = G.core;
-  if (!core || !core.session || auth.blocking()) { app.className = 'app auth'; app.innerHTML = auth.renderAuth(); drawLayer(); return; }
+  if (!core || !core.session || auth.blocking()) { app.className = 'app auth'; app.innerHTML = pruebasBar() + auth.renderAuth(); drawLayer(); return; }
   if (G.applyTheme) G.applyTheme();
   let route = G.ui.route;
   const v0 = VIEWS[route];
@@ -95,7 +98,7 @@ function layout(route, v, body) {
   const st = inPrev ? s.prev : null;
   const est = st ? { preparacion: ['En preparación', 'warn'], activo: ['Activo', 'ok'], cerrado: ['Cerrado', 'muted'] }[st.estado] : null;
   return `
-  ${G.preview ? `<div class="preview-bar">${icon('info')} Vista previa: los datos pueden no conservarse y no hay modo sin conexión, sincronización, GPS ni descargas. Para uso real, aloja la aplicación.</div>` : ''}
+  ${pruebasBar()}${G.preview ? `<div class="preview-bar">${icon('info')} Vista previa: los datos pueden no conservarse y no hay modo sin conexión, sincronización, GPS ni descargas. Para uso real, aloja la aplicación.</div>` : ''}
   <header class="top">
     ${inPrev ? `<button class="btn icon ghost" data-a="prev.exit" title="Volver a preventivos" aria-label="Volver a preventivos">${icon('atras')}</button>` : `<span class="logo">${logoSvg()}</span>`}
     <div class="top-title">${inPrev ? `<b>${esc(st.nombre)}</b><span class="chip sm ${est[1]}">${est[0]}${st.archivado ? ' · archivado' : ''}</span>` : `<b>${APP_NAME}</b>`}
@@ -241,12 +244,16 @@ async function boot() {
   try { storage = await openStorage(); } catch (e) { root.innerHTML = '<div class="splash"><p>No se pudo abrir el almacenamiento: ' + esc(e.message) + '</p></div>'; return; }
   G.storageKind = storage.kind;
   if (storage.kind === 'memoria') G.preview = true;
-  const core = new AppCore(storage);
+  G.pruebas = entornoPruebas();
+  // En el entorno de pruebas se puede apuntar a otro servidor (?servidor=…) o desactivarlo (?servidor=no)
+  const qs = new URLSearchParams(location.search).get('servidor');
+  const core = new AppCore(storage, { pruebas: G.pruebas, ...(G.pruebas && qs ? { servidor: qs === 'no' ? false : qs } : {}) });
   G.core = core; G.go = go; G.render = queueRender; G.tick = tick; G.lastActivity = Date.now();
   await core.boot();
   core.on((type, data) => {
     if (type === 'change' && data && data.remote && data.pid === core.cur) { queueRender(); return; }
     if (type === 'sync') { if (data.pid === core.cur) queueRender(); return; }
+    if (type === 'mensaje') { toast(data.texto, data.tipo || 'info', 8000); queueRender(); return; }
     queueRender();
   });
   bindGlobal();

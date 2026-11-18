@@ -153,7 +153,7 @@ export function field(f, values = {}) {
     case 'tags': return `<div class="fld">${lab}<input id="${id}" name="${attr(f.name)}" value="${attr(Array.isArray(v) ? v.join(', ') : v)}"${req}${dis}${ph}${da}>${help || '<small class="help">Separados por comas</small>'}</div>`;
     case 'datetime': return `<div class="fld">${lab}<input type="datetime-local" id="${id}" name="${attr(f.name)}" value="${attr(v ? toLocalInput(v) : '')}"${req}${dis}${da}>${help}</div>`;
     case 'number': case 'range': return `<div class="fld">${lab}<input type="${f.type}" id="${id}" name="${attr(f.name)}" value="${attr(v)}"${f.min != null ? ` min="${f.min}"` : ''}${f.max != null ? ` max="${f.max}"` : ''} step="${f.step || 1}" inputmode="numeric"${req}${dis}${ph}${da}>${help}</div>`;
-    default: return `<div class="fld">${lab}<input type="${f.type || 'text'}" id="${id}" name="${attr(f.name)}" value="${attr(v)}"${req}${dis}${ph}${f.autocomplete ? ` autocomplete="${f.autocomplete}"` : ''}${f.maxlength ? ` maxlength="${f.maxlength}"` : ''}${da}>${help}</div>`;
+    default: return `<div class="fld">${lab}<input type="${f.type || 'text'}" id="${id}" name="${attr(f.name)}" value="${attr(v)}"${req}${dis}${ph}${f.autocomplete ? ` autocomplete="${f.autocomplete}"` : ''}${f.maxlength ? ` maxlength="${f.maxlength}"` : ''}${f.attrs ? ' ' + f.attrs : ''}${da}>${help}</div>`;
   }
 }
 export function fieldsHtml(fields, values = {}) { return fields.map(f => (typeof f === 'string' ? f : field(f, values))).join(''); }

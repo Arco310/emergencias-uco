@@ -104,8 +104,10 @@ A['pcfg.resetVis'] = async () => {
 A['pcfg.modalidad'] = async () => {
   const to = P().modalidad === 'compartida' ? 'independiente' : 'compartida';
   let server = '';
-  if (to === 'compartida') {
-    const r = await confirmDlg({ title: 'Convertir en compartido', text: 'Otros dispositivos podrán incorporarse con un código. Sin servidor, la sincronización será por archivo.', ok: 'Continuar', fields: [{ name: 's', label: 'Servidor de sincronización (opcional)', value: core().cfg.syncServidor || '', placeholder: 'https://sync.ejemplo.es' }] });
+  if (to === 'compartida' && core().centralMeta) {
+    if (!(await confirmDlg({ title: 'Convertir en compartido', text: 'El preventivo se compartirá automáticamente en el servidor central y aparecerá en todos los dispositivos conectados.', ok: 'Compartir' }))) return;
+  } else if (to === 'compartida') {
+    const r = await confirmDlg({ title: 'Convertir en compartido', text: 'Este dispositivo no está conectado al servidor central: otros dispositivos podrán incorporarse con un código o por archivo.', ok: 'Continuar', fields: [{ name: 's', label: 'Servidor de sincronización (opcional)', value: core().cfg.syncServidor || '', placeholder: 'https://sync.ejemplo.es' }] });
     if (!r) return; server = r.s;
   } else if (!(await confirmDlg({ title: 'Cambiar a independiente', text: 'Este dispositivo dejará de sincronizar. Los demás no recibirán más cambios de este.', ok: 'Cambiar', danger: true }))) return;
   if (!(await authorize('El cambio de modalidad altera la operativa del preventivo.'))) return;
@@ -129,14 +131,16 @@ export function renderSync() {
     ${st.error ? `<p class="note bad">${icon('alerta')} ${esc(st.error)}</p>` : ''}
     <p class="muted small">Cada dispositivo trabaja en local: si se pierde la conexión se sigue operando y los cambios se envían al volver. El dispositivo que creó el preventivo no es imprescindible.</p>
     <div class="actions">${m.server ? btn('Sincronizar ahora', 'sync.now', { cls: 'primary', ic: 'sync' }) : ''}</div></section>
-  <section class="card pad"><h2>Servidor</h2>
+  ${m.central ? `<section class="card pad"><h2>Servidor central</h2>
+    <p>Compartido automáticamente en el servidor central${c.centralMeta ? ' <b>' + esc(c.centralMeta.nombre || c.centralMeta.server) + '</b>' : ''}. Aparece solo en todos los dispositivos conectados: no hace falta ningún código ni dirección.</p>
+    ${can('sync.gestionar') ? `<p class="muted small">Si el servidor se ha reinstalado o ha perdido sus datos, este dispositivo puede volver a enviarle todo el registro del preventivo (sin duplicados y conservando los números de aviso).</p>${btn('Reenviar todo al servidor', 'sync.resend', { ic: 'subir' })}` : ''}</section>` : `<section class="card pad"><h2>Servidor</h2>
     <form data-f="sync.server">${fieldsHtml([{ name: 's', label: 'Dirección del servidor', value: m.server || '', placeholder: 'https://sync.ejemplo.es', disabled: !can('sync.gestionar'), help: 'Vacío: sincronización solo por archivo.' }])}
     ${can('sync.gestionar') ? `<div class="row end gap">${btn('Probar conexión', 'sync.ping', { cls: 'ghost' })}<button class="btn">Guardar servidor</button></div>` : ''}</form>
     ${can('sync.gestionar') && m.server ? `<p class="muted small">Si el servidor se ha reinstalado o ha perdido sus datos, este dispositivo puede volver a enviarle todo el registro del preventivo (sin duplicados y conservando los números de aviso).</p>${btn('Reenviar todo al servidor', 'sync.resend', { ic: 'subir' })}` : ''}</section>
   <section class="card pad"><h2>Incorporar otro dispositivo</h2>
     <p class="muted small">Comparte este código solo con dispositivos autorizados: permite leer y modificar el preventivo. Los datos viajan cifrados de extremo a extremo.</p>
     <textarea readonly rows="3" class="code-box" id="joincode">${esc(code)}</textarea>
-    <div class="actions">${btn('Copiar código', 'sync.copy', { ic: 'copiar' })}${navigator.share && !G.preview ? btn('Compartir código', 'sync.shareCode', { ic: 'compartir' }) : ''}</div></section>
+    <div class="actions">${btn('Copiar código', 'sync.copy', { ic: 'copiar' })}${navigator.share && !G.preview ? btn('Compartir código', 'sync.shareCode', { ic: 'compartir' }) : ''}</div></section>`}
   <section class="card pad"><h2>Sincronización por archivo (sin red)</h2>
     <p class="muted small">Exporta un paquete y ábrelo en otro dispositivo del preventivo (Bluetooth, USB, mensajería). No crea duplicados aunque se importe varias veces.</p>
     <div class="actions">${btn('Exportar paquete', 'sync.exportBundle', { ic: 'descargar' })}${can('sync.gestionar') ? btn('Importar paquete', 'sync.importBundle', { ic: 'subir' }) : ''}</div></section>
@@ -246,7 +250,7 @@ export function renderGlobalConfig() {
     { name: 'bloqueoMin', label: 'Bloqueo automático por inactividad (minutos, 0 = nunca)', type: 'number', min: 0, max: 480, disabled: ro },
   ], cfg)}${ro ? '' : '<div class="row end"><button class="btn primary">Guardar</button></div>'}</form></section>
   <section class="card pad"><h2>Sincronización</h2><form data-f="gcfg.sync">${fieldsHtml([
-    { name: 'syncServidor', label: 'Servidor por defecto para preventivos compartidos', placeholder: 'https://sync.ejemplo.es', disabled: ro },
+    core().centralMeta ? `<p class="note">${icon('sync')} Servidor central: <b>${esc(core().centralMeta.server)}</b> (preconfigurado). Los preventivos compartidos lo usan automáticamente.</p>` : { name: 'syncServidor', label: 'Servidor para preventivos compartidos sin servidor central (opcional)', placeholder: 'https://sync.ejemplo.es', disabled: ro },
     { name: 'syncIntervaloSeg', label: 'Intervalo de sincronización (segundos)', type: 'number', min: 2, max: 300, disabled: ro },
   ], cfg)}${ro ? '' : '<div class="row end"><button class="btn primary">Guardar</button></div>'}</form></section>
   <section class="card pad"><h2>Copias automáticas</h2><form data-f="gcfg.backup">${fieldsHtml([
@@ -266,10 +270,10 @@ export function renderGlobalConfig() {
 F['gcfg.basic'] = async form => {
   const v = readForm(form); const c = core();
   await c.saveCfg({ ...c.cfg, tema: v.tema, densidad: v.densidad, bloqueoMin: Number(v.bloqueoMin) || 0 }, 'Apariencia y seguridad');
-  if (v.devNombre !== c.device.nombre || v.devCode !== c.device.code) { await c.repo.saveDevice({ nombre: v.devNombre, code: v.devCode }); c.device = c.repo.device; }
+  if (v.devNombre !== c.device.nombre || v.devCode !== c.device.code) { await c.repo.saveDevice({ nombre: v.devNombre, code: v.devCode }); }
   applyTheme(); toast('Guardado', 'ok');
 };
-F['gcfg.sync'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, syncServidor: v.syncServidor, syncIntervaloSeg: Number(v.syncIntervaloSeg) || 5 }, 'Sincronización'); toast('Guardado', 'ok'); };
+F['gcfg.sync'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, syncServidor: v.syncServidor ?? core().cfg.syncServidor, syncIntervaloSeg: Number(v.syncIntervaloSeg) || 5 }, 'Sincronización'); toast('Guardado', 'ok'); };
 F['gcfg.backup'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, copiaAutoMin: Number(v.copiaAutoMin) || 10, copiasAutoMax: Number(v.copiasAutoMax) || 20 }, 'Copias automáticas'); toast('Guardado', 'ok'); };
 F['gcfg.prev'] = async form => { const v = readForm(form); await core().saveCfg({ ...core().cfg, prev: { ...core().cfg.prev, ...v, descansoMin: Number(v.descansoMin) || 30 } }, 'Valores por defecto de preventivos'); toast('Guardado', 'ok'); };
 A['gcat.open'] = el => openCatalog({
@@ -287,7 +291,9 @@ G.applyTheme = applyTheme;
 
 // ======================= sistema =======================
 export function renderSystemMenu() {
+  const ce = core().centralEstado();
   return `<div class="grid-btns big">
+    ${tile('sync', 'Servidor central', 'nav', { v: 'central' }, ce.meta ? ({ conectado: 'Conectado', sin_conexion: 'Sin conexión', error: 'Error', pendiente: 'Cambios pendientes', sincronizando: 'Sincronizando…' }[ce.st.estado] || 'Configurado') : 'Sin configurar')}
     ${tile('usuario', 'Usuarios y roles', 'nav', { v: 'usuarios' })}
     ${tile('archivar', 'Copias de seguridad', 'nav', { v: 'copias' })}
     ${tile('bitacora', 'Auditoría del sistema', 'nav', { v: 'auditoria' })}
@@ -296,6 +302,80 @@ export function renderSystemMenu() {
     ${tile('info', 'Acerca de', 'nav', { v: 'acerca' })}
   </div>`;
 }
+
+// ---------- servidor central ----------
+let CENTRAL_DISP = null;
+const CFG_NOMBRE = id => id === 'roles' ? 'Roles y permisos' : id.startsWith('usr:') ? 'Usuario' : id;
+export function renderCentral() {
+  const c = core(); const { meta, st, remoto, consultado, servidor } = c.centralEstado();
+  const gestion = can('central.gestionar');
+  if (!meta) {
+    if (!consultado) { c.consultarCentral(); return '<p class="muted">Comprobando el servidor central…</p>'; }
+    const intro = `<div class="note">Con el servidor central, los preventivos compartidos y los usuarios son los mismos en todos los dispositivos. No hay que escribir direcciones ni códigos: en cada dispositivo basta con iniciar sesión. Los datos viajan cifrados de extremo a extremo; el servidor no puede leerlos.</div>`;
+    if (!remoto) return `${intro}<section class="card pad"><h3>Sin conexión con el servidor central</h3><p class="muted small">No se ha podido contactar con ${esc(servidor)}. Este dispositivo sigue funcionando en local.</p>${btn('Reintentar', 'central.retry', { ic: 'sync' })}</section>`;
+    if (remoto.org) return `${intro}<section class="card pad"><h3>Conectar este dispositivo</h3>
+      <p class="muted small">El servidor central <b>${esc(remoto.nombre || servidor)}</b> ya está activo. Inicia sesión con tu usuario y contraseña del servidor central (los mismos que en cualquier otro dispositivo conectado).</p>
+      <form data-f="central.conectar">${fieldsHtml([
+        { name: 'u', label: 'Usuario', required: true, value: c.user ? c.user.usuario : '', attrs: 'autocomplete="username" autocapitalize="none"' },
+        { name: 'p', label: 'Contraseña', type: 'password', required: true, attrs: 'autocomplete="current-password"' },
+      ])}<p class="muted small">Los preventivos compartidos de este dispositivo pasarán al servidor central. Si en este dispositivo había usuarios con el mismo nombre que en el servidor, se usarán los del servidor.</p>
+      <div class="row end"><button class="btn primary">Conectar</button></div></form></section>`;
+    return `${intro}${gestion ? `<section class="card pad"><h3>Activar el servidor central</h3>
+      <p class="muted small">Se hace <b>una sola vez</b> para toda la organización. Hace falta el <b>código de administración del servidor</b>: lo muestra el instalador al terminar y se puede consultar en el PC servidor con «MOSTRAR-CODIGO-ADMIN».</p>
+      <form data-f="central.activar">${fieldsHtml([
+        { name: 'codigo', label: 'Código de administración del servidor', required: true, placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX', attrs: 'autocomplete="off" autocapitalize="characters"' },
+        { name: 'p', label: 'Tu contraseña (para entrar también desde otros dispositivos)', type: 'password', required: true, attrs: 'autocomplete="current-password"' },
+        { name: 'nombre', label: 'Nombre de la organización', value: 'Gestor de Emergencias UCO' },
+      ])}<p class="muted small">Se publicarán los usuarios, roles y preventivos compartidos de este dispositivo.</p>
+      <div class="row end"><button class="btn primary">Activar servidor central</button></div></form></section>` : '<p class="note">El servidor central aún no está activado. Debe activarlo un administrador.</p>'}`;
+  }
+  const est = { conectado: ['Conectado', 'ok'], sincronizando: ['Sincronizando…', 'ok'], pendiente: ['Cambios pendientes', 'warn'], sin_conexion: ['Sin conexión: se sigue trabajando en local y se sincroniza al volver', 'warn'], error: ['Error: ' + (st.error || ''), 'bad'] }[st.estado] || ['Comprobando…', 'muted'];
+  const disp = CENTRAL_DISP ? Object.entries(CENTRAL_DISP).sort((a, b) => b[1].visto - a[1].visto) : null;
+  const confl = c._centralConflictos || [];
+  if (!c._centralConflictosP) c._centralConflictosP = c.central.datos().then(d => { c._centralConflictos = Object.entries(d.conflictos).map(([id, x]) => ({ id, ...x })); c._centralConflictosP = null; if (c._centralConflictos.length !== confl.length) G.render(); });
+  return `<section class="card pad"><h3>Estado</h3>
+      <dl class="kv">
+        <dt>Estado</dt><dd><span class="chip ${est[1]}" data-central-estado="${attr(st.estado || '')}">${esc(est[0])}</span></dd>
+        <dt>Servidor</dt><dd>${esc(meta.server)} <span class="muted small">(preconfigurado, HTTPS)</span></dd>
+        <dt>Organización</dt><dd>${esc(meta.nombre || '—')}${meta.pruebas ? ' ' + chip('PRUEBAS · CLAUDE_TEST', '#C62828') : ''}</dd>
+        <dt>Última comunicación</dt><dd>${st.ultimo ? esc(fmtDateTime(st.ultimo)) : '—'}</dd>
+      </dl>
+      <div class="row gap wrap">${btn('Comprobar ahora', 'central.sync', { ic: 'sync' })}${gestion ? btn('Ver dispositivos', 'central.disp', { ic: 'usuario' }) : ''}</div>
+      <p class="muted small">Para añadir un dispositivo: abre la aplicación en él e inicia sesión con tu usuario y contraseña. No hay que configurar nada más.</p>
+    </section>
+    ${confl.length ? `<section class="card pad"><h3>Cambios simultáneos por resolver ${chip(String(confl.length), '#C62828')}</h3><p class="muted small">Otro dispositivo cambió lo mismo a la vez. Elige qué versión se conserva; nunca se sobrescribe sin avisar.</p>
+      ${confl.map(x => `<div class="conf"><b>${esc(CFG_NOMBRE(x.id))}</b>${x.id.startsWith('usr:') && (x.mio || x.suyo) ? ' ' + esc((x.mio || x.suyo).usuario || '') : ''}<div class="muted small">${esc(fmtDateTime(x.t))}</div>
+        ${can('usuarios.admin') || gestion ? `<div class="actions">${btn('Mantener la de este dispositivo', 'central.resolver', { data: { id: x.id, v: 'mio' } })}${btn('Usar la del servidor', 'central.resolver', { cls: 'primary', data: { id: x.id, v: 'suyo' } })}</div>` : ''}</div>`).join('')}</section>` : ''}
+    ${disp ? `<section class="card pad"><h3>Dispositivos conectados</h3><table class="tbl"><thead><tr><th>Dispositivo</th><th>Versión</th><th>Última comunicación</th></tr></thead><tbody>${disp.map(([id, d]) => `<tr><td>${esc(d.nombre || id)}${id === c.device.id ? ' (este)' : ''}</td><td>${esc(d.version || '—')}</td><td>${esc(fmtDateTime(d.visto))}</td></tr>`).join('')}</tbody></table></section>` : ''}
+    ${gestion ? `<section class="card pad"><h3>Este dispositivo</h3><p class="muted small">Si este dispositivo deja de usar el servidor central, los preventivos ya descargados se conservan en él.</p>${btn('Dejar de usar el servidor central aquí', 'central.olvidar', { cls: 'danger ghost' })}</section>` : ''}`;
+}
+A['central.retry'] = async () => { await core().consultarCentral(); G.render(); };
+F['central.activar'] = async form => {
+  const v = readForm(form);
+  toast('Activando el servidor central…', 'info', 4000);
+  const m = await core().centralActivar({ codigo: v.codigo, password: v.p, nombre: v.nombre });
+  toast('Servidor central activado (' + m.server + '). En los demás dispositivos basta con iniciar sesión.', 'ok', 8000);
+  G.render();
+};
+F['central.conectar'] = async form => {
+  const v = readForm(form);
+  toast('Conectando con el servidor central…', 'info', 4000);
+  await core().centralConectar({ usuario: v.u, password: v.p });
+  toast('Dispositivo conectado al servidor central', 'ok', 6000);
+  G.go('inicio');
+};
+A['central.sync'] = async () => { const st = await core().central.syncNow(); toast(st.estado === 'conectado' ? 'Servidor central: conectado' : 'Servidor central: ' + (st.error || st.estado), st.estado === 'conectado' ? 'ok' : 'warn'); G.render(); };
+A['central.disp'] = async () => { CENTRAL_DISP = await core().central.dispositivos(); G.render(); };
+A['central.resolver'] = async el => {
+  const c = core(); await c.central.resolverConfig(el.dataset.id, el.dataset.v);
+  if (el.dataset.v === 'suyo') await c._centralConfig([el.dataset.id]);
+  c._centralConflictos = (c._centralConflictos || []).filter(x => x.id !== el.dataset.id);
+  toast('Resuelto', 'ok'); G.render();
+};
+A['central.olvidar'] = async () => {
+  if (!(await confirmDlg({ title: 'Dejar de usar el servidor central', text: 'Este dispositivo dejará de recibir preventivos, usuarios y configuración del servidor central. Los datos ya descargados se conservan aquí.', ok: 'Dejar de usarlo', danger: true }))) return;
+  await core().centralOlvidar(); CENTRAL_DISP = null; toast('Este dispositivo ya no usa el servidor central', 'ok'); G.render();
+};
 
 // ---------- usuarios y roles ----------
 let USERS = null, ROLES = null;
@@ -319,12 +399,12 @@ A['users.edit'] = el => {
     { name: 'nombre', label: 'Nombre y apellidos', required: true }, { name: 'usuario', label: 'Usuario', required: true },
     { name: 'rol', label: 'Rol', type: 'select', options: ROLES.map(r => [r.id, r.nombre]) },
     { name: 'activo', label: 'Usuario activo', type: 'checkbox' },
-    { name: 'pw', label: u.id ? 'Nueva contraseña (vacío = no cambiar)' : 'Contraseña inicial', type: 'password', required: !u.id, autocomplete: 'new-password' },
+    { name: 'pw', label: (u.id ? 'Nueva contraseña (vacío = no cambiar)' : 'Contraseña inicial') + ' · mínimo ' + core().minPassword() + ' caracteres', type: 'password', required: !u.id, autocomplete: 'new-password', help: core().centralMeta ? 'La cuenta sirve en todos los dispositivos conectados al servidor central.' : '' },
   ], u)}<div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar</button></div></form>` });
 };
 F['users.save'] = async form => {
   const v = readForm(form);
-  await core().repo.saveUser({ id: form.dataset.id || null, usuario: v.usuario, nombre: v.nombre, rol: v.rol, activo: v.activo }, v.pw || null);
+  await core().saveUser({ id: form.dataset.id || null, usuario: v.usuario, nombre: v.nombre, rol: v.rol, activo: v.activo }, v.pw || null);
   USERS = null; closeSheet(); toast('Usuario guardado', 'ok'); await core().repo.refreshSession(); G.render();
 };
 function rolesMatrix() {
@@ -339,7 +419,7 @@ CH['roles.tog'] = el => { const r = ROLES[Number(el.dataset.i)]; const s = new S
 A['roles.add'] = async () => { const n = await confirmDlg({ title: 'Nuevo rol', input: { label: 'Nombre del rol' }, ok: 'Crear' }); if (!n) return; ROLES.push({ id: 'rol_' + Date.now().toString(36), nombre: n, permisos: ['estadisticas.ver'] }); G.render(); };
 A['roles.ren'] = async el => { const r = ROLES[Number(el.dataset.i)]; const n = await confirmDlg({ title: 'Renombrar rol', input: { label: 'Nombre', value: r.nombre }, ok: 'Aceptar' }); if (n) { r.nombre = n; G.render(); } };
 A['roles.del'] = async el => { const i = Number(el.dataset.i); if (USERS.some(u => u.rol === ROLES[i].id)) { toast('Hay usuarios con ese rol', 'error'); return; } ROLES.splice(i, 1); G.render(); };
-A['roles.save'] = async () => { await core().repo.saveRoles(ROLES); ROLES = null; toast('Roles y permisos guardados', 'ok'); G.render(); };
+A['roles.save'] = async () => { await core().saveRoles(ROLES); ROLES = null; toast('Roles y permisos guardados', 'ok'); G.render(); };
 
 // ---------- copias de seguridad ----------
 let BK = null;
@@ -516,17 +596,19 @@ document.addEventListener('visibilitychange', async () => { if (!document.hidden
 
 // ---------- cuenta ----------
 export function renderAccount() {
-  const u = core().user;
+  const c = core(); const u = c.user;
+  if (c.centralMeta && c._credPend === undefined) c.repo.db.get('users', u.id).then(r => { c._credPend = !(r && r.cred && r.cred.central); G.render(); });
   return `<section class="card pad"><h2>${esc(u.nombre)}</h2><p class="muted">${esc(u.usuario)} · rol ${esc(u.rolNombre)}</p>
-    <p class="small">Permisos: ${PERMISOS.filter(p => u.perms.has(p[0])).map(p => esc(p[1])).join(' · ')}</p></section>
+    <p class="small">Permisos: ${PERMISOS.filter(p => u.perms.has(p[0])).map(p => esc(p[1])).join(' · ')}</p>
+    ${c.centralMeta ? (c._credPend ? `<p class="note warn">${icon('info')} Tu cuenta aún no está disponible en otros dispositivos. Si tu contraseña tiene menos de 8 caracteres, cámbiala aquí; si no, se publicará sola la próxima vez que inicies sesión con conexión.</p>` : `<p class="note">${icon('ok')} Tu usuario y contraseña sirven en cualquier dispositivo conectado al servidor central.</p>`) : ''}</section>
   <section class="card pad"><h2>Cambiar contraseña</h2><form data-f="acc.pw">${fieldsHtml([
     { name: 'old', label: 'Contraseña actual', type: 'password', required: true, autocomplete: 'current-password' },
-    { name: 'p1', label: 'Nueva contraseña', type: 'password', required: true, autocomplete: 'new-password' },
+    { name: 'p1', label: 'Nueva contraseña (mínimo ' + c.minPassword() + ' caracteres)', type: 'password', required: true, autocomplete: 'new-password' },
     { name: 'p2', label: 'Repite la nueva contraseña', type: 'password', required: true, autocomplete: 'new-password' },
   ])}<div class="row end"><button class="btn primary">Cambiar</button></div></form></section>
   <div class="actions">${btn('Bloquear pantalla', 'session.lock', { ic: 'candado' })}${btn('Cerrar sesión', 'session.logout', { ic: 'salir' })}</div>`;
 }
-F['acc.pw'] = async form => { const v = readForm(form); if (v.p1 !== v.p2) { toast('Las contraseñas no coinciden', 'error'); return; } await core().repo.changeOwnPassword(v.old, v.p1); form.reset(); toast('Contraseña cambiada', 'ok'); };
+F['acc.pw'] = async form => { const v = readForm(form); if (v.p1 !== v.p2) { toast('Las contraseñas no coinciden', 'error'); return; } await core().changeOwnPassword(v.old, v.p1); form.reset(); core()._credPend = undefined; toast('Contraseña cambiada' + (core().centralMeta ? ': vale ya en todos los dispositivos conectados' : ''), 'ok'); G.render(); };
 
 export function renderAbout() {
   const c = core();

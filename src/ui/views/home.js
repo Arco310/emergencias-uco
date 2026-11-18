@@ -22,13 +22,41 @@ export function renderHome() {
   const act = sums.filter(s => !s.archivado && s.estado !== 'cerrado');
   const hist = sums.filter(s => s.archivado || s.estado === 'cerrado');
   const list = tab === 'act' ? act : hist;
+  const disp = (core().centralDisp || []).filter(x => tab === 'act' ? !x.archivado && x.estado !== 'cerrado' : x.archivado || x.estado === 'cerrado');
   return `<div class="page-head"><h1>Preventivos</h1><div class="actions">
       ${can('preventivos.crear') ? btn('Nuevo preventivo', 'home.new', { cls: 'primary', ic: 'mas_add' }) : ''}
-      ${can('sync.gestionar') ? btn('Unirse a un preventivo compartido', 'home.join', { ic: 'sync' }) : ''}
+      ${can('sync.gestionar') && !core().centralMeta ? btn('Unirse con código', 'home.join', { ic: 'sync' }) : ''}
     </div></div>
-  ${tabs([['act', 'En curso', act.length], ['hist', 'Historial', hist.length]], tab, 'home.tab')}
-  <div class="plist">${list.map(card).join('') || empty(tab === 'act' ? 'No hay preventivos en curso. Crea uno nuevo o únete a uno compartido.' : 'El historial está vacío.')}</div>`;
+  ${centralBanner()}
+  ${tabs([['act', 'En curso', act.length + disp.length], ['hist', 'Historial', hist.length]], tab, 'home.tab')}
+  <div class="plist">${list.map(card).join('')}${disp.map(cardCentral).join('')}${!list.length && !disp.length ? empty(tab === 'act' ? 'No hay preventivos en curso. Crea uno nuevo.' : 'El historial está vacío.') : ''}</div>`;
 }
+/** Estado del servidor central en la pantalla de inicio */
+function centralBanner() {
+  const { meta, st, remoto } = core().centralEstado();
+  if (meta) {
+    const est = { conectado: ['Conectado', 'ok'], sincronizando: ['Sincronizando…', 'ok'], pendiente: ['Cambios pendientes', 'warn'], sin_conexion: ['Sin conexión: se trabaja en local', 'warn'], error: ['Error', 'bad'] }[st.estado] || ['Comprobando…', 'muted'];
+    return `<div class="central-bar" data-central-estado="${attr(st.estado || '')}"><span class="chip ${est[1]}">Servidor central: ${esc(est[0])}</span><span class="muted small">${esc(meta.nombre || meta.server)}${st.ultimo ? ' · ' + esc(fmtDateTime(st.ultimo)) : ''}</span>${btn('Detalles', 'nav', { cls: 'sm ghost', data: { v: 'central' } })}</div>`;
+  }
+  if (remoto && remoto.org) return `<div class="note" data-central-aviso="conectar">Este dispositivo aún no está conectado al <b>servidor central</b>. Conéctalo una vez con tu usuario y contraseña del servidor y los preventivos compartidos aparecerán solos. ${btn('Conectar', 'nav', { cls: 'sm primary', data: { v: 'central' } })}</div>`;
+  if (remoto && can('central.gestionar')) return `<div class="note" data-central-aviso="activar">El <b>servidor central</b> está disponible pero aún no se ha activado. Actívalo una sola vez y los preventivos compartidos y los usuarios serán comunes a todos los dispositivos. ${btn('Activar', 'nav', { cls: 'sm primary', data: { v: 'central' } })}</div>`;
+  return '';
+}
+function cardCentral(x) {
+  const e = EST[x.estado] || ['?', 'muted'];
+  return `<article class="pcard pcard-central">
+    <button class="pcard-main" data-a="home.openCentral" data-id="${attr(x.pid)}">
+      <span class="row gap-s wrap"><b class="pname">${esc(x.nombre)}</b><span class="chip ${e[1]}">${e[0]}</span>${chip('En el servidor central', '#1565C0')}</span>
+      <span class="muted small">${x.fecha ? esc(fmtDate(new Date(x.fecha + 'T12:00').getTime())) : 'Sin fecha'}${x.por ? ' · creado en ' + esc(x.por) : ''}</span>
+      <span class="muted small">Todavía no se ha abierto en este dispositivo: pulsa para descargarlo y abrirlo.</span>
+    </button></article>`;
+}
+A['home.openCentral'] = async el => {
+  toast('Descargando el preventivo del servidor central…', 'info', 4000);
+  await core().abrirCentral(el.dataset.id);
+  try { localStorage.setItem('uco:last', el.dataset.id); } catch { }
+  G.go('panel');
+};
 function card(s) {
   const e = EST[s.estado] || ['?', 'muted'];
   return `<article class="pcard">
@@ -82,11 +110,7 @@ A['home.new'] = async el => {
         '<div class="row gap wrap">', { name: 'fecha', label: 'Fecha', type: 'date', value: today }, { name: 'horaInicio', label: 'Hora de inicio', type: 'time' }, { name: 'horaFin', label: 'Hora de finalización', type: 'time' }, '</div>',
         { name: 'lugar', label: 'Lugar (dirección)', placeholder: 'Se puede completar después con coordenadas' },
       ])}
-      <h3>Modalidad</h3>${fieldsHtml([
-        { name: 'modalidad', label: 'Modalidad de funcionamiento', type: 'select', options: [['independiente', 'Independiente: un único dispositivo, sin Internet ni servidor'], ['compartida', 'Compartida: varios dispositivos sincronizados']] },
-        { name: 'server', label: 'Servidor de sincronización (solo compartida; vacío = por archivo)', value: core().cfg.syncServidor || '', placeholder: 'https://sync.ejemplo.es' },
-        { name: 'activar', label: 'Activar ahora (si no, queda "en preparación" para revisar unidades, plano y configuración)', type: 'checkbox', value: false },
-      ])}
+      <h3>Modalidad</h3>${fieldsHtml(modalidadFields())}
       <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear preventivo</button></div></form>`,
   });
 };
@@ -102,13 +126,22 @@ F['home.create'] = async form => {
     seed = c.seedFromPrev(pid, { unidades: v.copUnits, plano: v.copPlan });
   } else seed = c.seedFromConfig();
   const datos = { nombre: v.nombre, descripcion: v.descripcion || seed.descripcion || '', fecha: v.fecha, horaInicio: v.horaInicio, horaFin: v.horaFin, lugar: v.lugar ? { txt: v.lugar, lat: null, lon: null } : null, modalidad: v.modalidad, activar: v.activar, participantes: seed.participantes || [] };
-  const pid = await c.createPrev({ datos, seed, server: v.server });
+  const pid = await c.createPrev({ datos, seed });
   try { localStorage.setItem('uco:last', pid); } catch { }
   closeSheet();
-  toast(v.activar ? 'Preventivo creado y activo' : 'Preventivo creado en preparación: revisa la configuración y actívalo', 'ok', 6000);
+  toast((v.activar ? 'Preventivo creado y activo' : 'Preventivo creado en preparación: revisa la configuración y actívalo') + (c.meta(pid).central ? '. Compartido en el servidor central.' : ''), 'ok', 6000);
   G.go('panel');
-  if (v.modalidad === 'compartida') setTimeout(() => G.go('sync'), 50);
+  // Compartido sin servidor central: se muestra el código de incorporación (por archivo o con un servidor propio)
+  if (v.modalidad === 'compartida' && !c.meta(pid).central) setTimeout(() => G.go('sync'), 50);
 };
+/** Modalidad: con servidor central no se pregunta ninguna dirección; se usa automáticamente */
+function modalidadFields() {
+  const central = core().centralMeta;
+  const act = { name: 'activar', label: 'Activar ahora (si no, queda "en preparación" para revisar unidades, plano y configuración)', type: 'checkbox', value: false };
+  if (central) return [{ name: 'modalidad', label: 'Modalidad de funcionamiento', type: 'select', value: 'compartida', options: [['compartida', 'Compartida en el servidor central (' + (central.nombre || central.server) + ')'], ['independiente', 'Independiente: solo en este dispositivo']], help: 'Los preventivos compartidos aparecen solos en todos los dispositivos dados de alta. No hay que escribir ninguna dirección.' }, act];
+  const srv = core().cfg.syncServidor;
+  return [{ name: 'modalidad', label: 'Modalidad de funcionamiento', type: 'select', options: [['independiente', 'Independiente: un único dispositivo, sin Internet ni servidor'], ['compartida', srv ? 'Compartida con código de incorporación (servidor ' + srv + ')' : 'Compartida por archivo (sin servidor)']], help: 'Para que los preventivos se compartan solos entre dispositivos, configura una vez el servidor central (Sistema → Servidor central).' }, act];
+}
 
 // ---------- unirse ----------
 A['home.join'] = () => openSheet({

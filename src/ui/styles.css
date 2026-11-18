@@ -280,3 +280,12 @@ fieldset.checks{border:1px solid var(--line);border-radius:var(--r-s);padding:.5
 .loc-sum{font-size:.92rem;color:var(--muted)}
 
 @media print{.top,nav,.fab,#toasts{display:none!important}main#main{padding:0}}
+
+/* Servidor central y entorno de pruebas */
+.pruebas-bar{position:fixed;left:0;right:0;bottom:calc(var(--bot) + env(safe-area-inset-bottom));z-index:60;background:#C62828;color:#fff;font-size:.72rem;font-weight:700;padding:2px 8px;display:flex;gap:.3rem;justify-content:center;align-items:center;pointer-events:none;letter-spacing:.02em}
+.pruebas-bar .ic{width:14px;height:14px}
+.app.auth .pruebas-bar{bottom:0}
+.central-bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.1rem 0 .8rem}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:.35rem .9rem;margin:.4rem 0 .8rem}
+dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;overflow-wrap:anywhere}
+.pcard-central{border-style:dashed}

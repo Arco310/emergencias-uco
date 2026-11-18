@@ -57,6 +57,33 @@ export async function prevKeys(secret) {
   return { key: await importAes(keyRaw, false), token, tokenHash: await sha256hex(token) };
 }
 
+/** Cuenta del servidor central: de la contraseña salen una prueba de acceso (el servidor solo guarda
+ *  su hash) y una clave que envuelve el secreto del espacio. La contraseña nunca sale del dispositivo. */
+export const CUENTA_ITER = 600000;
+export async function cuentaDerivar(password, salt, iter = CUENTA_ITER) {
+  const base = await subtle().importKey('raw', enc.encode(String(password).normalize('NFC')), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await subtle().deriveBits({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, 256));
+  const prueba = await hkdfBits(bits, 'cuenta-acceso');
+  return { prueba, verif: await sha256hex(prueba), envKey: await importAes(await hkdfBits(bits, 'cuenta-envoltura'), false) };
+}
+/** Clave de datos local envuelta con el secreto del espacio central: permite el primer acceso de
+ *  un usuario del espacio en este dispositivo (tras comprobar su cuenta en el servidor). */
+export async function wrapDekSecreto(dek, secret) {
+  const k = await importAes(await hkdfBits(secret, 'dek-local'), false);
+  const w = await encryptBytes(k, await exportRaw(dek)); return { iv: w.iv, ct: w.ct };
+}
+export async function unwrapDekSecreto(w, secret) {
+  const k = await importAes(await hkdfBits(secret, 'dek-local'), false);
+  return importAes(await decryptBytes(k, w), true);
+}
+
+/** Claves del espacio central (organización) a partir de su secreto: cifrado y acceso al servidor */
+export async function orgKeys(secret) {
+  const keyRaw = await hkdfBits(secret, 'org-datos');
+  const token = hex(await hkdfBits(secret, 'org-acceso'));
+  return { key: await importAes(keyRaw, false), token, tokenHash: await sha256hex(token) };
+}
+
 /** Cifrado compacto para transporte: base64(iv || ct) */
 export async function seal(key, obj) {
   const r = await encryptJSON(key, obj);

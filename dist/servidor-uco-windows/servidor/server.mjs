@@ -4,16 +4,19 @@
 // - Almacena las operaciones CIFRADAS de extremo a extremo: el servidor no puede leer los datos.
 // - Asigna números de aviso definitivos y correlativos (por orden de llegada).
 // - Opcionalmente sirve la propia aplicación (--static) para alojar todo en un único sitio.
+// - Espacio central (organización): registro de preventivos y configuración general compartidos,
+//   también cifrados de extremo a extremo con la clave de la organización (que el servidor no conoce).
+//   Crear un espacio central exige el código de administración del servidor.
 //
 // Uso: node server.mjs --port 8443 --data ./datos [--static ../dist/app] [--cert cert.pem --key key.pem]
-//                      [--origins https://usuario.github.io] [--host 0.0.0.0]
+//                      [--origins https://usuario.github.io] [--host 0.0.0.0] [--admin-file ruta]
 import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const VERSION = '1.0.3';
+const VERSION = '1.1.0';
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
   if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : 'true']);
   return acc;
@@ -25,8 +28,79 @@ const STATIC = args.static ? path.resolve(args.static) : null;
 const ORIGINS = (args.origins || process.env.ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
 const MAX_BODY = 25 * 1024 * 1024;
 fs.mkdirSync(DATA, { recursive: true });
+const ORG_DIR = path.join(DATA, '_org');
+// Código de administración del servidor: se genera la primera vez y se guarda junto a los datos.
+// El instalador de Windows restringe el acceso a esa carpeta a administradores y SYSTEM.
+const ADMIN_FILE = path.resolve(args['admin-file'] || path.join(DATA, '_servidor', 'codigo-admin.txt'));
+function codigoAdmin() {
+  if (process.env.UCO_CODIGO_ADMIN) return process.env.UCO_CODIGO_ADMIN.trim();
+  if (!fs.existsSync(ADMIN_FILE)) {
+    const ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; const b = crypto.randomBytes(20);
+    const code = Array.from(b, x => ABC[x % ABC.length]).join('').match(/.{5}/g).join('-');
+    fs.mkdirSync(path.dirname(ADMIN_FILE), { recursive: true });
+    fs.writeFileSync(ADMIN_FILE, code + '\n', { mode: 0o600 });
+    log('Código de administración del servidor creado en', ADMIN_FILE);
+  }
+  return fs.readFileSync(ADMIN_FILE, 'utf8').trim();
+}
+// Código SOLO para pruebas (perfil CLAUDE_TEST): permite crear y borrar espacios de pruebas, nunca el real.
+const PRUEBAS_FILE = path.resolve(args['pruebas-file'] || path.join(DATA, '_servidor', 'codigo-pruebas.txt'));
+function nuevoCodigo(file, etiqueta) {
+  const ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; const b = crypto.randomBytes(20);
+  const code = Array.from(b, x => ABC[x % ABC.length]).join('').match(/.{5}/g).join('-');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, code + '\n', { mode: 0o600 });
+  log(etiqueta + ' creado en', file);
+}
+function codigoPruebas() {
+  if (process.env.UCO_CODIGO_PRUEBAS) return process.env.UCO_CODIGO_PRUEBAS.trim();
+  if (!fs.existsSync(PRUEBAS_FILE)) nuevoCodigo(PRUEBAS_FILE, 'Código de pruebas (CLAUDE_TEST)');
+  return fs.readFileSync(PRUEBAS_FILE, 'utf8').trim();
+}
+// Secreto del servidor: solo para respuestas señuelo (no revela qué cuentas existen)
+const SECRETO_FILE = path.join(DATA, '_servidor', 'secreto.bin');
+let SECRETO = null;
+function secretoServidor() {
+  if (SECRETO) return SECRETO;
+  if (!fs.existsSync(SECRETO_FILE)) { fs.mkdirSync(path.dirname(SECRETO_FILE), { recursive: true }); fs.writeFileSync(SECRETO_FILE, crypto.randomBytes(32), { mode: 0o600 }); }
+  return (SECRETO = fs.readFileSync(SECRETO_FILE));
+}
+const normCodigo = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+// Límite de intentos con código erróneo (global: detrás de Tailscale todas las peticiones llegan desde 127.0.0.1)
+const fallos = { n: 0, desde: 0 };
+function comprobarCodigo(codigo, { pruebas = false } = {}) {
+  if (Date.now() - fallos.desde > 15 * 60000) { fallos.n = 0; fallos.desde = Date.now(); }
+  if (fallos.n >= 10) throw Object.assign(new Error('Demasiados intentos fallidos; espera 15 minutos'), { status: 429 });
+  const c = normCodigo(codigo);
+  if (c && safeEq(c, normCodigo(codigoAdmin()))) return 'admin';
+  if (c && pruebas && safeEq(c, normCodigo(codigoPruebas()))) return 'pruebas';
+  fallos.n++;
+  throw Object.assign(new Error('Código de administración del servidor incorrecto'), { status: 403 });
+}
+// Espacio central principal de cada entorno: lo que encuentra una app recién instalada
+const CENTRAL_FILE = path.join(DATA, '_servidor', 'central.json');
+function principal() { try { return JSON.parse(fs.readFileSync(CENTRAL_FILE, 'utf8')); } catch { return { produccion: null, pruebas: null }; } }
+function guardarPrincipal(p) { fs.mkdirSync(path.dirname(CENTRAL_FILE), { recursive: true }); writeAtomic(CENTRAL_FILE, JSON.stringify(p)); }
+// Cuentas: límite de intentos por cuenta y global (la contraseña nunca llega al servidor)
+const CUENTA_ITER = 600000;
+const fallosCuenta = new Map(); const fallosAcceso = { n: 0, desde: 0 };
+function limiteAcceso(uid) {
+  const t = Date.now();
+  if (t - fallosAcceso.desde > 15 * 60000) { fallosAcceso.n = 0; fallosAcceso.desde = t; }
+  const f = fallosCuenta.get(uid);
+  if (f && t - f.desde > 15 * 60000) fallosCuenta.delete(uid);
+  if (fallosAcceso.n >= 200 || (fallosCuenta.get(uid) || { n: 0 }).n >= 8) throw Object.assign(new Error('Demasiados intentos fallidos; espera 15 minutos'), { status: 429 });
+}
+function falloAcceso(uid) {
+  fallosAcceso.n++;
+  const f = fallosCuenta.get(uid) || { n: 0, desde: Date.now() }; f.n++; fallosCuenta.set(uid, f);
+  if (fallosCuenta.size > 10000) fallosCuenta.clear();
+}
 
-const PID_RE = /^[A-Za-z0-9_-]{4,80}$/;
+const PID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{3,79}$/; // no empieza por «_»: reservado para _org y _servidor
+const ORG_RE = /^org_[A-Za-z0-9_-]{4,60}$/;
+const ITEM_RE = /^[A-Za-z0-9_:.-]{1,100}$/;
+const UID_RE = /^[0-9a-f]{64}$/;
 const ID_RE = /^[A-Za-z0-9_:.-]{1,120}$/;
 const cache = new Map();
 
@@ -64,7 +138,7 @@ function cors(req, res) {
   const origin = req.headers.origin;
   if (ORIGINS.includes('*')) res.setHeader('Access-Control-Allow-Origin', '*');
   else if (origin && ORIGINS.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
   res.setHeader('Access-Control-Max-Age', '600');
   if (req.headers['access-control-request-private-network']) res.setHeader('Access-Control-Allow-Private-Network', 'true');
@@ -89,9 +163,151 @@ function auth(req, p) {
   return tok && safeEq(sha256hex(tok), p.meta.tokenHash);
 }
 
+// ---------------- espacio central (organización) ----------------
+const orgs = new Map();
+function orgLoad(org) {
+  if (orgs.has(org)) return orgs.get(org);
+  const dir = path.join(ORG_DIR, org);
+  const f = n => path.join(dir, n);
+  if (!fs.existsSync(f('meta.json'))) return null;
+  const rd = (n, def) => { try { return JSON.parse(fs.readFileSync(f(n), 'utf8')); } catch { return def; } };
+  const o = { dir, meta: rd('meta.json', null), prevs: rd('prevs.json', {}), config: rd('config.json', {}), disp: rd('dispositivos.json', {}), cuentas: rd('cuentas.json', {}) };
+  orgs.set(org, o); return o;
+}
+function orgSave(o, ...names) {
+  const datos = { meta: o.meta, prevs: o.prevs, config: o.config, dispositivos: o.disp, cuentas: o.cuentas };
+  for (const n of names) writeAtomic(path.join(o.dir, n + '.json'), JSON.stringify(datos[n]));
+}
+function orgAuth(req, o) {
+  const h = req.headers.authorization || '';
+  const tok = h.startsWith('Bearer ') ? h.slice(7) : '';
+  return tok && safeEq(sha256hex(tok), o.meta.tokenHash);
+}
+async function apiOrg(req, res, url, parts) {
+  if (parts.length === 3 && req.method === 'POST') {
+    const b = await readJson(req);
+    if (!ORG_RE.test(b.org || '') || !/^[0-9a-f]{64}$/.test(b.tokenHash || '')) return send(res, 400, { error: 'Datos no válidos' });
+    const quien = comprobarCodigo(b.codigo, { pruebas: !!b.pruebas });
+    if (quien === 'pruebas' && !b.pruebas) return send(res, 403, { error: 'El código de pruebas solo sirve para espacios de pruebas' });
+    const ex = orgLoad(b.org);
+    if (ex) return safeEq(ex.meta.tokenHash, b.tokenHash) ? send(res, 200, { ok: true, existente: true, principal: principal()[ex.meta.pruebas ? 'pruebas' : 'produccion'] === b.org }) : send(res, 409, { error: 'Ese espacio central ya existe con otra clave' });
+    const dir = path.join(ORG_DIR, b.org); fs.mkdirSync(dir, { recursive: true });
+    const o = { dir, meta: { org: b.org, tokenHash: b.tokenHash, nombre: String(b.nombre || '').slice(0, 80), pruebas: !!b.pruebas, creado: Date.now(), seq: 0 }, prevs: {}, config: {}, disp: {}, cuentas: {} };
+    orgSave(o, 'meta', 'prevs', 'config', 'dispositivos', 'cuentas'); orgs.set(b.org, o);
+    // Espacio principal: el real solo se fija una vez (cambiarlo exige intervención en el propio servidor);
+    // el de pruebas se puede sustituir.
+    let esPrincipal = false;
+    if (b.principal) {
+      const pr = principal(); const slot = o.meta.pruebas ? 'pruebas' : 'produccion';
+      if (!pr[slot] || !orgLoad(pr[slot]) || o.meta.pruebas) { pr[slot] = b.org; guardarPrincipal(pr); esPrincipal = true; }
+    }
+    log('Espacio central creado', b.org, o.meta.pruebas ? '(pruebas)' : '', esPrincipal ? '(principal)' : '');
+    return send(res, 201, { ok: true, principal: esPrincipal });
+  }
+  const org = parts[3];
+  if (!ORG_RE.test(org || '')) return send(res, 400, { error: 'Espacio central no válido' });
+  const o = orgLoad(org);
+  if (!o) return send(res, 404, { error: 'Espacio central no encontrado en este servidor' });
+  // Borrado de un espacio de PRUEBAS (y de sus preventivos): solo con el código de administración
+  if (parts.length === 4 && req.method === 'DELETE') {
+    const b = await readJson(req);
+    comprobarCodigo(b.codigo, { pruebas: true });
+    if (!o.meta.pruebas) return send(res, 403, { error: 'Solo se pueden borrar espacios centrales de pruebas' });
+    let n = 0;
+    for (const pid of Object.keys(o.prevs)) {
+      if (!PID_RE.test(pid)) continue;
+      const d = path.join(DATA, pid);
+      if (fs.existsSync(d)) { fs.rmSync(d, { recursive: true, force: true }); cache.delete(pid); n++; }
+    }
+    fs.rmSync(o.dir, { recursive: true, force: true }); orgs.delete(org);
+    const pr = principal(); if (pr.pruebas === org) { pr.pruebas = null; guardarPrincipal(pr); }
+    log('Espacio central de pruebas borrado', org, n, 'preventivos');
+    return send(res, 200, { ok: true, preventivosBorrados: n });
+  }
+  // Acceso con cuenta (usuario y contraseña) desde un dispositivo nuevo. La contraseña nunca llega aquí:
+  // el dispositivo demuestra que la conoce y recibe la clave del espacio envuelta con ella.
+  if (parts[4] === 'acceso' && req.method === 'POST') {
+    const b = await readJson(req);
+    if (!UID_RE.test(b.uid || '')) return send(res, 400, { error: 'Datos no válidos' });
+    const c = o.cuentas[b.uid];
+    if (parts[5] === 'sal') {
+      if (c) return send(res, 200, { salt: c.salt, iter: c.iter });
+      // cuenta inexistente: sal señuelo estable, indistinguible de una real
+      const salt = crypto.createHmac('sha256', secretoServidor()).update(org + ':' + b.uid).digest().subarray(0, 16).toString('base64');
+      return send(res, 200, { salt, iter: CUENTA_ITER });
+    }
+    if (parts.length !== 5 || typeof b.prueba !== 'string' || b.prueba.length > 100) return send(res, 400, { error: 'Datos no válidos' });
+    limiteAcceso(b.uid);
+    const h = crypto.createHash('sha256').update(Buffer.from(b.prueba, 'base64')).digest('hex');
+    if (!c || !safeEq(h, c.verif)) { falloAcceso(b.uid); return send(res, 403, { error: 'Usuario o contraseña incorrectos' }); }
+    fallosCuenta.delete(b.uid);
+    return send(res, 200, { wrap: c.wrap, nombre: o.meta.nombre, pruebas: o.meta.pruebas });
+  }
+  if (!orgAuth(req, o)) return send(res, 401, { error: 'Credenciales del espacio central no válidas' });
+  const what = parts[4];
+  if (!what && req.method === 'GET') return send(res, 200, { org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, creado: o.meta.creado, seq: o.meta.seq, version: VERSION, principal: principal()[o.meta.pruebas ? 'pruebas' : 'produccion'] === org });
+  // Cuentas: las publica un dispositivo ya dado de alta (al crear un usuario o cambiar su contraseña)
+  if (what === 'cuentas' && UID_RE.test(parts[5] || '')) {
+    if (req.method === 'PUT') {
+      const b = await readJson(req);
+      if (typeof b.salt !== 'string' || b.salt.length > 64 || !Number.isInteger(b.iter) || b.iter < 100000 || b.iter > 5000000 || !/^[0-9a-f]{64}$/.test(b.verif || '') || typeof b.wrap !== 'string' || b.wrap.length > 4096) return send(res, 400, { error: 'Datos no válidos' });
+      o.cuentas[parts[5]] = { salt: b.salt, iter: b.iter, verif: b.verif, wrap: b.wrap, t: Date.now() };
+      orgSave(o, 'cuentas'); fallosCuenta.delete(parts[5]);
+      return send(res, 200, { ok: true });
+    }
+    if (req.method === 'DELETE') { delete o.cuentas[parts[5]]; orgSave(o, 'cuentas'); return send(res, 200, { ok: true }); }
+  }
+  // Cambios desde una secuencia: registro de preventivos y configuración general
+  if (what === 'cambios' && req.method === 'GET') {
+    const desde = Math.max(0, Number(url.searchParams.get('desde') || 0));
+    const prevs = Object.entries(o.prevs).filter(([, v]) => v.sq > desde).map(([pid, v]) => ({ pid, w: v.w, sq: v.sq }));
+    const config = Object.entries(o.config).filter(([, v]) => v.sq > desde).map(([id, v]) => ({ id, v: v.v, c: v.c, borrado: !!v.borrado, sq: v.sq }));
+    return send(res, 200, { prevs, config, last: o.meta.seq });
+  }
+  if (what === 'prevs' && parts[5] && req.method === 'PUT') {
+    const pid = parts[5]; if (!PID_RE.test(pid)) return send(res, 400, { error: 'Preventivo no válido' });
+    const b = await readJson(req);
+    if (typeof b.w !== 'string' || b.w.length > 64 * 1024) return send(res, 400, { error: 'Datos no válidos' });
+    const cur = o.prevs[pid];
+    if (cur && cur.w === b.w) return send(res, 200, { ok: true, sq: cur.sq });
+    o.prevs[pid] = { w: b.w, sq: ++o.meta.seq, t: Date.now() };
+    orgSave(o, 'prevs', 'meta');
+    return send(res, 200, { ok: true, sq: o.prevs[pid].sq });
+  }
+  // Configuración general: control optimista por elemento (nunca se sobrescribe en silencio)
+  if (what === 'config' && parts[5] && req.method === 'PUT') {
+    const id = parts[5]; if (!ITEM_RE.test(id)) return send(res, 400, { error: 'Elemento no válido' });
+    const b = await readJson(req);
+    if (!Number.isInteger(b.base) || b.base < 0 || typeof b.c !== 'string' || b.c.length > 256 * 1024) return send(res, 400, { error: 'Datos no válidos' });
+    const cur = o.config[id];
+    const v = cur ? cur.v : 0;
+    if (b.base !== v) return send(res, 409, { error: 'El elemento ha cambiado en otro dispositivo', actual: cur ? { id, v: cur.v, c: cur.c, borrado: !!cur.borrado, sq: cur.sq } : null });
+    o.config[id] = { v: v + 1, c: b.c, borrado: !!b.borrado, sq: ++o.meta.seq, t: Date.now() };
+    orgSave(o, 'config', 'meta');
+    return send(res, 200, { ok: true, v: v + 1, sq: o.config[id].sq });
+  }
+  // Latido de cada dispositivo: versión y última comunicación (panel de administración)
+  if (what === 'latido' && req.method === 'POST') {
+    const b = await readJson(req);
+    if (!/^[A-Za-z0-9_-]{4,80}$/.test(b.dev || '')) return send(res, 400, { error: 'Dispositivo no válido' });
+    o.disp[b.dev] = { nombre: String(b.nombre || '').slice(0, 80), version: String(b.version || '').slice(0, 20), visto: Date.now() };
+    orgSave(o, 'dispositivos');
+    return send(res, 200, { ok: true, version: VERSION, hora: Date.now() });
+  }
+  if (what === 'dispositivos' && req.method === 'GET') return send(res, 200, { dispositivos: o.disp, version: VERSION });
+  return send(res, 404, { error: 'No encontrado' });
+}
+
 async function api(req, res, url) {
   const parts = url.pathname.split('/').filter(Boolean); // api v1 ...
   if (parts[2] === 'salud') return send(res, 200, { ok: true, servicio: 'gestor-emergencias-uco', version: VERSION, hora: Date.now() });
+  if (parts[2] === 'org') return apiOrg(req, res, url, parts);
+  // Espacio central principal (público: solo identifica el espacio; acceder exige una cuenta)
+  if (parts[2] === 'central' && req.method === 'GET') {
+    const slot = url.searchParams.get('entorno') === 'pruebas' ? 'pruebas' : 'produccion';
+    const org = principal()[slot]; const o = org && orgLoad(org);
+    return send(res, 200, o ? { ok: true, org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, version: VERSION } : { ok: true, org: null, version: VERSION });
+  }
   if (parts[2] !== 'prev') return send(res, 404, { error: 'No encontrado' });
   if (parts.length === 3 && req.method === 'POST') {
     const b = await readJson(req);
@@ -185,6 +401,7 @@ const server = args.cert && args.key
   ? https.createServer({ cert: fs.readFileSync(args.cert), key: fs.readFileSync(args.key) }, handler)
   : http.createServer(handler);
 server.listen(PORT, HOST, () => {
+  codigoAdmin(); codigoPruebas(); secretoServidor();
   log(`Servidor de sincronización UCO ${VERSION} en ${args.cert ? 'https' : 'http'}://${HOST}:${PORT}  datos: ${DATA}${STATIC ? '  app: ' + STATIC : ''}`);
 });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { log('Deteniendo servidor'); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000).unref(); });

@@ -5,7 +5,8 @@ import { icon } from '../icons.js';
 import { APP_NAME, APP_VERSION } from '../../core/defaults.js';
 
 const logo = () => `<svg viewBox="0 0 48 48" width="56" height="56" aria-hidden="true"><rect width="48" height="48" rx="11" fill="#B71C1C"/><path d="M20 9h8v11h11v8H28v11h-8V28H9v-8h11z" fill="#fff"/></svg>`;
-let users = null; let setupDone = null; let recoveryShown = null;
+let users = null; let setupDone = null; let recoveryShown = null; let modoLocal = false; let consultando = false;
+const splash = t => `<div class="splash">${logo()}<p>${esc(t)}</p></div>`;
 
 /** La clave de recuperación debe mostrarse aunque ya exista sesión */
 export function blocking() { return !!recoveryShown; }
@@ -13,7 +14,16 @@ export function renderAuth() {
   const core = G.core;
   if (setupDone === null) { core.repo.isSetup().then(v => { setupDone = v; G.render(); }); return `<div class="splash">${logo()}<p>Cargando…</p></div>`; }
   if (recoveryShown) return recoveryView();
-  if (!setupDone) return setupView();
+  if (!setupDone) {
+    // Dispositivo nuevo: si el servidor central (preconfigurado) está activo, basta con iniciar sesión
+    if (!core.centralConsultado && !modoLocal) {
+      if (!consultando) { consultando = true; core.consultarCentral().finally(() => { consultando = false; G.render(); }); }
+      return splash('Conectando con el servidor central…');
+    }
+    const r = core.centralRemoto;
+    if (r && r.org && !modoLocal) return centralLoginView(r);
+    return setupView(r);
+  }
   if (users === null) { core.repo.listUsersPublic().then(u => { users = u.filter(x => x.activo); G.render(); }); return `<div class="splash">${logo()}<p>Cargando…</p></div>`; }
   return `<div class="auth-box">
     <div class="auth-head">${logo()}<h1>${APP_NAME}</h1><p class="muted">${esc(core.device.nombre)} · v${APP_VERSION}</p></div>
@@ -30,18 +40,40 @@ export function renderAuth() {
   </div>`;
 }
 
-function setupView() {
+/** Dispositivo nuevo con el servidor central activo: solo usuario y contraseña */
+function centralLoginView(r) {
+  return `<div class="auth-box">
+    <div class="auth-head">${logo()}<h1>${APP_NAME}</h1><p class="muted">${esc(r.nombre || 'Servidor central')} · v${APP_VERSION}</p></div>
+    ${G.preview ? `<p class="note warn">${icon('info')} Vista previa: los datos se guardan solo mientras la página esté abierta.</p>` : ''}
+    <form data-f="auth.central" class="card pad">
+      ${fieldsHtml([
+        { name: 'u', label: 'Usuario', required: true, autocomplete: 'username', attrs: 'autocapitalize="none" spellcheck="false"' },
+        { name: 'p', label: 'Contraseña', type: 'password', required: true, autocomplete: 'current-password' },
+      ])}
+      <details class="small"><summary>Nombre de este dispositivo (opcional)</summary>${fieldsHtml([{ name: 'dev', label: 'Nombre del dispositivo', placeholder: 'p. ej. Tablet puesto de mando' }])}</details>
+      <button class="btn primary block">${icon('llave')}<span>Entrar</span></button>
+    </form>
+    <p class="muted center small">Usa el usuario y la contraseña que te ha dado el administrador. La primera vez se descargan los datos del servidor central; después también funciona sin conexión.</p>
+    <div class="row center gap wrap"><button class="btn ghost sm" data-a="auth.local">Usar este dispositivo sin servidor central</button></div>
+  </div>`;
+}
+
+function setupView(r) {
+  const min = G.core.minPassword();
   return `<div class="auth-box wide">
     <div class="auth-head">${logo()}<h1>${APP_NAME}</h1><p class="muted">Configuración inicial de este dispositivo</p></div>
     ${G.preview ? `<p class="note warn">${icon('info')} Vista previa: los datos no se conservan al cerrar la página.</p>` : ''}
+    ${r === null && !modoLocal ? `<p class="note">${icon('info')} Sin conexión con el servidor central: el dispositivo se configura en local y podrás conectarlo más tarde (Sistema → Servidor central). <button type="button" class="btn sm ghost" data-a="auth.retryCentral">Reintentar</button></p>` : ''}
+    ${r && r.org && modoLocal ? `<p class="note">${icon('info')} Hay un servidor central activo. <button type="button" class="btn sm ghost" data-a="auth.usarCentral">Entrar con mi usuario del servidor central</button></p>` : ''}
     <form data-f="auth.setup" class="card pad">
       <h2>Administrador</h2>
       ${fieldsHtml([
         { name: 'nombre', label: 'Nombre y apellidos', required: true, autocomplete: 'name' },
         { name: 'usuario', label: 'Usuario', required: true, placeholder: 'p. ej. coordinador', autocomplete: 'username' },
-        { name: 'p1', label: 'Contraseña (mínimo 6 caracteres)', type: 'password', required: true, autocomplete: 'new-password' },
+        { name: 'p1', label: 'Contraseña (mínimo ' + min + ' caracteres)', type: 'password', required: true, autocomplete: 'new-password' },
         { name: 'p2', label: 'Repite la contraseña', type: 'password', required: true, autocomplete: 'new-password' },
       ])}
+      ${r && !r.org ? `<h2>Servidor central</h2>${fieldsHtml([{ name: 'codigo', label: 'Código de administración del servidor (opcional)', placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX', attrs: 'autocomplete="off" autocapitalize="characters"', help: 'Actívalo aquí una sola vez para toda la organización: después, en los demás dispositivos bastará con iniciar sesión. También puede hacerse más tarde.' }])}` : ''}
       <h2>Dispositivo</h2>
       ${fieldsHtml([
         { name: 'dev', label: 'Nombre del dispositivo', value: 'Tablet 1', required: true },
@@ -77,8 +109,21 @@ F['auth.setup'] = async form => {
   if (v.p1 !== v.p2) { toast('Las contraseñas no coinciden', 'error'); return; }
   const r = await G.core.setup({ usuario: v.usuario, nombre: v.nombre, password: v.p1 });
   await G.core.repo.saveDevice({ nombre: v.dev, code: v.code });
+  if (v.codigo && v.codigo.trim()) {
+    try { await G.core.centralActivar({ codigo: v.codigo, password: v.p1 }); toast('Servidor central activado: en los demás dispositivos basta con iniciar sesión', 'ok', 8000); }
+    catch (e) { toast('Dispositivo configurado, pero no se pudo activar el servidor central: ' + e.message + '. Puedes hacerlo después en Sistema → Servidor central.', 'error', 10000); }
+  }
   setupDone = true; recoveryShown = r.recovery; G.render();
 };
+F['auth.central'] = async form => {
+  const v = readForm(form);
+  toast('Comprobando la cuenta y descargando los datos…', 'info', 5000);
+  await G.core.accederCentral(v.u, v.p, { dispositivo: (v.dev || '').trim() });
+  setupDone = true; users = null; await G.afterLogin();
+};
+A['auth.local'] = () => { modoLocal = true; G.render(); };
+A['auth.usarCentral'] = () => { modoLocal = false; G.render(); };
+A['auth.retryCentral'] = async () => { await G.core.consultarCentral(); G.render(); };
 A['auth.copyRec'] = () => copyText(recoveryShown);
 A['auth.recDone'] = async () => {
   if (!document.getElementById('recok').checked) { toast('Confirma que has guardado la clave de recuperación', 'error'); return; }

@@ -3,9 +3,10 @@
 import { uid, now, b64, unb64, stableStringify, AppError, clone, base32, randomBytes } from '../core/util.js';
 import * as K from '../core/crypto.js';
 import { defaultGlobalConfig, SCHEMA_VERSION, APP_VERSION } from '../core/defaults.js';
-import { defaultRoles, permsOf } from '../core/perms.js';
+import { defaultRoles, permsOf, PERM_KEYS } from '../core/perms.js';
 
 const LOCK_AFTER = 5;
+const credV = u => (u && u.cred && u.cred.v) || 'v0';
 const META_FIELDS = ['num', 'ref', 'sq', 'ps'];
 
 export class Repo {
@@ -35,11 +36,12 @@ export class Repo {
   async dec(rec) { if (!this.dek) throw new AppError('Sesión cerrada'); return K.decryptJSON(this.dek, rec); }
   async getDoc(id, def = null) { const r = await this.db.get('docs', id); return r ? this.dec(r.enc) : def; }
   async putDoc(id, data) { await this.db.put('docs', { id, enc: await this.enc(data) }); }
+  async delDoc(id) { await this.db.del('docs', id); }
 
   // ---------------- alta inicial y sesiones ----------------
   async setup({ usuario, nombre, password }) {
     if (await this.isSetup()) throw new AppError('El sistema ya está configurado');
-    validatePassword(password);
+    validatePassword(password, this.minPassword);
     usuario = normUser(usuario); if (!usuario) throw new AppError('Indica un nombre de usuario');
     const dek = await K.genDek(); this.dek = dek;
     const recovery = K.newRecoveryCode();
@@ -54,17 +56,20 @@ export class Repo {
     return { recovery, user };
   }
   async listUsersPublic() { return (await this.db.getAll('users')).map(u => ({ id: u.id, usuario: u.usuario, nombre: u.nombre, activo: u.activo })); }
+  /** Errores con código: «no_existe» y «sin_clave_local» permiten intentarlo con la cuenta del servidor central */
   async login(usuario, password) {
     const users = await this.db.getAll('users');
     const u = users.find(x => x.usuario === normUser(usuario));
-    if (!u || !u.activo) throw new AppError('Usuario o contraseña incorrectos');
+    if (!u) throw new AppError('Usuario o contraseña incorrectos', 'no_existe');
+    if (!u.activo) throw new AppError('Usuario o contraseña incorrectos');
     if (u.bloqueoHasta > now()) throw new AppError('Demasiados intentos. Espera ' + Math.ceil((u.bloqueoHasta - now()) / 1000) + ' s.');
+    if (!u.wrap) throw new AppError('Usuario o contraseña incorrectos', 'sin_clave_local');
     try { this.dek = await K.unwrapDek(u.wrap, password); }
     catch {
       u.fallos = (u.fallos || 0) + 1;
       if (u.fallos >= LOCK_AFTER) u.bloqueoHasta = now() + Math.min(15 * 60000, 30000 * 2 ** (u.fallos - LOCK_AFTER));
       await this.db.put('users', u);
-      throw new AppError('Usuario o contraseña incorrectos');
+      throw new AppError('Usuario o contraseña incorrectos', 'credenciales');
     }
     u.fallos = 0; u.bloqueoHasta = 0; u.ultimoAcceso = now();
     await this.db.put('users', u);
@@ -73,7 +78,7 @@ export class Repo {
     return this.session;
   }
   async _startSession(u) {
-    const roles = await this.getDoc('roles', defaultRoles());
+    const roles = await this.getRoles();
     const rol = roles.find(r => r.id === u.rol) || roles.find(r => r.id === 'rol_consulta');
     this.session = { user: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, rolNombre: rol ? rol.nombre : '', perms: permsOf(roles, u.rol) }, inicio: now() };
     return this.session;
@@ -84,14 +89,68 @@ export class Repo {
     try { await K.unwrapDek(u.wrap, password); return true; } catch { return false; }
   }
   async logout() { if (this.session) await this.audit('Cierre de sesión', 'Usuario ' + this.session.user.usuario, '', ''); this.session = null; this.dek = null; }
+
+  // ---------------- servidor central: identidad común a todos los dispositivos ----------------
+  /** Puntero no secreto al espacio central (dirección e identificador): permite comprobar una cuenta antes de abrir los datos */
+  async centralPointer() { const r = await this.db.get('meta', 'central'); return r ? r.v : null; }
+  async setCentralPointer(p) { if (p) await this.db.put('meta', { k: 'central', v: p }); else await this.db.del('meta', 'central'); }
+  /** Guarda la clave de datos de este dispositivo envuelta con el secreto del espacio central */
+  async setOrgWrap(secret) {
+    if (!this.dek) throw new AppError('Sesión cerrada');
+    const c = await this.db.get('meta', 'crypto');
+    await this.db.put('meta', { k: 'crypto', v: { ...(c ? c.v : { recovery: null, creado: now() }), orgWrap: await K.wrapDekSecreto(this.dek, secret) } });
+  }
+  async clearOrgWrap() { const c = await this.db.get('meta', 'crypto'); if (c && c.v.orgWrap) { delete c.v.orgWrap; await this.db.put('meta', c); } }
+  /** Dispositivo nuevo que entra con una cuenta del servidor central: clave de datos propia ligada al espacio */
+  async setupCentral(secret) {
+    if (await this.isSetup()) throw new AppError('El sistema ya está configurado');
+    const dek = await K.genDek(); this.dek = dek;
+    await this.db.put('meta', { k: 'crypto', v: { recovery: null, orgWrap: await K.wrapDekSecreto(dek, secret), creado: now() } });
+    await this.putDoc('roles', defaultRoles());
+    await this.putDoc('cfg', defaultGlobalConfig());
+  }
+  /** Abre los datos de este dispositivo con el secreto del espacio (cuenta ya comprobada en el servidor) */
+  async unlockConSecreto(secret) {
+    const c = await this.db.get('meta', 'crypto');
+    if (!c || !c.v.orgWrap) throw new AppError('Este dispositivo no está vinculado al servidor central');
+    try { this.dek = await K.unwrapDekSecreto(c.v.orgWrap, secret); } catch { throw new AppError('La cuenta pertenece a otro espacio central distinto del de este dispositivo'); }
+  }
+  async userByName(usuario) { return (await this.db.getAll('users')).find(x => x.usuario === normUser(usuario)) || null; }
+  /** Primer acceso de un usuario en este dispositivo (o tras cambiar su contraseña en otro): guarda su clave local */
+  async establecerClaveLocal(userId, password) {
+    const u = await this.db.get('users', userId);
+    if (!u || !u.activo) throw new AppError('Usuario o contraseña incorrectos');
+    u.wrap = await K.wrapDek(this.dek, password); u.wrapV = credV(u); u.fallos = 0; u.bloqueoHasta = 0; u.ultimoAcceso = now();
+    await this.db.put('users', u);
+    await this._startSession(u);
+    await this.audit('Inicio de sesión', 'Usuario ' + u.usuario, '', 'Primer acceso en este dispositivo con su cuenta del servidor central');
+    return this.session;
+  }
+  /** Perfil común de un usuario (sin claves locales ni contadores) */
+  perfil(u) { return { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, activo: u.activo !== false, creado: u.creado || 0, cred: { v: credV(u), central: !!(u.cred && u.cred.central) } }; }
+  async perfiles() { return (await this.db.getAll('users')).map(u => this.perfil(u)); }
+  /** Aplica un perfil recibido del servidor central. Devuelve el usuario local sustituido (mismo nombre, otro id) */
+  async aplicarPerfil(p, { borrado = false } = {}) {
+    const users = await this.db.getAll('users'); let sustituido = null;
+    for (const x of users) if (x.usuario === normUser(p.usuario) && x.id !== p.id) { await this.db.del('users', x.id); sustituido = x; }
+    const cur = users.find(x => x.id === p.id);
+    const u = { fallos: 0, bloqueoHasta: 0, ...(cur || {}), id: p.id, usuario: normUser(p.usuario), nombre: p.nombre, rol: p.rol, activo: !borrado && p.activo !== false, creado: p.creado || now(), cred: { v: (p.cred && p.cred.v) || 'v0', central: !!(p.cred && p.cred.central) } };
+    if (u.wrap && (u.wrapV || 'v0') !== credV(u)) { delete u.wrap; delete u.wrapV; } // contraseña cambiada en otro dispositivo
+    await this.db.put('users', u);
+    return sustituido;
+  }
+  async marcarCuentaPublicada(userId) { const u = await this.db.get('users', userId); if (u) { u.cred = { v: credV(u), central: true }; await this.db.put('users', u); } return u; }
+
   /** Recupera el acceso con la clave de recuperación y fija una nueva contraseña */
   async recover(code, usuario, newPassword) {
-    validatePassword(newPassword);
+    validatePassword(newPassword, this.minPassword);
     const c = await this.db.get('meta', 'crypto');
+    if (!c || !c.v.recovery) throw new AppError('Este dispositivo usa las cuentas del servidor central: pide a un administrador que restablezca tu contraseña e inicia sesión con la nueva');
     let dek; try { dek = await K.unwrapDek(c.v.recovery, K.normalizeRecovery(code)); } catch { throw new AppError('Clave de recuperación incorrecta'); }
     const u = (await this.db.getAll('users')).find(x => x.usuario === normUser(usuario));
     if (!u) throw new AppError('Usuario no encontrado');
     u.wrap = await K.wrapDek(dek, newPassword); u.fallos = 0; u.bloqueoHasta = 0; u.activo = true;
+    u.cred = { v: 'v' + uid(''), central: false }; u.wrapV = u.cred.v;
     await this.db.put('users', u);
     this.dek = dek; await this._startSession(u);
     await this.audit('Recuperación de acceso', 'Usuario ' + u.usuario, '', 'Contraseña restablecida con la clave de recuperación');
@@ -115,20 +174,27 @@ export class Repo {
       const admins = users.filter(x => x.activo && x.rol === 'rol_admin' && x.id !== u.id);
       if (!admins.length) throw new AppError('Debe quedar al menos un administrador activo');
     }
+    this.ultimoCambioUsuario = { usuarioAnterior: u.usuario && u.usuario !== usuario ? u.usuario : null };
     Object.assign(u, { usuario, nombre: String(data.nombre || usuario).trim(), rol: data.rol, activo: data.activo !== false });
-    if (password) { validatePassword(password); u.wrap = await K.wrapDek(this.dek, password); u.fallos = 0; u.bloqueoHasta = 0; }
+    if (password) { validatePassword(password, this.minPassword); u.wrap = await K.wrapDek(this.dek, password); u.fallos = 0; u.bloqueoHasta = 0; u.cred = { v: 'v' + uid(''), central: false }; u.wrapV = u.cred.v; }
     await this.db.put('users', u);
     await this.audit(before ? 'Modificación de usuario' : 'Alta de usuario', 'Usuario ' + usuario, before ? JSON.stringify(before) : '', JSON.stringify({ usuario, nombre: u.nombre, rol: u.rol, activo: u.activo }) + (password ? ' (contraseña establecida)' : ''));
     return u.id;
   }
   async changeOwnPassword(oldPwd, newPwd) {
     if (!(await this.verifyPassword(oldPwd))) throw new AppError('La contraseña actual no es correcta');
-    validatePassword(newPwd);
+    validatePassword(newPwd, this.minPassword);
     const u = await this.db.get('users', this.session.user.id);
-    u.wrap = await K.wrapDek(this.dek, newPwd); await this.db.put('users', u);
+    u.wrap = await K.wrapDek(this.dek, newPwd); u.cred = { v: 'v' + uid(''), central: false }; u.wrapV = u.cred.v; await this.db.put('users', u);
     await this.audit('Cambio de contraseña', 'Usuario ' + u.usuario, '', '');
   }
-  async getRoles() { return this.getDoc('roles', defaultRoles()); }
+  async getRoles() {
+    const roles = await this.getDoc('roles', defaultRoles());
+    // Migración: el rol de sistema «Administrador» tiene siempre todos los permisos, también los nuevos
+    const adm = roles.find(r => r.id === 'rol_admin' && r.sistema);
+    if (adm) for (const k of PERM_KEYS) if (!adm.permisos.includes(k)) adm.permisos.push(k);
+    return roles;
+  }
   async saveRoles(roles) {
     this.needAdmin();
     const before = await this.getRoles();
@@ -282,7 +348,8 @@ export class Repo {
     if (blobs) for (const b of await this.db.getAll('blobs')) { const { enc: e, ...m } = b; payload.blobs.push({ ...m, data: b64(await K.decryptBytes(this.dek, e)) }); }
     if (dek) payload.dek = b64(await K.exportRaw(this.dek));
     payload.users = payload.users.map(u => ({ ...u, wrap: u.wrap ? { ...u.wrap, salt: b64(u.wrap.salt), iv: b64(u.wrap.iv), ct: b64(u.wrap.ct) } : null }));
-    payload.meta = payload.meta.map(m => (m.k === 'crypto' ? { k: 'crypto', v: { ...m.v, recovery: { ...m.v.recovery, salt: b64(m.v.recovery.salt), iv: b64(m.v.recovery.iv), ct: b64(m.v.recovery.ct) } } } : m));
+    // La clave local envuelta con el secreto del espacio central no viaja en las copias
+    payload.meta = payload.meta.map(m => (m.k === 'crypto' ? { k: 'crypto', v: { ...m.v, orgWrap: undefined, recovery: m.v.recovery ? { ...m.v.recovery, salt: b64(m.v.recovery.salt), iv: b64(m.v.recovery.iv), ct: b64(m.v.recovery.ct) } : null } } : m));
     payload.integridad = await K.sha256hex(stableStringify({ ...payload, integridad: undefined }));
     return payload;
   }
@@ -373,6 +440,10 @@ export class Repo {
     const auds = new Set((await this.db.getAll('audit')).map(a => a.id));
     for (const a of p.audit) if (!auds.has(a.id)) await this.db.put('audit', { id: a.id, t: a.t, enc: await this.enc(a.data) });
     for (const m of p.meta) if (/^(num|ref):/.test(m.k)) { const cur = await this.db.get('meta', m.k); if (!cur || cur.v < m.v) await this.db.put('meta', m); }
+    // Vinculación con el servidor central: se rehace con el secreto restaurado (o se retira si ya no hay)
+    const cen = await this.getDoc('central');
+    if (cen && cen.secret) { await this.setOrgWrap(unb64(cen.secret)); await this.setCentralPointer({ server: cen.server, org: cen.org, pruebas: !!cen.pruebas, nombre: cen.nombre || '' }); }
+    else if (modo === 'reemplazar') { await this.setCentralPointer(null); await this.clearOrgWrap(); }
     await this.audit('Restauración de copia', 'Sistema', '', modo + ': ' + stats.ops + ' operaciones, ' + stats.docs + ' documentos, ' + stats.blobs + ' archivos');
     return stats;
   }
@@ -394,8 +465,9 @@ async function verifyPayload(p) {
   if (h !== p.integridad) throw new AppError('La copia está dañada o ha sido modificada (integridad no válida)');
 }
 function unwrapB64(w) { return w ? { ...w, salt: typeof w.salt === 'string' ? unb64(w.salt) : w.salt, iv: typeof w.iv === 'string' ? unb64(w.iv) : w.iv, ct: typeof w.ct === 'string' ? unb64(w.ct) : w.ct } : null; }
-export function validatePassword(p) {
-  if (String(p || '').length < 6) throw new AppError('La contraseña debe tener al menos 6 caracteres');
+/** Con servidor central (acceso público por Internet) se exigen al menos 8 caracteres */
+export function validatePassword(p, min = 6) {
+  if (String(p || '').length < min) throw new AppError('La contraseña debe tener al menos ' + min + ' caracteres');
 }
 function normUser(u) { return String(u || '').trim().toLowerCase().replace(/\s+/g, '.'); }
 function summarizeRoles(roles) { return roles.map(r => r.nombre + ' (' + r.permisos.length + ' permisos)').join(', '); }
