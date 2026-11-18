@@ -1,9 +1,11 @@
-SERVIDOR DE SINCRONIZACIÓN · GESTOR DE EMERGENCIAS UCO (Windows 10 y 11)
+SERVIDOR CENTRAL · GESTOR DE EMERGENCIAS UCO (Windows 10 y 11)
 
 Qué hace
-Deja este PC como servidor de sincronización de los preventivos compartidos, con una
-dirección HTTPS fija y gratuita (Tailscale Funnel). Arranca solo al encender el PC,
-aunque nadie inicie sesión en Windows.
+Deja este PC como servidor central del Gestor: preventivos compartidos, usuarios y
+configuración comunes a todos los dispositivos, con una dirección HTTPS fija y gratuita
+(Tailscale Funnel). Arranca solo al encender el PC, aunque nadie inicie sesión en Windows.
+Si ya estaba instalado, el instalador lo actualiza: guarda antes una copia de los datos y,
+si la versión nueva no arrancase, vuelve sola a la anterior.
 
 Instalar
 1. Descomprime el ZIP en el PC que hará de servidor (no lo ejecutes desde dentro del ZIP).
@@ -17,12 +19,17 @@ Instalar
    https://nombre-del-pc.tail1234.ts.net/ (queda guardada en
    C:\ProgramData\GestorUCO\DIRECCION.txt).
 
-En la aplicación (en cada dispositivo)
-Sistema → Configuración general → «Servidor por defecto para preventivos compartidos»
-→ pega la dirección. También se puede indicar al crear un preventivo compartido.
+En la aplicación
+La aplicación ya conoce la dirección del servidor: no hay que escribirla en ningún sitio.
+- Una sola vez (administrador): Sistema → Servidor central → «Activar el servidor central»
+  con el código de administración. Para verlo, ejecuta MOSTRAR-CODIGO-ADMIN.bat (también en
+  C:\ProgramData\GestorUCO). No lo compartas.
+- Después, en cada móvil o tablet basta con abrir la aplicación e iniciar sesión con el
+  usuario y la contraseña. Los preventivos compartidos aparecen solos.
 
 Comprobar y desinstalar
-- estado-servidor.bat: muestra si funciona en el PC y si responde desde Internet.
+- estado-servidor.bat: muestra si funciona en el PC, si responde desde Internet y si el
+  servidor central está activado.
 - desinstalar-servidor.bat: lo detiene y quita el arranque automático (conserva los datos).
 
 A tener en cuenta
@@ -32,4 +39,5 @@ A tener en cuenta
 - Tailscale es gratuito en su plan Personal, solo para uso no comercial. Si lo usa una
   empresa o se cobra por el servicio, revisa sus condiciones (plan de pago).
 - Los datos que guarda el servidor están cifrados de extremo a extremo: el servidor no
-  puede leerlos. Copia de seguridad: carpeta C:\ProgramData\GestorUCO\datos.
+  puede leerlos. Copia de seguridad: carpeta C:\ProgramData\GestorUCO\datos (las copias
+  automáticas de cada actualización están en C:\ProgramData\GestorUCO\copias).

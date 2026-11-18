@@ -3,7 +3,7 @@
 // pide; el servidor de sincronización arranca de verdad con los mismos argumentos que en Windows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync, cpSync, rmSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -22,7 +22,7 @@ function entorno({ tsInicial = 'Running' } = {}) {
   const tailscale = fake('tailscale', 'case "$1" in status) echo "{\\"BackendState\\":\\"$(cat ' + est + ')\\",\\"Self\\":{\\"DNSName\\":\\"pc-prueba.tail1234.ts.net.\\"}}";;\n up) echo Running > "' + est + '";;\nesac\nexit 0\n');
   return { dir, log, base: join(dir, 'GestorUCO'), schtasks, tailscale, powercfg };
 }
-const correr = (script, e, puerto, extra = {}) => spawnSync(process.execPath, [join(PKG, script)], {
+const correr = (script, e, puerto, extra = {}, pkg = PKG) => spawnSync(process.execPath, [join(pkg, script)], {
   encoding: 'utf8', timeout: 90000,
   env: { ...process.env, UCO_SIMULAR: '1', UCO_SIN_PREGUNTAS: '1', UCO_BASE: e.base, UCO_PUERTO: String(puerto), UCO_SCHTASKS: e.schtasks, UCO_TAILSCALE: e.tailscale, UCO_POWERCFG: e.powercfg, UCO_URL_PRUEBA: 'http://127.0.0.1:' + puerto + '/', ...extra },
 });
@@ -98,5 +98,31 @@ test('instalador para Windows: si el puerto está ocupado por otro programa, usa
     assert.doesNotMatch(readFileSync(e.log, 'utf8'), /powercfg/, 'sin autorización no se cambia la suspensión');
   } finally {
     otro.close(); correr('desinstalar.mjs', e, p + 1);
+  }
+});
+
+test('instalador para Windows: actualización con copia de datos y vuelta atrás automática si la nueva versión no arranca', async () => {
+  const e = entorno(); const p = await libre();
+  let r = correr('instalar.mjs', e, p);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  writeFileSync(join(e.base, 'datos', 'dato-real.txt'), 'no se pierde');
+  // Paquete con un servidor que no arranca
+  const roto = mkdtempSync(join(tmpdir(), 'uco-pkg-roto-'));
+  cpSync(PKG, roto, { recursive: true });
+  writeFileSync(join(roto, 'servidor', 'server.mjs'), 'process.exit(3);\n');
+  try {
+    r = correr('instalar.mjs', e, p, {}, roto);
+    assert.notEqual(r.status, 0, 'el instalador informa del fallo');
+    assert.match(r.stdout, /Copia de seguridad de los datos/);
+    assert.match(r.stdout, /se ha restaurado la anterior \(versión \d+\.\d+\.\d+\)/i, r.stdout);
+    const salud = await (await fetch('http://127.0.0.1:' + p + '/api/v1/salud')).json();
+    assert.equal(salud.servicio, 'gestor-emergencias-uco', 'el servidor anterior sigue funcionando');
+    const copias = readdirSync(join(e.base, 'copias')).filter(x => x.startsWith('datos-'));
+    assert.equal(copias.length, 1);
+    assert.equal(readFileSync(join(e.base, 'copias', copias[0], 'dato-real.txt'), 'utf8'), 'no se pierde', 'copia previa de los datos');
+    assert.equal(readFileSync(join(e.base, 'datos', 'dato-real.txt'), 'utf8'), 'no se pierde');
+    assert.doesNotMatch(readFileSync(join(e.base, 'servidor', 'server.mjs'), 'utf8'), /process\.exit\(3\)/, 'se restauró el servidor anterior');
+  } finally {
+    correr('desinstalar.mjs', e, p); rmSync(roto, { recursive: true, force: true });
   }
 });

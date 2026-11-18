@@ -2,7 +2,7 @@
 // copia los archivos, crea una tarea que lo arranca al encender el equipo y lo publica en
 // Internet con una dirección HTTPS fija mediante Tailscale Funnel.
 // Se ejecuta desde instalar-servidor.bat (con permisos de administrador).
-import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, copyFileSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -25,13 +25,31 @@ const fallo = msg => { console.log('\n[ERROR] ' + msg); process.exit(1); };
 const ok = msg => console.log('[OK] ' + msg);
 const libre = p => new Promise(res => { const s = createServer(); s.once('error', () => res(false)); s.listen(p, '127.0.0.1', () => s.close(() => res(true))); });
 
+/** Detiene el servidor instalado (tarea programada y proceso) */
+async function detener(puerto) {
+  U.run(U.SCHTASKS, ['/End', '/TN', U.TAREA]);
+  if (U.SIM) { try { process.kill(Number(readFileSync(join(U.BASE, 'pid-prueba.txt'), 'utf8'))); } catch { } }
+  else { const pid = U.pidEnPuerto(puerto); if (pid) U.run('taskkill', ['/F', '/T', '/PID', pid]); }
+  await U.esperar(async () => !(await U.salud(U.local(puerto), 1000)), 15);
+}
+function arrancar(puerto) {
+  if (U.SIM) {
+    const ch = spawn(U.NODE, U.argsServidor(puerto), { detached: true, stdio: 'ignore' }); ch.unref();
+    writeFileSync(join(U.BASE, 'pid-prueba.txt'), String(ch.pid));
+  } else U.run(U.SCHTASKS, ['/Run', '/TN', U.TAREA]);
+}
+const sello = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+/** Conserva solo las n copias de datos más recientes */
+function limpiarCopias(dir, n) {
+  const c = readdirSync(dir).filter(x => x.startsWith('datos-')).sort();
+  for (const x of c.slice(0, Math.max(0, c.length - n))) rmSync(join(dir, x), { recursive: true, force: true });
+}
+
 async function elegirPuerto() {
   // Reinstalación: si ya responde el servidor del Gestor, se detiene para sustituirlo
   if (await U.salud(U.local(U.PUERTO))) {
     console.log('Hay una instalación anterior en marcha: se detiene para actualizarla.');
-    U.run(U.SCHTASKS, ['/End', '/TN', U.TAREA]);
-    const pid = U.pidEnPuerto(U.PUERTO); if (pid) U.run('taskkill', ['/F', '/T', '/PID', pid]);
-    await U.esperar(async () => !(await U.salud(U.local(U.PUERTO), 1000)), 15);
+    await detener(U.PUERTO);
   }
   for (let p = U.PUERTO; p < U.PUERTO + 20; p++) if (await libre(p)) return p;
   fallo('No hay ningún puerto libre entre ' + U.PUERTO + ' y ' + (U.PUERTO + 19) + '.');
@@ -43,6 +61,20 @@ async function main() {
 
   // 1. Archivos en una carpeta fija del equipo
   const puerto = await elegirPuerto();
+  // Actualización: se guarda la versión instalada (para volver atrás) y una copia de los datos
+  const COPIAS = join(U.BASE, 'copias'); const ANT = join(COPIAS, 'anterior');
+  const habia = existsSync(U.RUTAS.servidor);
+  if (habia) {
+    rmSync(ANT, { recursive: true, force: true }); mkdirSync(ANT, { recursive: true });
+    copyFileSync(U.RUTAS.servidor, join(ANT, 'server.mjs'));
+    if (existsSync(U.RUTAS.app)) cpSync(U.RUTAS.app, join(ANT, 'app'), { recursive: true });
+    if (existsSync(U.RUTAS.datos)) {
+      const d = join(COPIAS, 'datos-' + sello()); cpSync(U.RUTAS.datos, d, { recursive: true });
+      limpiarCopias(COPIAS, 5); ok('Copia de seguridad de los datos en ' + d);
+    }
+    // Las copias contienen los códigos del servidor: solo sistema y administradores
+    if (!U.SIM) U.run(U.ICACLS, [COPIAS, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '/T', '/C', '/Q']);
+  }
   mkdirSync(dirname(U.RUTAS.servidor), { recursive: true });
   cpSync(join(AQUI, 'servidor', 'server.mjs'), U.RUTAS.servidor);
   rmSync(U.RUTAS.app, { recursive: true, force: true }); cpSync(join(AQUI, 'app'), U.RUTAS.app, { recursive: true });
@@ -64,13 +96,19 @@ async function main() {
   const t = U.run(U.SCHTASKS, ['/Create', '/TN', U.TAREA, '/XML', U.RUTAS.tarea, '/F']);
   if (t.code !== 0) fallo('No se pudo crear la tarea programada: ' + t.out.trim());
   ok('Arranque automático al encender el equipo (tarea «' + U.TAREA + '»)');
-  if (U.SIM) {
-    const ch = spawn(U.NODE, U.argsServidor(puerto), { detached: true, stdio: 'ignore' }); ch.unref();
-    writeFileSync(join(U.BASE, 'pid-prueba.txt'), String(ch.pid));
-  } else U.run(U.SCHTASKS, ['/Run', '/TN', U.TAREA]);
+  arrancar(puerto);
   const v = await U.esperar(() => U.salud(U.local(puerto)), 40);
+  if (!v && habia) {
+    // Vuelta atrás automática: se restaura la versión anterior, que sí funcionaba
+    console.log('[AVISO] La nueva versión no arranca: se restaura la anterior.');
+    await detener(puerto);
+    copyFileSync(join(ANT, 'server.mjs'), U.RUTAS.servidor);
+    if (existsSync(join(ANT, 'app'))) { rmSync(U.RUTAS.app, { recursive: true, force: true }); cpSync(join(ANT, 'app'), U.RUTAS.app, { recursive: true }); }
+    arrancar(puerto);
+    const va = await U.esperar(() => U.salud(U.local(puerto)), 40);
+    fallo(va ? 'La nueva versión no arrancó. Se ha restaurado la anterior (versión ' + va + '), que sigue funcionando. Revisa ' + U.RUTAS.registro : 'El servidor no arranca ni con la versión anterior. Revisa ' + U.RUTAS.registro);
+  }
   if (!v) fallo('El servidor no ha arrancado. Revisa ' + U.RUTAS.registro);
-  ok('Servidor en marcha (versión ' + v + ')');
   // Los códigos del servidor solo pueden leerlos el sistema (el servidor) y los administradores
   if (!U.SIM) {
     const r = U.run(U.ICACLS, [SRV, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '/T', '/C', '/Q']);
