@@ -393,8 +393,9 @@ CH['u.sectorSel'] = el => { const f = el.closest('form'); const b = f && f.query
 // Valores del formulario de unidad mientras se crea un tipo nuevo (para no perder lo escrito)
 let UFORM = null;
 A['u.nuevoTipo'] = el => {
-  const form = el.closest('form'); UFORM = { ...readForm(form) };
-  nuevoTipoRecurso(t => { UFORM = { ...UFORM, tipo: t.id }; refreshSheets(); });
+  const form = el.closest('form'); const id = form.dataset.id || null; const vals = { ...readForm(form) };
+  // Al volver, el formulario se reabre con lo escrito y el tipo nuevo seleccionado
+  nuevoTipoRecurso(t => { closeSheet(); if (id) abrirEdicionUnidad(id, { ...vals, tipo: t.id }); else abrirFormUnidad({ ...vals, tipo: t.id }); });
 };
 /** Añadir unidad: primero las unidades plantilla (solo piden el número); después, una unidad personalizada */
 A['u.new'] = () => {
@@ -410,8 +411,8 @@ A['u.new'] = () => {
   });
 };
 A['u.newBlank'] = () => { closeSheet(); abrirFormUnidad(); };
-function abrirFormUnidad() {
-  const p = P(); UFORM = null;
+function abrirFormUnidad(vals = null) {
+  const p = P(); UFORM = vals;
   openSheet({ title: 'Nueva unidad', size: 'l', onClose: () => { UFORM = null; }, render: () => `<form data-f="u.save">${fieldsHtml(unitFields(p.cat, UFORM ? { tipo: UFORM.tipo, sector: UFORM.sector } : {}, { create: true }), UFORM || { ...unitValues({ vis: {} }), colorC0: '' })}
     <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear unidad</button></div></form>` });
 }
@@ -437,11 +438,12 @@ F['u.tplSave'] = async form => {
   toast('Unidad ' + [pl.prefijo, String(v.numero).trim()].filter(Boolean).join(' ') + ' creada en C0' + (v.sector ? '' : ', pendiente de asignación'), 'ok', 5000);
   closeSheet();
 };
-A['u.edit'] = el => {
-  const u = S().units[el.dataset.id]; const p = P(); UFORM = null;
+A['u.edit'] = el => abrirEdicionUnidad(el.dataset.id);
+function abrirEdicionUnidad(id, vals = null) {
+  const u = S().units[id]; const p = P(); UFORM = vals;
   openSheet({ title: 'Editar ' + unitLabel(u), size: 'l', onClose: () => { UFORM = null; }, render: () => `<form data-f="u.save" data-id="${u.id}">${fieldsHtml(unitFields(p.cat, UFORM ? { ...u, tipo: UFORM.tipo, sector: UFORM.sector, sectorOtro: UFORM.sectorOtro } : u, { tipoEditable: can('unidades.tipos') }), UFORM || unitValues(u))}
     <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar</button></div></form>` });
-};
+}
 F['u.save'] = async form => {
   const v = readForm(form); const d = unitFromForm(v);
   if (!form.dataset.id) { await exec(C.unitCreate, d); UFORM = null; toast('Unidad creada', 'ok'); closeSheet(); return; }

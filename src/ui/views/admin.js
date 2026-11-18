@@ -301,9 +301,10 @@ export function renderUnitTemplates() {
     </li>`; }).join('') || '<li class="muted">No hay unidades plantilla</li>'}</ul>`;
 }
 let UPL = null; // plantilla en edición (para no perder lo escrito al crear un tipo nuevo)
-A['upl.edit'] = el => {
-  const c = core(); const id = el.dataset.id || null;
-  UPL = id ? clone(c.plantillasUnidad().find(x => x.id === id)) : { nombre: '', prefijo: '', tipo: '', color: '#1565C0', vis: { forma: 'circulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] }, activo: true };
+A['upl.edit'] = el => abrirEditorPlantilla(el.dataset.id || null);
+function abrirEditorPlantilla(id, preset = null) {
+  const c = core();
+  UPL = preset || (id ? clone(c.plantillasUnidad().find(x => x.id === id)) : { nombre: '', prefijo: '', tipo: '', color: '#1565C0', vis: { forma: 'circulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] }, activo: true });
   openSheet({ title: id ? 'Editar plantilla · ' + UPL.nombre : 'Nueva unidad plantilla', size: 'm', onClose: () => { UPL = null; }, render: () => {
     const tipos = c.tiposRecursoGenerales().filter(t => t.activo !== false || t.id === UPL.tipo);
     const val = { nombre: UPL.nombre, prefijo: UPL.prefijo, tipo: UPL.tipo || '', color: UPL.color || '#1565C0', forma: (UPL.vis || {}).forma || '', icono: (UPL.vis || {}).icono || '', campos: UPL.campos || [], obligatorios: UPL.obligatorios || [], subtipo: (UPL.valores || {}).subtipo || '', caract: (UPL.valores || {}).caract || [], activo: UPL.activo !== false };
@@ -322,9 +323,12 @@ A['upl.edit'] = el => {
       { name: 'activo', label: 'Activa (se ofrece al añadir unidades)', type: 'checkbox' },
     ], val)}<div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar</button></div></form>`;
   } });
-};
+}
 const leerPlantilla = form => { const v = readForm(form); return { ...UPL, nombre: v.nombre, prefijo: v.prefijo, tipo: v.tipo || null, color: v.color, vis: { forma: v.forma || '', icono: v.icono || '' }, campos: v.campos || [], obligatorios: v.obligatorios || [], valores: { subtipo: v.subtipo || '', caract: v.caract || [] }, activo: !!v.activo }; };
-A['upl.nuevoTipo'] = el => { UPL = leerPlantilla(el.closest('form')); nuevoTipoRecurso(t => { UPL.tipo = t.id; refreshSheets(); }); };
+A['upl.nuevoTipo'] = el => {
+  const form = el.closest('form'); const id = form.dataset.id || null; const p = leerPlantilla(form);
+  nuevoTipoRecurso(t => { closeSheet(); abrirEditorPlantilla(id, { ...p, tipo: t.id }); });
+};
 F['upl.save'] = async form => {
   const p = leerPlantilla(form); p.id = form.dataset.id || null;
   const r = await core().guardarPlantillaUnidad(p); UPL = null;

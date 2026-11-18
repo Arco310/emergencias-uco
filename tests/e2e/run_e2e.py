@@ -501,6 +501,79 @@ def scenario_android(b):
     check('Android: aviso de fin de descanso', rest_notif)
     A.ctx.close()
 
+def scenario_recursos(b):
+    print('\n== Escenario 4: tipos de recurso, sector OTROS y unidades plantilla ==')
+    A = App(b, 'fase2', PHONE)
+    A.setup('Lucía Jefa', 'lucia', 'secreto4', 'Móvil PMA', 'L'); A.perms(False)
+    A.new_prev('Partido de fútbol', 'independiente', True)
+    def upr():
+        A.nav('unidades'); A.a('u.new'); s = A.sheet(); s.locator('.tpl-grid').wait_for(); A.shot('01-anadir-unidad')
+        tiles = s.locator('[data-a="u.fromTpl"]').all_inner_texts()
+        assert any('UPR' in t for t in tiles) and any('VIRES' in t for t in tiles), tiles
+        s.locator('[data-a="u.fromTpl"]', has_text='UPR').first.click(); A.pg.wait_for_timeout(300)
+        f = A.sheet().locator('form[data-f="u.tplSave"]')
+        assert f.locator('input[name], select[name], textarea[name]').count() == 1, 'solo se pide el número'
+        f.locator('[name=numero]').fill('8025'); A.pg.wait_for_timeout(150)
+        hint = f.locator('.help').first.inner_text(); assert 'UPR 8025' in hint, hint
+        f.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        u = A.pg.evaluate("() => { const u = Object.values(window.__UCO.core.state.units).find(x => x.ind === 'UPR 8025'); return u && [u.tipo, u.clave, u.sector, u.colorC0, u.vis.forma] }")
+        assert u == ['rt_vl', 'C0', None, '#1565C0', 'triangulo'], u
+        card = A.pg.locator('.ucard', has_text='UPR 8025').inner_text(); assert 'Pendiente de asignación' in card, card
+        A.shot('02-upr-creada')
+        return 'AÑADIR UNIDAD → UPR → «8025»: UPR 8025, vehículo ligero, triángulo azul, C0, pendiente de asignación'
+    check('Unidades plantilla: UPR solo pide el número', upr)
+    def otros():
+        A.a('u.new'); A.a('u.newBlank'); f = A.sheet().locator('form[data-f="u.save"]')
+        f.locator('[name=ind]').fill('MOTO-1')
+        assert not f.locator('[data-otros]').is_visible()
+        f.locator('[name=sector]').select_option('otros'); A.pg.wait_for_timeout(150)
+        assert f.locator('[data-otros]').is_visible(), 'aparece el campo personalizado'
+        f.locator('[name=sectorOtro]').fill('Puerta 7'); A.shot('03-sector-otros')
+        f.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        u = A.pg.evaluate("() => { const u = Object.values(window.__UCO.core.state.units).find(x => x.ind === 'MOTO-1'); return [u.sector, u.sectorOtro] }")
+        assert u == ['otros', 'Puerta 7'], u
+        n = A.pg.evaluate('() => window.__UCO.core.state.prev.cat.sectores.length'); assert n == 4, n
+        card = A.pg.locator('.ucard', has_text='MOTO-1').inner_text(); assert 'Otros: Puerta 7' in card, card
+        return 'OTROS → «Puerta 7» asignado a la unidad, sin crear sectores nuevos'
+    check('Sectores: opción OTROS con ubicación personalizada', otros)
+    def nuevo_tipo():
+        A.a('u.new'); A.a('u.newBlank'); f = A.sheet().locator('form[data-f="u.save"]')
+        f.locator('[name=ind]').fill('DRON-1')
+        f.locator('[data-a="u.nuevoTipo"]').click(); A.pg.wait_for_timeout(300)
+        t = A.sheet().locator('form[data-f="cat.nuevoTipo"]'); t.locator('[name=nombre]').fill('Dron'); t.locator('[name=forma]').select_option('rombo')
+        t.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        f = A.sheet().locator('form[data-f="u.save"]')
+        assert f.locator('[name=ind]').input_value() == 'DRON-1', 'no se pierde lo escrito'
+        sel = f.locator('[name=tipo] option:checked').inner_text(); assert 'Dron' in sel, sel
+        f.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        r = A.pg.evaluate("() => { const c = window.__UCO.core; const u = Object.values(c.state.units).find(x => x.ind === 'DRON-1'); const t = c.tiposRecursoGenerales().find(x => x.nombre === 'Dron'); return [!!t, u.tipo === (t && t.id), c.state.prev.cat.tiposRecurso.some(x => x.nombre === 'Dron')] }")
+        assert r == [True, True, True], r
+        return 'tipo «Dron» creado desde el formulario de la unidad: guardado en la configuración general y usado por la unidad'
+    check('Tipos de recurso: crear uno nuevo al crear una unidad', nuevo_tipo)
+    def admin_plantillas():
+        A.pg.locator('[data-a="prev.exit"]').first.click() if A.pg.locator('[data-a="prev.exit"]').count() else None
+        A.nav('config'); A.pg.locator('[data-a="nav"][data-v="uplantillas"]').first.click(); A.pg.wait_for_selector('[data-plantilla]')
+        A.a('upl.edit'); f = A.sheet().locator('form[data-f="upl.save"]')
+        f.locator('[name=nombre]').fill('Moto sanitaria'); f.locator('[name=prefijo]').fill('msa'); f.locator('[name=tipo]').select_option(label='Equipo sanitario')
+        f.locator('[data-group="campos"][value="sector"]').check(); f.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        row = A.pg.locator('[data-plantilla]', has_text='Moto sanitaria'); assert row.count() == 1
+        assert 'MSA nº' in row.inner_text(), row.inner_text()
+        row.locator('[data-a="upl.dup"]').click(); A.pg.wait_for_timeout(500)
+        assert A.pg.locator('[data-plantilla]', has_text='Moto sanitaria (copia)').count() == 1
+        A.pg.locator('[data-plantilla]', has_text='Moto sanitaria (copia)').locator('[data-a="upl.toggle"]').click(); A.pg.wait_for_timeout(500)
+        assert 'Desactivada' in A.pg.locator('[data-plantilla]', has_text='Moto sanitaria (copia)').inner_text()
+        A.shot('04-unidades-plantilla', True)
+        return 'crear, duplicar y desactivar plantillas desde Configuración → Unidades plantilla'
+    check('Configuración → Unidades plantilla', admin_plantillas)
+    def persistencia():
+        A.goto(); A.login('lucia', 'secreto4')
+        r = A.pg.evaluate("() => { const c = window.__UCO.core; return [c.tiposRecursoGenerales().some(t => t.nombre === 'Dron'), c.plantillasUnidad().some(p => p.nombre === 'Moto sanitaria')] }")
+        assert r == [True, True], r
+        return 'tipo y plantilla siguen disponibles tras recargar la aplicación'
+    check('Persistencia de tipos y plantillas', persistencia)
+    check('Sin errores de JavaScript (fase 2)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+    A.ctx.close()
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -513,6 +586,7 @@ def main():
             if only in ('', '1'): scenario_standalone(b)
             if only in ('', '2'): scenario_shared(b)
             if only in ('', '3'): scenario_android(b)
+            if only in ('', '4'): scenario_recursos(b)
             b.close()
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)

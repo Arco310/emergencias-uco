@@ -1,201 +1,36 @@
 {
- "fecha": "2026-11-18 11:28:51",
+ "fecha": "2026-11-18 11:53:49",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Alta inicial del administrador y clave de recuperación",
+   "prueba": "Unidades plantilla: UPR solo pide el número",
    "resultado": "SUPERADA",
-   "detalle": "clave 8BBR4…"
+   "detalle": "AÑADIR UNIDAD → UPR → «8025»: UPR 8025, vehículo ligero, triángulo azul, C0, pendiente de asignación"
   },
   {
-   "prueba": "Permisos del dispositivo: solicitar todos",
+   "prueba": "Sectores: opción OTROS con ubicación personalizada",
    "resultado": "SUPERADA",
-   "detalle": "aviso al primer acceso; ubicación y notificaciones concedidas; queda en la auditoría"
+   "detalle": "OTROS → «Puerta 7» asignado a la unidad, sin crear sectores nuevos"
   },
   {
-   "prueba": "Crear preventivo independiente y activarlo",
+   "prueba": "Tipos de recurso: crear uno nuevo al crear una unidad",
    "resultado": "SUPERADA",
-   "detalle": ""
+   "detalle": "tipo «Dron» creado desde el formulario de la unidad: guardado en la configuración general y usado por la unidad"
   },
   {
-   "prueba": "Unidades: crear desde el formulario",
+   "prueba": "Configuración → Unidades plantilla",
    "resultado": "SUPERADA",
-   "detalle": "3 unidades"
+   "detalle": "crear, duplicar y desactivar plantillas desde Configuración → Unidades plantilla"
   },
   {
-   "prueba": "Unidades: editar y personalizar apariencia",
+   "prueba": "Persistencia de tipos y plantillas",
    "resultado": "SUPERADA",
-   "detalle": "nombre, forma, icono y tamaño personalizados"
+   "detalle": "tipo y plantilla siguen disponibles tras recargar la aplicación"
   },
   {
-   "prueba": "Color C0: personalizar en C0",
-   "resultado": "SUPERADA",
-   "detalle": "color principal y borde = #AA00AA en C0"
-  },
-  {
-   "prueba": "Avisos: crear, numerar, sugerir y asignar; claves C1-C3",
-   "resultado": "SUPERADA",
-   "detalle": "Nº 1 · AMB-01 C1 → C2 → C3 · aviso en curso"
-  },
-  {
-   "prueba": "Color C0: bloqueo fuera de C0, color de clave y borde C0",
-   "resultado": "SUPERADA",
-   "detalle": "fuera de C0: principal = color de clave C3, borde = C0, edición bloqueada"
-  },
-  {
-   "prueba": "Descansos: bloqueo con aviso activo",
-   "resultado": "SUPERADA",
-   "detalle": "botón de descanso deshabilitado con aviso activo"
-  },
-  {
-   "prueba": "Descansos: temporizador real que se recupera tras recargar",
-   "resultado": "SUPERADA",
-   "detalle": "cuenta atrás 0:59 → tras recargar 0:56; unidad en gris"
-  },
-  {
-   "prueba": "Avisos: finalizar y apartado de finalizados",
-   "resultado": "SUPERADA",
-   "detalle": "aparece en Avisos finalizados; AMB-01 liberada a C0"
-  },
-  {
-   "prueba": "Color C0: recuperación al volver a C0 y persistencia",
-   "resultado": "SUPERADA",
-   "detalle": "al regresar a C0 recupera #AA00AA"
-  },
-  {
-   "prueba": "Descansos: fin automático y recuperación del estado",
-   "resultado": "SUPERADA",
-   "detalle": "fin automático: vuelve a C0 con su color, sin sobrescribir la clave"
-  },
-  {
-   "prueba": "Claves especiales: CESP con motivo",
-   "resultado": "SUPERADA",
-   "detalle": "CESP con motivo del desplegable"
-  },
-  {
-   "prueba": "Plano táctico: importar, colocar unidades y persistencia",
-   "resultado": "SUPERADA",
-   "detalle": "imagen importada; 2 unidades colocadas; posiciones persistentes tras recargar"
-  },
-  {
-   "prueba": "Estadísticas: vistas con datos reales",
-   "resultado": "SUPERADA",
-   "detalle": "vistas por preventivo, unidad y aviso"
-  },
-  {
-   "prueba": "Bitácora: registro cronológico",
-   "resultado": "SUPERADA",
-   "detalle": "18 registros con usuario y valores anterior/nuevo"
-  },
-  {
-   "prueba": "Cronología individual de unidad",
-   "resultado": "SUPERADA",
-   "detalle": "10 acontecimientos con duraciones"
-  },
-  {
-   "prueba": "Informes: PDF, JSON y CSV con contenido real",
-   "resultado": "SUPERADA",
-   "detalle": "PDF 7 KB, JSON con 18 operaciones, ZIP con 8 CSV"
-  },
-  {
-   "prueba": "Funcionamiento sin conexión (modo avión)",
-   "resultado": "SUPERADA",
-   "detalle": "modo avión: recarga, sesión, aviso nº 2, descanso, plano e informe PDF sin red"
-  },
-  {
-   "prueba": "Plantillas: crear, aplicar y aislamiento",
-   "resultado": "SUPERADA",
-   "detalle": "preventivo desde plantilla: 3 unidades, plano y colores; 0 avisos; cambios posteriores en la plantilla no le afectan"
-  },
-  {
-   "prueba": "Usuarios, roles y permisos",
-   "resultado": "SUPERADA",
-   "detalle": "Consulta sin acciones operativas; Operador crea avisos pero no edita configuración"
-  },
-  {
-   "prueba": "Cierre del preventivo",
-   "resultado": "SUPERADA",
-   "detalle": "cerrado con advertencias registradas, archivado y en solo lectura"
-  },
-  {
-   "prueba": "Sin errores de JavaScript (móvil)",
+   "prueba": "Sin errores de JavaScript (fase 2)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
-  },
-  {
-   "prueba": "Servidor central: activación única con el código del servidor",
-   "resultado": "SUPERADA",
-   "detalle": "espacio central activado una sola vez durante el alta inicial; estado conectado"
-  },
-  {
-   "prueba": "Servidor central: alta de usuario",
-   "resultado": "SUPERADA",
-   "detalle": "usuario creado en la tablet; su cuenta queda publicada en el servidor central"
-  },
-  {
-   "prueba": "Servidor central: dispositivo nuevo con usuario y contraseña",
-   "resultado": "SUPERADA",
-   "detalle": "el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza"
-  },
-  {
-   "prueba": "Compartido: crear preventivo sin pedir servidor",
-   "resultado": "SUPERADA",
-   "detalle": "creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central"
-  },
-  {
-   "prueba": "Compartido: el preventivo aparece solo en el otro dispositivo",
-   "resultado": "SUPERADA",
-   "detalle": "aparece solo en el móvil y se abre con un toque, con sus 3 unidades"
-  },
-  {
-   "prueba": "Compartido: avisos simultáneos sin duplicados",
-   "resultado": "SUPERADA",
-   "detalle": "números definitivos únicos 1 y 2 en ambos dispositivos"
-  },
-  {
-   "prueba": "Compartido: desconexión, trabajo local y reconexión",
-   "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional QF-2), reconexión y convergencia sin pérdidas"
-  },
-  {
-   "prueba": "Compartido: resolución de conflictos",
-   "resultado": "SUPERADA",
-   "detalle": "conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador"
-  },
-  {
-   "prueba": "Tablet: panel operativo multicolumna",
-   "resultado": "SUPERADA",
-   "detalle": "panel de 3 columnas y navegación lateral"
-  },
-  {
-   "prueba": "Sin errores de JavaScript (multidispositivo)",
-   "resultado": "SUPERADA",
-   "detalle": "ninguno"
-  },
-  {
-   "prueba": "Android: «Probar» notificaciones muestra un aviso real",
-   "resultado": "SUPERADA",
-   "detalle": "aviso mostrado por el service worker; el constructor prohibido en Android no se usa"
-  },
-  {
-   "prueba": "Android: botón «Probar» de vibración visible",
-   "resultado": "SUPERADA",
-   "detalle": "botón «Probar» visible con la vibración disponible"
-  },
-  {
-   "prueba": "Android: pantalla encendida se recupera al volver a la aplicación",
-   "resultado": "SUPERADA",
-   "detalle": "tras salir y volver 3 veces la pantalla sigue encendida (3 de 3 recuperaciones)"
-  },
-  {
-   "prueba": "Android: importar copias y paquetes sin archivos en gris",
-   "resultado": "SUPERADA",
-   "detalle": "el selector muestra todos los archivos (sin filtro) y uno erróneo se rechaza: «El archivo no es una copia válida»"
-  },
-  {
-   "prueba": "Android: aviso de fin de descanso",
-   "resultado": "SUPERADA",
-   "detalle": "aviso «Fin del descanso: AND-1 Android uno» mostrado por el service worker"
   }
  ]
 }

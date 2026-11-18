@@ -293,3 +293,4 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;overflow-wrap:anywhere}
 .tile.tpl{flex-direction:row;justify-content:flex-start;gap:.6rem;text-align:left;min-height:64px;padding:.5rem .7rem}
 .tile.tpl span{display:flex;flex-direction:column;align-items:flex-start}
 .cat-row.off{opacity:.6}
+[hidden]{display:none!important}
