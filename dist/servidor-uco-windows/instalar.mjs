@@ -2,7 +2,7 @@
 // copia los archivos, crea una tarea que lo arranca al encender el equipo y lo publica en
 // Internet con una dirección HTTPS fija mediante Tailscale Funnel.
 // Se ejecuta desde instalar-servidor.bat (con permisos de administrador).
-import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, copyFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -17,7 +17,10 @@ const preguntar = async txt => {
   try { return (await rl.question(txt)).trim(); } finally { rl.close(); }
 };
 // Respuestas dadas de antemano (opcional): opciones.json junto al instalador, p. ej. { "evitarSuspension": true }
-const OPC = (() => { try { return JSON.parse(readFileSync(process.env.UCO_OPCIONES || join(AQUI, 'opciones.json'), 'utf8')); } catch { return {}; } })();
+const OPC_FILE = process.env.UCO_OPCIONES || join(AQUI, 'opciones.json');
+const OPC = (() => { try { return JSON.parse(readFileSync(OPC_FILE, 'utf8')); } catch { return {}; } })();
+/** Quita una opción ya aplicada (p. ej. un código de pruebas) para que no quede guardada en opciones.json */
+const quitarOpcion = k => { try { const o = JSON.parse(readFileSync(OPC_FILE, 'utf8')); delete o[k]; writeFileSync(OPC_FILE, JSON.stringify(o, null, 1)); } catch { /* sin opciones.json */ } };
 const fallo = msg => { console.log('\n[ERROR] ' + msg); process.exit(1); };
 const ok = msg => console.log('[OK] ' + msg);
 const libre = p => new Promise(res => { const s = createServer(); s.once('error', () => res(false)); s.listen(p, '127.0.0.1', () => s.close(() => res(true))); });
@@ -44,6 +47,15 @@ async function main() {
   cpSync(join(AQUI, 'servidor', 'server.mjs'), U.RUTAS.servidor);
   rmSync(U.RUTAS.app, { recursive: true, force: true }); cpSync(join(AQUI, 'app'), U.RUTAS.app, { recursive: true });
   mkdirSync(U.RUTAS.datos, { recursive: true });
+  const SRV = join(U.RUTAS.datos, '_servidor'); mkdirSync(SRV, { recursive: true });
+  // Código SOLO para el entorno de pruebas (CLAUDE_TEST), si se indica en opciones.json: crea y borra
+  // espacios de pruebas, nunca el real ni sus datos. Se retira de opciones.json una vez aplicado.
+  if (OPC.codigoPruebas) {
+    if (!/^[0-9A-Z]{5}(-[0-9A-Z]{5}){3}$/i.test(String(OPC.codigoPruebas))) fallo('codigoPruebas de opciones.json no tiene el formato XXXXX-XXXXX-XXXXX-XXXXX');
+    writeFileSync(join(SRV, 'codigo-pruebas.txt'), String(OPC.codigoPruebas).toUpperCase() + '\n');
+    quitarOpcion('codigoPruebas'); ok('Código del entorno de pruebas (CLAUDE_TEST) instalado');
+  }
+  copyFileSync(join(AQUI, 'MOSTRAR-CODIGO-ADMIN.bat'), join(U.BASE, 'MOSTRAR-CODIGO-ADMIN.bat'));
   writeFileSync(U.RUTAS.arrancar, U.arrancarCmd(puerto));
   writeFileSync(U.RUTAS.tarea, U.utf16(U.tareaXml()));
   ok('Archivos en ' + U.BASE + ' (datos en ' + U.RUTAS.datos + ')');
@@ -58,6 +70,13 @@ async function main() {
   } else U.run(U.SCHTASKS, ['/Run', '/TN', U.TAREA]);
   const v = await U.esperar(() => U.salud(U.local(puerto)), 40);
   if (!v) fallo('El servidor no ha arrancado. Revisa ' + U.RUTAS.registro);
+  ok('Servidor en marcha (versión ' + v + ')');
+  // Los códigos del servidor solo pueden leerlos el sistema (el servidor) y los administradores
+  if (!U.SIM) {
+    const r = U.run(U.ICACLS, [SRV, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '/T', '/C', '/Q']);
+    if (r.code === 0) ok('Códigos del servidor protegidos (solo sistema y administradores)');
+    else console.log('[AVISO] No se pudieron restringir los permisos de ' + SRV + ': ' + r.out.trim());
+  }
   ok('Servidor en marcha en este equipo (versión ' + v + ', puerto ' + puerto + ')');
 
   // 3. Tailscale: sesión iniciada y modo desatendido (sigue activo aunque nadie inicie sesión en Windows)
@@ -92,20 +111,27 @@ async function main() {
     if (r.code === 0) ok('Suspensión desactivada con el PC enchufado'); else console.log('[AVISO] No se pudo desactivar la suspensión: ' + r.out.trim());
   } else console.log('[--] Suspensión del equipo sin cambios');
 
+  const activo = await U.centralActivo(U.local(puerto));
   writeFileSync(U.RUTAS.direccion, [
-    'Servidor de sincronización del Gestor de Emergencias UCO', '', 'Dirección: ' + url, '',
-    'En la aplicación de cada dispositivo: Sistema → Configuración general →',
-    '«Servidor por defecto para preventivos compartidos» → pega la dirección.',
-    'También puede indicarse al crear un preventivo compartido.', '',
+    'Servidor central del Gestor de Emergencias UCO', '', 'Dirección: ' + url, '',
+    'La aplicación ya conoce esta dirección: no hay que escribirla en ningún dispositivo.', '',
+    'Primera vez (una sola vez para toda la organización): en la aplicación, Sistema → Servidor central',
+    '→ «Activar el servidor central», con el código de administración. Para verlo, ejecuta',
+    U.BASE + '\\MOSTRAR-CODIGO-ADMIN.bat (pide permisos de administrador).', '',
+    'Después, en cada dispositivo basta con abrir la aplicación e iniciar sesión.', '',
     'Datos (haz copia de esta carpeta): ' + U.RUTAS.datos, 'Registro: ' + U.RUTAS.registro, ''].join('\r\n'));
   U.linea();
   console.log('SERVIDOR INSTALADO\n');
-  console.log('  Dirección:  ' + url);
-  console.log('  En la aplicación: Sistema → Configuración general → «Servidor por defecto');
-  console.log('  para preventivos compartidos» → pega la dirección.\n');
+  console.log('  Dirección:  ' + url + '   (la aplicación ya la conoce)');
+  if (activo) console.log('  Servidor central activo: ' + (activo.nombre || 'sí') + '. En cada dispositivo basta con iniciar sesión.\n');
+  else {
+    console.log('  Falta activar el servidor central (una sola vez): en la aplicación,');
+    console.log('  Sistema → Servidor central → «Activar», con el código de administración.');
+    console.log('  Para verlo: ' + U.BASE + '\\MOSTRAR-CODIGO-ADMIN.bat\n');
+  }
   console.log('  Este PC debe estar encendido y con Internet durante los preventivos.');
   console.log('  Si se apaga, los dispositivos siguen trabajando y se sincronizan al volver.');
-  console.log('  Dirección guardada en ' + U.RUTAS.direccion);
+  console.log('  Instrucciones guardadas en ' + U.RUTAS.direccion);
   U.linea();
 }
 

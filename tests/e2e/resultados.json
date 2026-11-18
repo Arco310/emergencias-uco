@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-17 22:31:02",
+ "fecha": "2026-11-18 11:28:51",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave W6AKW…"
+   "detalle": "clave 8BBR4…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -123,14 +123,29 @@
    "detalle": "ninguno"
   },
   {
-   "prueba": "Compartido: crear preventivo con servidor",
+   "prueba": "Servidor central: activación única con el código del servidor",
    "resultado": "SUPERADA",
-   "detalle": "código de incorporación generado"
+   "detalle": "espacio central activado una sola vez durante el alta inicial; estado conectado"
   },
   {
-   "prueba": "Compartido: incorporar otro dispositivo",
+   "prueba": "Servidor central: alta de usuario",
    "resultado": "SUPERADA",
-   "detalle": "el móvil recibe el preventivo y sus 3 unidades"
+   "detalle": "usuario creado en la tablet; su cuenta queda publicada en el servidor central"
+  },
+  {
+   "prueba": "Servidor central: dispositivo nuevo con usuario y contraseña",
+   "resultado": "SUPERADA",
+   "detalle": "el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza"
+  },
+  {
+   "prueba": "Compartido: crear preventivo sin pedir servidor",
+   "resultado": "SUPERADA",
+   "detalle": "creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central"
+  },
+  {
+   "prueba": "Compartido: el preventivo aparece solo en el otro dispositivo",
+   "resultado": "SUPERADA",
+   "detalle": "aparece solo en el móvil y se abre con un toque, con sus 3 unidades"
   },
   {
    "prueba": "Compartido: avisos simultáneos sin duplicados",
@@ -140,7 +155,7 @@
   {
    "prueba": "Compartido: desconexión, trabajo local y reconexión",
    "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional M-2), reconexión y convergencia sin pérdidas"
+   "detalle": "trabajo sin red (ref. provisional QF-2), reconexión y convergencia sin pérdidas"
   },
   {
    "prueba": "Compartido: resolución de conflictos",

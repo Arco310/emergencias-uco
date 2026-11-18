@@ -30,7 +30,7 @@ const correr = (script, e, puerto, extra = {}) => spawnSync(process.execPath, [j
 test('instalador para Windows: instala, arranca, publica, informa del estado y desinstala conservando los datos', async () => {
   assert.ok(existsSync(join(PKG, 'instalar-servidor.bat')), 'paquete generado por build.mjs');
   const e = entorno({ tsInicial: 'NeedsLogin' }); const p = await libre();
-  const opc = join(e.dir, 'opciones.json'); writeFileSync(opc, JSON.stringify({ evitarSuspension: true }));
+  const opc = join(e.dir, 'opciones.json'); writeFileSync(opc, JSON.stringify({ evitarSuspension: true, codigoPruebas: 'PRUEB-ASDEL-INSTA-LADOR' }));
   const r = correr('instalar.mjs', e, p, { UCO_OPCIONES: opc });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /SERVIDOR INSTALADO/);
@@ -39,6 +39,15 @@ test('instalador para Windows: instala, arranca, publica, informa del estado y d
   // Archivos instalados
   for (const f of ['servidor/server.mjs', 'app/index.html', 'app/sw.js', 'datos', 'DIRECCION.txt']) assert.ok(existsSync(join(e.base, f)), f);
   assert.match(readFileSync(join(e.base, 'DIRECCION.txt'), 'utf8'), /Dirección: https:\/\/pc-prueba\.tail1234\.ts\.net\//);
+  // Servidor central: la app ya conoce la dirección; falta activarlo una vez con el código de administración
+  assert.match(r.stdout, /la aplicación ya la conoce/);
+  assert.match(r.stdout, /Falta activar el servidor central/);
+  assert.ok(existsSync(join(e.base, 'MOSTRAR-CODIGO-ADMIN.bat')), 'utilidad para ver el código de administración');
+  assert.match(readFileSync(join(e.base, 'datos', '_servidor', 'codigo-admin.txt'), 'utf8'), /^[2-9A-Z]{5}(-[2-9A-Z]{5}){3}/);
+  // Código del entorno de pruebas (CLAUDE_TEST): instalado y retirado de opciones.json
+  assert.equal(readFileSync(join(e.base, 'datos', '_servidor', 'codigo-pruebas.txt'), 'utf8').trim(), 'PRUEB-ASDEL-INSTA-LADOR');
+  assert.ok(!('codigoPruebas' in JSON.parse(readFileSync(opc, 'utf8'))), 'el código de pruebas no queda en opciones.json');
+  assert.equal(JSON.parse(readFileSync(opc, 'utf8')).evitarSuspension, true, 'el resto de opciones se conservan');
   const cmd = readFileSync(join(e.base, 'arrancar.cmd'), 'utf8');
   assert.ok(cmd.includes('\r\n') && !/[^\r]\n/.test(cmd), 'arrancar.cmd con saltos de línea de Windows');
   assert.match(cmd, new RegExp('--port ' + p + ' --host 127\\.0\\.0\\.1 --data'), 'solo escucha en el propio equipo');
@@ -63,6 +72,7 @@ test('instalador para Windows: instala, arranca, publica, informa del estado y d
   const s = correr('estado.mjs', e, p);
   assert.match(s.stdout, /\[OK\] Arranque automático/); assert.match(s.stdout, /\[OK\] En este equipo: funcionando/);
   assert.match(s.stdout, /\[OK\] Tailscale: conectado \(pc-prueba\.tail1234\.ts\.net\)/); assert.match(s.stdout, /\[OK\] Desde Internet: responde/);
+  assert.match(s.stdout, /Servidor central: sin activar/);
   // Desinstalación: detiene, quita la tarea y Funnel, conserva los datos
   writeFileSync(join(e.base, 'datos', 'prueba.txt'), 'dato');
   const d = correr('desinstalar.mjs', e, p);

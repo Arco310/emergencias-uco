@@ -276,7 +276,8 @@ async function apiOrg(req, res, url, parts) {
   }
   // Configuración general: control optimista por elemento (nunca se sobrescribe en silencio)
   if (what === 'config' && parts[5] && req.method === 'PUT') {
-    const id = parts[5]; if (!ITEM_RE.test(id)) return send(res, 400, { error: 'Elemento no válido' });
+    let id; try { id = decodeURIComponent(parts[5]); } catch { id = ''; }
+    if (!ITEM_RE.test(id)) return send(res, 400, { error: 'Elemento no válido' });
     const b = await readJson(req);
     if (!Number.isInteger(b.base) || b.base < 0 || typeof b.c !== 'string' || b.c.length > 256 * 1024) return send(res, 400, { error: 'Datos no válidos' });
     const cur = o.config[id];

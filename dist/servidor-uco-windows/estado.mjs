@@ -12,6 +12,10 @@ async function main() {
   const puerto = U.puertoInstalado(leer(U.RUTAS.arrancar));
   const v = await U.salud(U.local(puerto));
   console.log((v ? '[OK]' : '[ERROR]') + ' En este equipo: ' + (v ? 'funcionando (versión ' + v + ', puerto ' + puerto + ')' : 'no responde. Revisa ' + U.RUTAS.registro));
+  if (v) {
+    const c = await U.centralActivo(U.local(puerto));
+    console.log((c ? '[OK]' : '[--]') + ' Servidor central: ' + (c ? 'activado (' + (c.nombre || c.org) + ')' : c === null ? 'sin activar. Actívalo una vez desde la aplicación (Sistema → Servidor central); código: MOSTRAR-CODIGO-ADMIN.bat' : 'versión sin servidor central'));
+  }
   const ts = U.tailscaleEstado();
   console.log((ts.estado === 'Running' ? '[OK]' : '[ERROR]') + ' Tailscale: ' + (ts.estado === 'Running' ? 'conectado (' + ts.dns + ')' : ts.estado));
   if (ts.dns) {

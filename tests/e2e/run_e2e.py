@@ -20,6 +20,8 @@ PLANO = os.path.join(ROOT, 'tests', 'e2e', 'plano-prueba.png')
 RESULTS = []
 PHONE = dict(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
 TABLET = dict(viewport={'width': 1280, 'height': 800}, is_mobile=True, has_touch=True, device_scale_factor=1.5)
+# Código de administración FICTICIO, solo para el servidor local que arrancan estas pruebas
+ADMIN_CODE = 'E2EAD-MINCO-DIGOL-OCAL1'
 
 def record(name, ok, detail=''):
     RESULTS.append({'prueba': name, 'resultado': 'SUPERADA' if ok else 'FALLIDA', 'detalle': detail})
@@ -69,9 +71,14 @@ class App:
     def toast_text(self):
         return ' | '.join(self.pg.locator('#toasts .toast').all_inner_texts())
     # ---- flujos ----
-    def setup(self, nombre, usuario, pw, dev, code):
-        self.goto(); self.pg.fill('#f_nombre', nombre); self.pg.fill('#f_usuario', usuario); self.pg.fill('#f_p1', pw); self.pg.fill('#f_p2', pw)
+    def setup(self, nombre, usuario, pw, dev, code, codigo=None):
+        self.goto(); self.pg.wait_for_selector('form[data-f="auth.setup"], form[data-f="auth.central"]', timeout=20000)
+        if self.pg.locator('form[data-f="auth.central"]').count():
+            # el servidor central ya está activo: este dispositivo se configura sin él
+            self.pg.click('[data-a="auth.local"]'); self.pg.wait_for_selector('form[data-f="auth.setup"]')
+        self.pg.fill('#f_nombre', nombre); self.pg.fill('#f_usuario', usuario); self.pg.fill('#f_p1', pw); self.pg.fill('#f_p2', pw)
         self.pg.fill('#f_dev', dev); self.pg.fill('#f_code', code)
+        if codigo: self.pg.fill('#f_codigo', codigo)
         self.pg.click('form[data-f="auth.setup"] button.primary'); self.pg.wait_for_selector('#recok', timeout=20000)
         self.recovery = self.pg.inner_text('#rec')
         self.pg.check('#recok'); self.pg.click('[data-a="auth.recDone"]'); self.pg.wait_for_selector('.top')
@@ -80,6 +87,12 @@ class App:
     def perms(self, all_=False):
         """Responde al aviso de permisos que aparece la primera vez"""
         self.pg.locator('[data-perm-onboard] [data-a="%s"]' % ('perm.all' if all_ else 'perm.later')).click(); self.pg.wait_for_timeout(1500 if all_ else 300)
+    def central_login(self, usuario, pw, dev=''):
+        """Dispositivo nuevo con el servidor central activo: solo usuario y contraseña"""
+        self.pg.wait_for_selector('form[data-f="auth.central"]', timeout=20000)
+        self.pg.fill('#f_u', usuario); self.pg.fill('#f_p', pw)
+        if dev: self.pg.click('form[data-f="auth.central"] summary'); self.pg.fill('#f_dev', dev)
+        self.pg.click('form[data-f="auth.central"] button.primary')
     def login(self, usuario, pw):
         self.pg.wait_for_selector('form[data-f="auth.login"]')
         u = self.pg.locator('#f_u')
@@ -94,8 +107,8 @@ class App:
             self.nav('inicio')
         self.a('home.new'); s = self.sheet()
         if origen: self.fill('origen', origen)
+        assert not s.locator('[name=server]').count(), 'el formulario no debe pedir servidor'
         self.fill('nombre', nombre); self.fill('modalidad', modalidad)
-        if server: self.fill('server', server)
         if activar: s.locator('[name=activar]').check()
         s.locator('form[data-f="home.create"] button.primary').click(); self.pg.wait_for_selector('.kpis', timeout=20000); self.pg.wait_for_timeout(500)
     def new_unit(self, ind, nombre='', tipo='rt_svb', sector='sec_1', color=None):
@@ -112,7 +125,8 @@ class App:
             self.sheet().locator('.sheet-head [data-a="sheet.close"]').click(); self.pg.wait_for_timeout(200)
 
 def start_server(data):
-    p = subprocess.Popen(['node', os.path.join(ROOT, 'server/server.mjs'), '--port', str(PORT), '--static', os.path.join(ROOT, 'dist/app'), '--data', data, '--host', '127.0.0.1', '--quiet'])
+    env = dict(os.environ, UCO_CODIGO_ADMIN=ADMIN_CODE)
+    p = subprocess.Popen(['node', os.path.join(ROOT, 'server/server.mjs'), '--port', str(PORT), '--static', os.path.join(ROOT, 'dist/app'), '--data', data, '--host', '127.0.0.1', '--quiet'], env=env)
     for _ in range(60):
         try:
             import urllib.request; urllib.request.urlopen(URL + 'api/v1/salud', timeout=1); return p
@@ -332,23 +346,52 @@ def scenario_standalone(browser):
     A.ctx.close()
 
 def scenario_shared(browser):
-    print('\n== Escenario 2: tablet + móvil, preventivo compartido ==')
+    print('\n== Escenario 2: tablet + móvil con el servidor central ==')
     T = App(browser, 'tablet', TABLET); M = App(browser, 'movil2', PHONE)
-    T.setup('Tomás Jefe', 'tomas', 'secreto2', 'Tablet mando', 'T'); T.perms(False); M.setup('María Operadora', 'maria', 'secreto3', 'Móvil sector 2', 'M'); M.perms(False)
-    code = {}
+    def activar():
+        T.setup('Tomás Jefe', 'tomas', 'secreto2', 'Tablet mando', 'T', codigo=ADMIN_CODE); T.perms(False)
+        T.pg.wait_for_selector('.central-bar[data-central-estado]', timeout=20000)
+        T.pg.wait_for_function("() => window.__UCO.core.central.status().estado === 'conectado'", timeout=20000)
+        T.shot('00-central-activado')
+        return 'espacio central activado una sola vez durante el alta inicial; estado conectado'
+    check('Servidor central: activación única con el código del servidor', activar)
+    def alta_usuario():
+        T.nav('sistema'); T.a('nav', v='usuarios'); T.pg.wait_for_selector('[data-a="users.edit"]'); T.a('users.edit')
+        T.fill('nombre', 'María Operadora'); T.fill('usuario', 'maria'); T.fill('rol', 'rol_operador'); T.fill('pw', 'secreto3')
+        T.sheet().locator('form[data-f="users.save"] button.primary').click(); T.pg.wait_for_timeout(800)
+        T.pg.evaluate('() => window.__UCO.core.central.syncNow()')
+        pend = T.pg.evaluate('async () => { const d = await window.__UCO.core.central.datos(); return Object.keys(d.pendCuentas).length + Object.keys(d.pendCfg).length }')
+        assert pend == 0, pend
+        return 'usuario creado en la tablet; su cuenta queda publicada en el servidor central'
+    check('Servidor central: alta de usuario', alta_usuario)
+    def nuevo_dispositivo():
+        M.goto(); M.pg.wait_for_selector('form[data-f="auth.central"]', timeout=20000); M.shot('00-acceso-central')
+        assert not M.pg.locator('[name=server], [name=code], [name=codigo]').count(), 'no se piden direcciones ni códigos'
+        M.central_login('maria', 'contraseña-mala'); M.pg.wait_for_timeout(3000)
+        err = M.toast_text(); assert 'incorrectos' in err, err
+        M.central_login('maria', 'secreto3', 'Móvil sector 2'); M.pg.wait_for_selector('.top', timeout=40000)
+        M.pg.wait_for_selector('[data-perm-onboard]', timeout=8000); M.perms(False)
+        quien = M.pg.evaluate('() => [window.__UCO.core.user.usuario, window.__UCO.core.user.rol, window.__UCO.core.device.nombre]')
+        assert quien == ['maria', 'rol_operador', 'Móvil sector 2'], quien
+        return 'el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza'
+    check('Servidor central: dispositivo nuevo con usuario y contraseña', nuevo_dispositivo)
     def create():
-        T.new_prev('Maratón ciudad', 'compartida', True, URL[:-1])
-        T.pg.wait_for_selector('#joincode'); T.pg.wait_for_timeout(1500)
-        code['c'] = T.pg.input_value('#joincode'); assert code['c'].startswith('UCO1.'), code['c'][:10]
+        T.new_prev('Maratón ciudad', 'compartida', True)
+        assert T.pg.evaluate('() => !!window.__UCO.core.meta(window.__UCO.core.cur).central'), 'no vinculado al servidor central'
         T.nav('panel'); [T.new_unit(i, '', 'rt_svb', 'sec_1') for i in ['A1', 'A2', 'A3']]
         T.pg.wait_for_timeout(1500); T.shot('01-panel-tablet')
-        return 'código de incorporación generado'
-    check('Compartido: crear preventivo con servidor', create)
+        return 'creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central'
+    check('Compartido: crear preventivo sin pedir servidor', create)
     def join():
-        M.a('home.join'); M.fill('code', code['c']); M.dlg_ok(); M.pg.wait_for_selector('.kpis', timeout=30000); M.pg.wait_for_timeout(800)
+        M.nav('inicio')
+        for _ in range(30):
+            M.pg.evaluate('() => window.__UCO.core.central.syncNow()'); M.pg.wait_for_timeout(700)
+            if M.pg.locator('[data-a="home.openCentral"]').count(): break
+        M.shot('01-movil-disponible')
+        M.pg.locator('[data-a="home.openCentral"]').first.click(); M.pg.wait_for_selector('.kpis', timeout=30000); M.pg.wait_for_timeout(800)
         n = M.state('return Object.keys(s.units).length'); assert n == 3, n
-        return 'el móvil recibe el preventivo y sus 3 unidades'
-    check('Compartido: incorporar otro dispositivo', join)
+        return 'aparece solo en el móvil y se abre con un toque, con sus 3 unidades'
+    check('Compartido: el preventivo aparece solo en el otro dispositivo', join)
     def simult():
         for app, d in [(T, 'Aviso tablet'), (M, 'Aviso móvil')]:
             app.nav('avisos'); app.a('a.new'); app.fill('desc', d); app.sheet().locator('form[data-f="a.save"] button.primary').click(); app.pg.wait_for_timeout(300); app.close_sheets()
