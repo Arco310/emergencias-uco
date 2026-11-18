@@ -1,7 +1,7 @@
 # Estado de la implementación — Evolución integral (pliego «Prompt maestro» + apartado 18)
 
 Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo desde otra sesión.
-Última actualización: 18/11/2026.
+Última actualización: 18/11/2026 (versión 1.2.0).
 
 ## 1. Auditoría técnica del proyecto existente (versión 1.0.3)
 
@@ -33,26 +33,33 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | D3b | **Tailscale Funnel se mantiene** (confirmado por el usuario el 18/11): acceso por HTTPS desde cualquier red, incluidos datos móviles, sin instalar nada en los dispositivos. | Decisión del usuario. |
 | D4 | Configuración general (tipos de recurso, unidades plantilla) como **elementos versionados** con control optimista (409 si otro dispositivo cambió el mismo elemento). | Nunca se sobrescribe en silencio; no exige descifrar en el servidor. |
 | D5 | Entorno **CLAUDE_TEST**: base de datos local distinta (`?entorno=pruebas`, banda roja permanente), espacio central de pruebas aislado (el entorno de pruebas no ve el espacio real ni al revés) y **código propio de pruebas** (`codigo-pruebas.txt`) que solo crea y borra espacios de pruebas; nunca el real. | Separación total de identidades, credenciales y datos reales y de pruebas (§18). |
-| D6 | Cartografía con **proveedores intercambiables**: OpenStreetMap (sin clave) por defecto y Google Maps Platform oficial cuando se configure una clave. Leaflet 1.9.4 incluido en el proyecto (BSD-2). | Requisito de georreferencia real y de poder cambiar de proveedor; Google exige clave y facturación. |
-| D7 | Actualizador del servidor basado en **GitHub Releases** con verificación SHA-256, copia previa de datos, comprobación de salud y vuelta atrás automática. | Requisito 15 sin ZIP manuales. |
+| D6 | Cartografía con **proveedores intercambiables**: OpenStreetMap (sin clave) por defecto y Google Maps Platform oficial (Map Tiles API con sesión y atribución, Places API (New) para buscar) cuando se configura una clave en Configuración general → Cartografía. La clave se guarda cifrada como elemento de la configuración común. Teselas OSM vistas guardadas para uso sin conexión (máx. 3000, sin descargas masivas). | Requisito de georreferencia real y de poder cambiar de proveedor; Google exige clave y facturación. |
+| D6b | **Leaflet 1.9.4** (BSD-2, 40 KB) incluido en el paquete, sin CDN. Coordenadas: posiciones WGS84 en planos cartográficos (EPSG:3857) y relativas en planos de imagen. | Única dependencia nueva: un mapa interactivo táctil (arrastrar, zonas, capas) sin escribirlo desde cero; licencia permisiva; funciona sin conexión. |
+| D7 | **Actualizador del servidor** (`server/actualizador.mjs` + `server/lanzador.mjs`): consulta las versiones publicadas del repositorio oficial (GitHub Releases); verifica el paquete con el SHA-256 calculado por GitHub y con `SHA256SUMS.txt`, comprueba su estructura y su versión, y lo **prueba arrancándolo con una copia de los datos**. Solo se instala cuando un administrador lo decide (ahora o en la **ventana segura**: 30 min sin escrituras en ningún preventivo). Antes: copia de los datos (se guardan 5) y del código anterior. El lanzador reinicia con la versión nueva y la vigila durante un **periodo de prueba**; si no responde con la versión esperada vuelve sola a la anterior. Durante el reinicio las escrituras reciben 503 y los dispositivos reintentan. | Requisito 15 sin ZIP manuales ni intervención en el PC. |
+| D7b | Acciones de actualización: consultar el estado es para cualquier dispositivo del espacio; **actuar exige el permiso «Gestionar las actualizaciones» en la app y el código de administración del servidor** (el servidor no puede leer los roles, que van cifrados de extremo a extremo). Cada acción queda en la auditoría local y en `despliegues.log` del servidor (acción, usuario, dispositivo). | Mínimo privilegio y comprobación en el servidor. |
+| D8 | **Ciclo de actualización de la app** (service worker): una caché por versión, sin mezclar archivos; integridad SHA-256 de `index.html` fijada al compilar (si no coincide, la versión no se instala); la versión nueva espera y se aplica sola solo sin sesión abierta o al arrancar; con sesión, aviso y el usuario elige el momento (antes se envían los cambios pendientes; la pantalla y el preventivo se recuperan). Se guarda la versión anterior; **pantalla de recuperación** si una versión no arranca. | Requisitos 8.2, 8.3 y 15.3: nunca interrumpir una operación ni perder cambios. |
+| D9 | **Migraciones de datos locales** (`src/data/migraciones.js`): copia de seguridad cifrada previa (se guardan 5), migraciones idempotentes y compatibles hacia atrás, el esquema solo avanza si terminan bien. | Requisito 8.3 (migraciones) y 15.6 (copias previas). |
+| D10 | **Versión mínima de la app** que admite el servidor (`/api/v1/version`): si la app es anterior, deja de sincronizar con ese servidor (los cambios se guardan y se envían al actualizar) y lo avisa. | Compatibilidad entre versiones sin corromper datos. |
+| D11 | Publicación con `tools/publicar-version.mjs`: comprueba que app y servidor tienen la misma versión, compila, verifica el paquete y publica la versión en GitHub (sobre el commit ya subido) y la app en GitHub Pages. Notas en `docs/CAMBIOS.md`. | Proceso repetible y verificable. |
 
 ## 3. Fases
 
 | Fase | Estado | Notas |
 |---|---|---|
-| 1. Servidor central automático | Código y pruebas terminados; despliegue pendiente | Servidor 1.1.0 (cuentas, espacio principal, código de pruebas), app 1.1.0 (acceso con usuario y contraseña, alta sin direcciones, preventivos que aparecen solos), instalador (protección de códigos, `MOSTRAR-CODIGO-ADMIN.bat`). 62 pruebas automáticas y 39 de navegador superadas. |
-| 2. Tipos de recurso, OTROS y unidades plantilla | Pendiente | |
-| 3. Cartografía y biblioteca de planos | Pendiente | |
-| 4. Plano interactivo de coordinación | Pendiente | |
-| 5. Web, PWA y actualizaciones | Pendiente | |
-| 6. Validación integral | Pendiente | |
+| 1. Servidor central automático | Terminada; **instalación en el PC servidor pendiente de la aprobación UAC** | Cuentas comunes, espacio principal, código de pruebas, servidor preconfigurado, preventivos que aparecen solos, instalador con copia y vuelta atrás. |
+| 2. Tipos de recurso, OTROS y unidades plantilla | Terminada | Tipos generales compartidos y persistentes, sector OTROS con nombre libre, unidades plantilla UPR/SVB/VIRES configurables (solo piden el número). |
+| 3. Cartografía y biblioteca de planos | Terminada (Google sin probar con clave real) | Buscador, selección de zona, plano georreferenciado, biblioteca Bernabéu/Metropolitano/Sol + guardados, clave de Google en Configuración general. |
+| 4. Plano interactivo de coordinación | Terminada | Arrastre (también desde pendientes), doble clic/pulsación larga para la clave, avisos por punto o zona, sincronización y bitácora. |
+| 5. Web, PWA y actualizaciones | Terminada | App (D8–D10) y servidor (D7, D7b, D11); panel Sistema → Actualizaciones. Versión 1.2.0. |
+| 6. Validación integral | Terminada en el entorno de pruebas | Los 25 escenarios de aceptación con pruebas automáticas (ver `docs/TESTING_REPORT.md`). Pendiente la prueba en vivo con el servidor real cuando esté instalada la 1.2.0. |
 
 ## 4. Bloqueos que requieren intervención humana
 
 | Bloqueo | Estado |
 |---|---|
-| Clave de Google Maps Platform (requiere facturación) | Preguntado; mientras tanto se usa OpenStreetMap |
+| Clave de Google Maps Platform (requiere facturación) | Pendiente del usuario; mientras tanto, OpenStreetMap. Se configura en Configuración general → Cartografía (restringirla por dominio en Google Cloud). |
 | Confirmar que se mantiene el acceso por Internet (Tailscale Funnel) | **Resuelto**: se mantiene (18/11) |
+| **Instalar la 1.2.0 en el PC servidor** (una sola vez) | El instalador necesita permisos de administrador (UAC). La pantalla segura de UAC no se puede manejar a distancia: el usuario debe aprobarla en el PC. Desde esa instalación, las siguientes versiones se instalan desde la app. El servidor sigue en la 1.0.3 y funcionando. |
 | Activar el espacio central real (una vez, con el código de administración) | Lo hace el usuario: exige elegir su propia contraseña de administrador; las pruebas usan solo el espacio CLAUDE_TEST |
 
 ## 5. Errores detectados y corregidos (esta evolución)
@@ -62,6 +69,15 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | La configuración compartida no llegaba al servidor («Elemento no válido») | Los identificadores con «:» viajan codificados en la URL y el servidor no los decodificaba | El servidor decodifica el identificador antes de validarlo |
 | Copia automática fallida en dispositivos dados de alta con cuenta | Esos dispositivos no tienen clave de recuperación local y la copia la daba por supuesta | Las copias admiten su ausencia; al restaurar se rehace la vinculación con el servidor central |
 | El nombre del dispositivo no se actualizaba en pantalla tras cambiarlo | El núcleo guardaba una copia antigua de los datos del dispositivo | El núcleo lee siempre los datos actuales del repositorio |
+| Plantillas creadas durante una sincronización central desaparecían | Carrera: la sincronización guardaba una copia de los datos leída antes del cambio | Mutex `_conDatos` para todas las escrituras centrales y fusión paso a paso; prueba de regresión |
+| Campos ocultos visibles en formularios | El estilo `.fld` anulaba el atributo `hidden` | `[hidden]{display:none!important}` |
+| El formulario de unidad no mostraba el tipo recién creado | Solo se repintaban las hojas «vivas» | Se reabre el formulario con lo ya escrito |
+| Posiciones fuera del plano tras cambiar de plano | Se usaban coordenadas geográficas fuera de los límites | Se usan solo si caen dentro; si no, la posición relativa |
+| **El mapa tapaba las hojas abiertas encima** (p. ej. la biblioteca de planos): no se podía pulsar «Abrir» | Las capas de Leaflet (z-index 400–1000) competían con las hojas | El contenedor del mapa crea su propio contexto de apilamiento; prueba de navegador que lo comprueba |
+| **Repintados por eventos borraban lo escrito** (p. ej. el alta inicial mientras llegaba el estado del servidor) | Se reconstruía la pantalla sin conservar los campos | Los repintados por eventos conservan lo que el usuario ha escrito; el gestor de actualizaciones solo repinta si cambia algo visible |
+| La prueba de una versión del servidor heredaba el entorno del lanzador | `spawn` sin entorno propio: la instancia de prueba se creía la real | Entorno aislado (sin `UCO_LANZADOR` ni la ruta de la instalación) y sin comprobaciones periódicas |
+| Tras volver a la versión anterior del servidor, el panel mostraba la versión retirada | El lanzador no actualizaba la versión instalada | Se lee la versión de la copia restaurada y se anota en el historial |
+| No había copia de los datos antes de activar una versión desde el actualizador | Solo el instalador la hacía | Copia de datos antes de activar o revertir (se guardan 5); si falla, no se activa |
 
 ## 6. Cuestión estructural detectada (para decidir)
 
@@ -73,3 +89,12 @@ Alternativas:
 3. **Operaciones firmadas por usuario**: el servidor verifica quién firma y su rol sin leer el contenido; no permite validar reglas que dependen del contenido.
 
 Recomendación: la 2 cuando se quiera la validación en servidor estricta (el servidor es un equipo propio). Requiere autorización por cambiar la arquitectura de seguridad; no se ha aplicado.
+
+## 7. Pendiente y limitaciones conocidas
+
+- **Instalar la 1.2.0 en el PC servidor** (UAC, ver §4) y, después, la prueba en vivo con el entorno CLAUDE_TEST contra el servidor real.
+- Google Maps Platform no se ha probado con una clave real (no hay clave); el código sigue la documentación oficial (sesión de Map Tiles API, atribución, Places API (New)).
+- Pruebas en dispositivos físicos: las de navegador emulan móvil, tablet y Chrome para Android; falta probar en un Android real.
+- Firma de las versiones con clave propia (además de HTTPS, repositorio oficial y SHA-256): mejora opcional; exige custodiar una clave privada.
+- Cuestión estructural del §6 (validación en el servidor de operaciones cifradas): pendiente de decisión.
+
