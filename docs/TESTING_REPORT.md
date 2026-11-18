@@ -71,4 +71,6 @@ Ver `docs/IMPLEMENTATION_STATUS.md` §5. Los más relevantes de esta fase: el ma
 
 ## 6. Publicación de la 1.2.0
 
-Pendiente de anotar el resultado de la publicación y de la comprobación del actualizador contra la versión publicada en GitHub.
+- **Aplicación 1.2.0 publicada en GitHub Pages** (compilación `83698b53b0b2`, comprobada en la rama `gh-pages`).
+- **Versión en GitHub Releases: no publicada.** La plataforma deniega a esta sesión crear versiones en GitHub (HTTP 403, «Creating, editing, or deleting releases is not permitted for this session type»). No se ha intentado eludir: se ha añadido el flujo `.github/workflows/publicar-version.yml`, que lanza una persona desde GitHub (Actions → «Publicar versión»), ejecuta las pruebas y publica con la misma herramienta.
+- Por lo mismo, la comprobación del actualizador contra GitHub real queda pendiente de esa publicación; la cadena completa está probada con una API local con el mismo formato (`tests/server/actualizaciones.test.mjs`, 7/7).

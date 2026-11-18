@@ -40,7 +40,7 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | D8 | **Ciclo de actualización de la app** (service worker): una caché por versión, sin mezclar archivos; integridad SHA-256 de `index.html` fijada al compilar (si no coincide, la versión no se instala); la versión nueva espera y se aplica sola solo sin sesión abierta o al arrancar; con sesión, aviso y el usuario elige el momento (antes se envían los cambios pendientes; la pantalla y el preventivo se recuperan). Se guarda la versión anterior; **pantalla de recuperación** si una versión no arranca. | Requisitos 8.2, 8.3 y 15.3: nunca interrumpir una operación ni perder cambios. |
 | D9 | **Migraciones de datos locales** (`src/data/migraciones.js`): copia de seguridad cifrada previa (se guardan 5), migraciones idempotentes y compatibles hacia atrás, el esquema solo avanza si terminan bien. | Requisito 8.3 (migraciones) y 15.6 (copias previas). |
 | D10 | **Versión mínima de la app** que admite el servidor (`/api/v1/version`): si la app es anterior, deja de sincronizar con ese servidor (los cambios se guardan y se envían al actualizar) y lo avisa. | Compatibilidad entre versiones sin corromper datos. |
-| D11 | Publicación con `tools/publicar-version.mjs`: comprueba que app y servidor tienen la misma versión, compila, verifica el paquete y publica la versión en GitHub (sobre el commit ya subido) y la app en GitHub Pages. Notas en `docs/CAMBIOS.md`. | Proceso repetible y verificable. |
+| D11 | Publicación con `tools/publicar-version.mjs`: comprueba que app y servidor tienen la misma versión, compila, verifica el paquete y publica la versión en GitHub (sobre el commit ya subido) y la app en GitHub Pages. Notas en `docs/CAMBIOS.md`. La versión en GitHub Releases la lanza una persona desde GitHub (Actions → «Publicar versión»), que ejecuta las pruebas y la misma herramienta. | Proceso repetible y verificable; esta sesión no puede crear versiones en GitHub (restricción de la plataforma), y es razonable que publicar quede en manos de una persona. |
 
 ## 3. Fases
 
@@ -59,6 +59,7 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 |---|---|
 | Clave de Google Maps Platform (requiere facturación) | Pendiente del usuario; mientras tanto, OpenStreetMap. Se configura en Configuración general → Cartografía (restringirla por dominio en Google Cloud). |
 | Confirmar que se mantiene el acceso por Internet (Tailscale Funnel) | **Resuelto**: se mantiene (18/11) |
+| **Publicar la versión 1.2.0 en GitHub Releases** | Esta sesión no tiene permiso para crear versiones en GitHub (respuesta 403 de la plataforma). Se lanza desde GitHub → Actions → «Publicar versión» → Run workflow → `1.2.0`. La aplicación 1.2.0 ya está publicada en GitHub Pages. |
 | **Instalar la 1.2.0 en el PC servidor** (una sola vez) | El instalador necesita permisos de administrador (UAC). La pantalla segura de UAC no se puede manejar a distancia: el usuario debe aprobarla en el PC. Desde esa instalación, las siguientes versiones se instalan desde la app. El servidor sigue en la 1.0.3 y funcionando. |
 | Activar el espacio central real (una vez, con el código de administración) | Lo hace el usuario: exige elegir su propia contraseña de administrador; las pruebas usan solo el espacio CLAUDE_TEST |
 

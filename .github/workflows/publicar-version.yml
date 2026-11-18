@@ -1,0 +1,43 @@
+# Publica una versión del Gestor de Emergencias UCO en GitHub Releases: comprueba que la versión pedida es
+# la del código, ejecuta las pruebas, compila, verifica el paquete del servidor y lo publica junto con su
+# lista de sumas SHA-256 (tools/publicar-version.mjs). Los servidores instalados la verán en
+# Sistema → Actualizaciones; no se instala sola: lo decide un administrador.
+#
+# Se lanza a mano desde GitHub: Actions → «Publicar versión» → Run workflow → escribir la versión.
+name: Publicar versión
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión que se publica (la del código, p. ej. 1.2.0)'
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: publicar-version
+  cancel-in-progress: false
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Comprobar que la versión pedida es la del código
+        env:
+          PEDIDA: ${{ inputs.version }}
+        run: |
+          V=$(node -e "import('./src/core/defaults.js').then(m => console.log(m.APP_VERSION))")
+          if [ "$V" != "$PEDIDA" ]; then echo "La versión del código es $V, no $PEDIDA"; exit 1; fi
+      - name: Pruebas
+        run: npm test
+      - name: Publicar la versión
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/publicar-version.mjs --github
