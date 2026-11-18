@@ -15,7 +15,7 @@ Fecha de generación: 18/11/2026 00:10 (hora peninsular) · Versión 1.0.3 · co
 | Sincronización real por Internet con el servidor instalado (2 dispositivos) | 5 | 5 | 0 |
 | **Total** | **116** | **116** | **0** |
 
-Todas las pruebas listadas se han **ejecutado realmente** y este informe se genera a partir de sus archivos de resultados (`tests/generar_informe.py`): `tests/resultados-node.tap`, `tests/e2e/resultados.json`, `tests/checks/resultados*.json` y `tests/perf/resultados-*.json`. Capturas en `tests/e2e/capturas/` y `tests/checks/capturas-mapas/`. Además se han medido los tiempos de respuesta (apartado 6).
+Todas las pruebas listadas se han **ejecutado realmente** y este informe se genera a partir de sus archivos de resultados (`tests/generar_informe.py`): `tests/resultados-node.tap`, `tests/e2e/resultados.json`, `tests/checks/resultados*.json` y `tests/perf/resultados-*.json`. Capturas en `docs/evidencias/1.0.3/` (antes en `tests/e2e/capturas/`, que ahora se regenera en cada ejecución) y `tests/checks/capturas-mapas/`. Además se han medido los tiempos de respuesta (apartado 6).
 
 ## 1. Pruebas de unidad (reglas críticas, datos y motor)
 - ✔ preventivo: creación, activación y unidades desde la creación

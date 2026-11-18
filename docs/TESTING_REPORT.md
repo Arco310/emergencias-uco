@@ -69,7 +69,25 @@ Pruebas nuevas de esta evolución: `central_cuentas` (13), `central_config` (4),
 
 Ver `docs/IMPLEMENTATION_STATUS.md` §5. Los más relevantes de esta fase: el mapa tapaba las hojas abiertas encima (la prueba falla sin la corrección y pasa con ella); los repintados por eventos borraban lo que se estaba escribiendo; la instancia de prueba de una versión del servidor heredaba el entorno del lanzador; faltaba la copia de datos previa en el actualizador.
 
-## 6. Publicación de la 1.2.0
+## 6. Capturas (`docs/evidencias/1.2.0/`)
+
+En el entorno de pruebas no hay acceso a los servidores de mapas: las teselas se sustituyen por una cuadrícula gris; la geometría, las coordenadas y la interacción son las reales.
+
+| Captura | Qué muestra |
+|---|---|
+| `act-01-version-lista.png` | Aviso «Versión 1.2.1 lista» con la sesión abierta, sin interrumpir |
+| `act-02-recuperacion.png` | Pantalla de recuperación ante una versión que no arranca |
+| `coord-01-selector-mapa.png` | Buscador de lugares y encuadre de la zona del preventivo |
+| `coord-02-selector-claves.png` | Selector de claves abierto con doble clic sobre una unidad del plano |
+| `coord-03-zona-dibujada.png` | Zona dibujada para un aviso |
+| `coord-04-plano-coordinacion.png` | Plano de coordinación: pendientes de asignación, unidad, aviso por punto y por zona |
+| `fase2-02-upr-creada.png`, `fase2-03-sector-otros.png`, `fase2-04-unidades-plantilla.png` | Unidad plantilla UPR, sector OTROS y configuración de plantillas |
+| `tablet-00-central-activado.png`, `movil2-00-acceso-central.png`, `movil2-01-movil-disponible.png` | Servidor central: activación, acceso con usuario y contraseña, preventivo que aparece solo |
+| `tablet-03-conflicto.png` | Conflicto detectado y pendiente de resolver |
+
+Las capturas de la 1.0.3 están en `docs/evidencias/1.0.3/`.
+
+## 7. Publicación de la 1.2.0
 
 - **Aplicación 1.2.0 publicada en GitHub Pages** (compilación `83698b53b0b2`, comprobada en la rama `gh-pages`).
 - **Versión en GitHub Releases: no publicada.** La plataforma deniega a esta sesión crear versiones en GitHub (HTTP 403, «Creating, editing, or deleting releases is not permitted for this session type»). No se ha intentado eludir: se ha añadido el flujo `.github/workflows/publicar-version.yml`, que lanza una persona desde GitHub (Actions → «Publicar versión»), ejecuta las pruebas y publica con la misma herramienta.
