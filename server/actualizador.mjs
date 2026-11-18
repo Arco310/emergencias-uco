@@ -74,7 +74,7 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
 
   async function obtener(url, binario = false) {
     const r = await fetchImpl(url, { headers: { Accept: binario ? 'application/octet-stream' : 'application/vnd.github+json', 'User-Agent': 'GestorUCO-servidor/' + version }, redirect: 'follow' });
-    if (!r.ok) throw new Error('No se pudo descargar ' + url.split('?')[0] + ' (' + r.status + ')');
+    if (!r.ok) throw Object.assign(new Error('No se pudo descargar ' + url.split('?')[0] + ' (' + r.status + ')'), { status: r.status });
     return binario ? Buffer.from(await r.arrayBuffer()) : r.json();
   }
   /** Consulta la última versión publicada en el repositorio oficial */
@@ -90,9 +90,15 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
       const zip = v && (j.assets || []).find(a => a.name === nombrePaquete(v) && deOrigen(a));
       const sumas = (j.assets || []).find(a => a.name === 'SHA256SUMS.txt' && deOrigen(a));
       est.disponible = v && zip && sumas ? { version: v, publicada: j.published_at || null, notas: String(j.body || '').slice(0, 4000), url: zip.browser_download_url, tam: zip.size || null, digest: zip.digest || null, sumas: sumas.browser_download_url, enlace: j.html_url || null } : null;
-      est.comprobado = Date.now(); est.error = v && (!zip || !sumas) ? 'La versión ' + v + ' no incluye el paquete del servidor o su lista de sumas' : null;
+      est.comprobado = Date.now(); est.sinVersiones = false; est.error = v && (!zip || !sumas) ? 'La versión ' + v + ' no incluye el paquete del servidor o su lista de sumas' : null;
       persistir();
-    } catch (e) { est.error = e.message; est.comprobado = Date.now(); persistir(); registro('Error al comprobar:', e.message); }
+    } catch (e) {
+      est.comprobado = Date.now();
+      // El repositorio todavía no tiene ninguna versión publicada: no es un error
+      if (e.status === 404) { est.disponible = null; est.error = null; est.sinVersiones = true; }
+      else { est.error = e.message; registro('Error al comprobar:', e.message); }
+      persistir();
+    }
     finally { ocupado = null; }
     return estado();
   }
@@ -207,7 +213,7 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
     const dep = leer(F_DEP, { historial: [] });
     return {
       instalada: version, lanzador, disponible: est.disponible, actualizable: !!(est.disponible && posterior(est.disponible.version, version)),
-      comprobado: est.comprobado, preparada: est.preparada, programada: est.programada, error: est.error, tarea: ocupado,
+      comprobado: est.comprobado, sinVersiones: !!est.sinVersiones, preparada: est.preparada, programada: est.programada, error: est.error, tarea: ocupado,
       despliegue: { estado: dep.estado || 'activa', fecha: dep.fecha || null, instalada: dep.instalada || version, ultimo: (dep.historial || []).slice(-1)[0] || null, historial: (dep.historial || []).slice(-10).reverse() },
       actividad: { ultimaEscritura: act.ultimaEscritura || null, inactivoMin: act.ultimaEscritura ? Math.floor((Date.now() - act.ultimaEscritura) / 60000) : null, preventivosConActividad: [...act.preventivos.values()].filter(t => Date.now() - t < 30 * 60000).length },
     };

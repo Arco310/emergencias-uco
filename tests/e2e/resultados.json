@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-18 16:36:02",
+ "fecha": "2026-11-18 17:44:41",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave EKGY6…"
+   "detalle": "clave 5B2EJ…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -155,7 +155,7 @@
   {
    "prueba": "Compartido: desconexión, trabajo local y reconexión",
    "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional DS-2), reconexión y convergencia sin pérdidas"
+   "detalle": "trabajo sin red (ref. provisional AH-2), reconexión y convergencia sin pérdidas"
   },
   {
    "prueba": "Compartido: resolución de conflictos",
@@ -171,6 +171,11 @@
    "prueba": "Tipos de recurso: el tipo nuevo aparece en el otro dispositivo",
    "resultado": "SUPERADA",
    "detalle": "tipo «Bicicleta sanitaria» creado en la tablet → disponible en el móvil sin hacer nada"
+  },
+  {
+   "prueba": "Actualizaciones: estado del servidor y de los dispositivos",
+   "resultado": "SUPERADA",
+   "detalle": "Sistema → Actualizaciones muestra el servidor y los 2 dispositivos con su nombre y versión"
   },
   {
    "prueba": "Servidor central: caída temporal del servidor sin interrumpir el trabajo",

@@ -2,7 +2,7 @@
 // copia los archivos, crea una tarea que lo arranca al encender el equipo y lo publica en
 // Internet con una dirección HTTPS fija mediante Tailscale Funnel.
 // Se ejecuta desde instalar-servidor.bat (con permisos de administrador).
-import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, copyFileSync, readdirSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, copyFileSync, readdirSync, openSync, closeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -24,6 +24,29 @@ const quitarOpcion = k => { try { const o = JSON.parse(readFileSync(OPC_FILE, 'u
 const fallo = msg => { console.log('\n[ERROR] ' + msg); process.exit(1); };
 const ok = msg => console.log('[OK] ' + msg);
 const libre = p => new Promise(res => { const s = createServer(); s.once('error', () => res(false)); s.listen(p, '127.0.0.1', () => s.close(() => res(true))); });
+
+/** Carpeta solo para el sistema (el servidor) y los administradores, con todo su contenido heredando de
+ *  ella. Los permisos se fijan en la carpeta y el contenido se restablece para que los herede: aplicarlos
+ *  archivo por archivo (como hacía la 1.2.0) dejaba archivos ilegibles incluso para el servidor. Antes se
+ *  toma la propiedad para los administradores, lo que también repara instalaciones con ese problema.
+ *  Devuelve los archivos que sigan sin poder leerse. */
+function protegerCarpeta(dir) {
+  if (!existsSync(dir)) return { ok: true, ilegibles: [] };
+  if (U.SIM && !process.env.UCO_ICACLS) return { ok: true, ilegibles: [] };
+  U.run(U.TAKEOWN, ['/F', dir, '/R', '/A']);
+  const a = U.run(U.ICACLS, [dir, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F']);
+  if (readdirSync(dir).length) U.run(U.ICACLS, [join(dir, '*'), '/reset', '/T', '/C', '/Q']);
+  const ilegibles = [];
+  const recorrer = d => {
+    for (const f of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, f.name);
+      if (f.isDirectory()) recorrer(p); else try { closeSync(openSync(p, 'r')); } catch { ilegibles.push(p); }
+    }
+  };
+  try { recorrer(dir); } catch { ilegibles.push(dir); }
+  return { ok: a.code === 0 && !ilegibles.length, ilegibles, out: a.out.trim() };
+}
+const avisoPermisos = (d, r) => console.log('[AVISO] No se han podido ajustar los permisos de ' + d + (r.ilegibles.length ? ' (archivos ilegibles: ' + r.ilegibles.slice(0, 3).join(', ') + (r.ilegibles.length > 3 ? '…' : '') + ')' : r.out ? ': ' + r.out : ''));
 
 /** Detiene el servidor instalado (tarea programada y proceso) */
 async function detener(puerto) {
@@ -60,6 +83,12 @@ async function elegirPuerto() {
 async function main() {
   U.linea(); console.log('Gestor de Emergencias UCO · Instalación del servidor de sincronización'); U.linea();
   for (const f of [join(AQUI, 'servidor', 'server.mjs'), join(AQUI, 'app', 'index.html')]) if (!existsSync(f)) fallo('Falta ' + f + '. Descomprime el paquete completo antes de instalar.');
+  // Instalación anterior: sus carpetas protegidas tienen que poder leerse antes de nada (para detener el
+  // servidor, copiar los datos y poder volver atrás)
+  for (const d of [join(U.RUTAS.datos, '_servidor'), join(U.BASE, 'copias')]) {
+    const r = protegerCarpeta(d);
+    if (!r.ok) avisoPermisos(d, r);
+  }
 
   // 1. Archivos en una carpeta fija del equipo
   const puerto = await elegirPuerto();
@@ -76,7 +105,7 @@ async function main() {
       limpiarCopias(COPIAS, 5); ok('Copia de seguridad de los datos en ' + d);
     }
     // Las copias contienen los códigos del servidor: solo sistema y administradores
-    if (!U.SIM) U.run(U.ICACLS, [COPIAS, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '/T', '/C', '/Q']);
+    const rc = protegerCarpeta(COPIAS); if (!rc.ok) avisoPermisos(COPIAS, rc);
   }
   mkdirSync(dirname(U.RUTAS.servidor), { recursive: true });
   // Código del servidor: server.mjs, actualizador y lanzador (actualizaciones automáticas verificadas)
@@ -113,11 +142,14 @@ async function main() {
     fallo(va ? 'La nueva versión no arrancó. Se ha restaurado la anterior (versión ' + va + '), que sigue funcionando. Revisa ' + U.RUTAS.registro : 'El servidor no arranca ni con la versión anterior. Revisa ' + U.RUTAS.registro);
   }
   if (!v) fallo('El servidor no ha arrancado. Revisa ' + U.RUTAS.registro);
-  // Los códigos del servidor solo pueden leerlos el sistema (el servidor) y los administradores
-  if (!U.SIM) {
-    const r = U.run(U.ICACLS, [SRV, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '/T', '/C', '/Q']);
-    if (r.code === 0) ok('Códigos del servidor protegidos (solo sistema y administradores)');
-    else console.log('[AVISO] No se pudieron restringir los permisos de ' + SRV + ': ' + r.out.trim());
+  // Los códigos del servidor solo pueden leerlos el sistema (el servidor) y los administradores.
+  // Se comprueba también que el propio servidor puede seguir leyéndolos.
+  {
+    const r = protegerCarpeta(SRV);
+    const ver = await fetch(U.local(puerto) + 'api/v1/version', { signal: AbortSignal.timeout(5000) }).then(x => x.json()).catch(() => null);
+    if (!r.ok) avisoPermisos(SRV, r);
+    else if (ver && ver.archivos === 'error') console.log('[AVISO] El servidor no puede leer sus códigos en ' + SRV + '. Vuelve a ejecutar este instalador.');
+    else ok('Códigos del servidor protegidos (solo sistema y administradores)');
   }
   ok('Servidor en marcha en este equipo (versión ' + v + ', puerto ' + puerto + ')');
 

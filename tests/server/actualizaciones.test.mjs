@@ -87,6 +87,10 @@ test('estado y versiones: la app consulta la versión mínima y el servidor expo
   assert.equal((await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'cancelar', codigo: 'AAAAA-BBBBB-CCCCC-DDDDD' } })).status, 403);
   assert.equal((await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'comprobar' } })).status, 200);
   const v2 = await req('/version'); assert.equal(v2.j.disponible, null, 'sin versiones publicadas no hay ninguna disponible');
+  assert.equal(v2.j.archivos, 'ok', 'el servidor puede leer sus archivos protegidos');
+  // Un repositorio sin versiones publicadas (404 en GitHub) no es un error
+  const e2 = (await req(`/org/${org}/admin/actualizaciones`, { token: tok })).j;
+  assert.equal(e2.sinVersiones, true); assert.equal(e2.error, null);
 });
 
 test('paquete manipulado: se rechaza por integridad y no queda nada preparado', async () => {

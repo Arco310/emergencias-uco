@@ -86,7 +86,7 @@ function seccionServidor() {
     ${fila('Estado', v.mantenimiento ? chip('Reiniciándose para actualizarse', 'warn') : chip('En servicio', 'ok'))}
     ${fila('Último despliegue', chip(est[0], est[1]) + (dep.fecha ? ' · ' + fecha(dep.fecha) : ''))}
     ${ult ? fila('Resultado', esc((ult.version || '') + ': ' + ((RESULTADO[ult.resultado] || [ult.resultado])[0]) + (ult.motivo ? ' — ' + ult.motivo : ''))) : ''}
-    ${fila('Disponible', actualizable && disp ? chip(disp.version + (disp.publicada ? ' · ' + fecha(Date.parse(disp.publicada)) : ''), 'info') : 'Ninguna más reciente')}
+    ${fila('Disponible', actualizable && disp ? chip(disp.version + (disp.publicada ? ' · ' + fecha(Date.parse(disp.publicada)) : ''), 'info') : srv && srv.sinVersiones ? 'Aún no hay versiones publicadas' : 'Ninguna más reciente')}
     ${fila('Versión mínima de la app', esc(v.minCliente || '—'))}
     ${fila('Esquema de datos', esc(String(v.esquema || '—')))}
     ${srv && srv.comprobado ? fila('Última consulta', fecha(srv.comprobado)) : ''}</dl>
@@ -94,6 +94,7 @@ function seccionServidor() {
     ${prep ? `<p class="note ok">Versión ${esc(prep.version)} descargada, verificada (SHA-256) y probada con una copia de los datos: lista para instalar.</p>` : ''}
     ${prog ? `<p class="note warn">Instalación programada ${prog.modo === 'ventana' ? 'para la próxima ventana segura (30 minutos sin cambios en ningún preventivo)' : 'ahora'}.</p>` : ''}
     ${srv && srv.error ? `<p class="note bad">${esc(srv.error)}</p>` : ''}
+    ${v.archivos === 'error' ? `<p class="note bad" data-act="archivos">El servidor no puede leer sus códigos protegidos (permisos de la carpeta de datos). Vuelve a ejecutar el instalador en el PC servidor: repara los permisos sin tocar los datos.</p>` : ''}
     ${srv && srv.actividad ? `<p class="muted small">Actividad: ${srv.actividad.ultimaEscritura ? 'último cambio hace ' + srv.actividad.inactivoMin + ' min · ' + srv.actividad.preventivosConActividad + ' preventivo(s) con cambios en los últimos 30 min' : 'sin cambios desde que arrancó el servidor'}.</p>` : ''}
     ${disp && disp.notas && actualizable ? `<details><summary>Novedades de la versión ${esc(disp.version)}</summary><pre class="notas">${esc(disp.notas)}</pre></details>` : ''}
     ${srv && srv.lanzador === false ? `<p class="note warn">El servidor no tiene todavía el sistema de actualizaciones: ejecuta una vez el instalador nuevo en el PC servidor.</p>` : ''}

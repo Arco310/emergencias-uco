@@ -79,6 +79,9 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | La prueba de una versión del servidor heredaba el entorno del lanzador | `spawn` sin entorno propio: la instancia de prueba se creía la real | Entorno aislado (sin `UCO_LANZADOR` ni la ruta de la instalación) y sin comprobaciones periódicas |
 | Tras volver a la versión anterior del servidor, el panel mostraba la versión retirada | El lanzador no actualizaba la versión instalada | Se lee la versión de la copia restaurada y se anota en el historial |
 | No había copia de los datos antes de activar una versión desde el actualizador | Solo el instalador la hacía | Copia de datos antes de activar o revertir (se guardan 5); si falla, no se activa |
+| **En el PC real, el servidor no podía leer su código de administración** («Error interno» al activar el espacio central) y la 1.2.0 se habría detenido en el siguiente reinicio | El instalador aplicaba los permisos con herencia archivo por archivo (`icacls … /T`): los archivos que ya existían quedaron sin permisos para nadie | Reparado en el PC (propiedad para Administradores, permisos en la carpeta y herencia restablecida; comprobado con `icacls`). En la 1.2.1 el instalador lo hace así y repara instalaciones afectadas antes de nada; el servidor ya no se detiene si no puede leerlos y lo indica en `/api/v1/version` (`archivos`) |
+| «No se pudo descargar …/releases/latest (404)» en el panel | Sin versiones publicadas GitHub responde 404 | Se muestra «Aún no hay versiones publicadas» |
+| La lista de dispositivos mostraba «Dispositivo» para un dispositivo recién dado de alta | El primer latido salía antes de guardar el nombre y no se repetía hasta pasado un minuto | El latido se repite en cuanto cambian el nombre o la versión |
 
 ## 6. Cuestión estructural detectada (para decidir)
 

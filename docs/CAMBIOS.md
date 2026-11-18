@@ -3,6 +3,14 @@
 Cada versión publica a la vez la aplicación y el servidor central. Los servidores ven la versión nueva en
 Sistema → Actualizaciones y solo se instala cuando un administrador lo decide.
 
+## 1.2.1 (18/11/2026)
+
+**Correcciones del servidor central en Windows**
+- El instalador dejaba los códigos del servidor sin poder leerse (ni siquiera por el propio servidor), lo que impedía activar el servidor central y podía impedir que el servidor volviera a arrancar. Ahora los permisos se aplican a la carpeta y su contenido los hereda; al instalar se reparan las instalaciones afectadas y se comprueba que el servidor puede leer sus códigos.
+- Si aun así no pudiera leerlos, el servidor sigue funcionando y lo explica con claridad (antes se detenía).
+- «Aún no hay versiones publicadas» ya no aparece como un error en Sistema → Actualizaciones.
+- La lista de dispositivos muestra enseguida el nombre de cada dispositivo (antes podía aparecer «Dispositivo» al darlo de alta).
+
 ## 1.2.0 (18/11/2026)
 
 **Configuración común**

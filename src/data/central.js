@@ -232,11 +232,12 @@ export class CentralSync {
       const m2 = await this.meta(); if (m2 && m2.org === meta.org) { m2.lastSeq = r.last; m2.ultimo = now(); await this.h.repo.putDoc('central', m2); }
       if (entradas.length) await this.h.onPrevs(entradas);
       if (cambiados.length && this.h.onConfig) await this.h.onConfig([...new Set(cambiados)]);
-      // 3. Latido (versión y última comunicación) como mucho cada minuto
-      if (Date.now() - this._latido > 60000) {
-        const dev = this.h.device();
-        await this._req(meta.server, base + '/latido', { method: 'POST', token: tok, body: { dev: dev.id, nombre: dev.nombre || '', version: this.h.version } }).catch(() => { });
-        this._latido = Date.now();
+      // 3. Latido (nombre, versión y última comunicación): cada minuto, o enseguida si cambian el nombre
+      // del dispositivo o la versión (p. ej. al dar de alta el dispositivo con su nombre)
+      const dev = this.h.device(); const firma = dev.id + '|' + (dev.nombre || '') + '|' + this.h.version;
+      if (Date.now() - this._latido > 60000 || firma !== this._firmaLatido) {
+        const ok = await this._req(meta.server, base + '/latido', { method: 'POST', token: tok, body: { dev: dev.id, nombre: dev.nombre || '', version: this.h.version } }).then(() => true, () => false);
+        this._latido = Date.now(); if (ok) this._firmaLatido = firma;
       }
       return this._set({ estado: resto.pend ? 'pendiente' : 'conectado', ultimo: now(), error: null, conflictos: resto.conflictos });
     } catch (e) {

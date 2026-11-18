@@ -126,3 +126,35 @@ test('instalador para Windows: actualización con copia de datos y vuelta atrás
     correr('desinstalar.mjs', e, p); rmSync(roto, { recursive: true, force: true });
   }
 });
+
+test('instalador para Windows: permisos de las carpetas protegidas en la carpeta (heredables), reparación previa y comprobación', async () => {
+  const e = entorno(); const p = await libre();
+  // Sustitutos de icacls y takeown que registran las órdenes (como schtasks y tailscale)
+  const fake = (nombre) => { const f = join(e.dir, nombre); writeFileSync(f, '#!/bin/sh\necho "' + nombre + ' $*" >> "' + e.log + '"\nexit 0\n'); chmodSync(f, 0o755); return f; };
+  const extra = { UCO_ICACLS: fake('icacls'), UCO_TAKEOWN: fake('takeown') };
+  let r = correr('instalar.mjs', e, p, extra);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /Códigos del servidor protegidos/);
+  const srv = join(e.base, 'datos', '_servidor');
+  let o = readFileSync(e.log, 'utf8').split('\n');
+  const idx = re => o.findIndex(l => re.test(l));
+  // Permisos en la carpeta, sin /T (heredables) y después el contenido restablecido para que herede
+  const grant = idx(new RegExp('^icacls ' + srv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' /inheritance:r /grant:r \\*S-1-5-18:\\(OI\\)\\(CI\\)F \\*S-1-5-32-544:\\(OI\\)\\(CI\\)F$'));
+  assert.ok(grant >= 0, 'permisos de la carpeta de códigos:\n' + o.join('\n'));
+  assert.ok(idx(/^takeown \/F .*_servidor \/R \/A$/) < grant, 'antes se toma la propiedad (repara archivos ilegibles)');
+  assert.ok(idx(/^icacls .*_servidor\/\* \/reset \/T \/C \/Q$/) > grant, 'el contenido hereda los permisos de la carpeta');
+  assert.ok(!o.some(l => /^icacls .*\(OI\)\(CI\)F.* \/T/.test(l)), 'nunca se aplican permisos con herencia archivo por archivo');
+  // Reinstalación: las carpetas protegidas se revisan ANTES de detener el servidor y copiar los datos
+  writeFileSync(e.log, '');
+  r = correr('instalar.mjs', e, p, extra);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  o = readFileSync(e.log, 'utf8').split('\n');
+  const primeraReparacion = idx(/^takeown \/F .*_servidor /), parada = idx(/^schtasks \/End/);
+  assert.ok(primeraReparacion >= 0 && parada > primeraReparacion, 'reparación antes de detener el servidor:\n' + o.join('\n'));
+  assert.ok(idx(/^takeown \/F .*copias /) >= 0 && idx(/^icacls .*copias \/inheritance:r/) >= 0, 'también las copias de seguridad');
+  assert.match(r.stdout, /Copia de seguridad de los datos/);
+  // El servidor confirma que puede leer sus códigos
+  const v = await (await fetch('http://127.0.0.1:' + p + '/api/v1/version')).json();
+  assert.equal(v.archivos, 'ok');
+  correr('desinstalar.mjs', e, p);
+});

@@ -85,7 +85,8 @@ class App:
         self.pg.fill('#f_nombre', nombre); self.pg.fill('#f_usuario', usuario); self.pg.fill('#f_p1', pw); self.pg.fill('#f_p2', pw)
         self.pg.fill('#f_dev', dev); self.pg.fill('#f_code', code)
         if codigo: self.pg.fill('#f_codigo', codigo)
-        self.pg.click('form[data-f="auth.setup"] button.primary'); self.pg.wait_for_selector('#recok', timeout=20000)
+        # El alta deriva claves (PBKDF2): con el equipo cargado puede tardar más de lo normal
+        self.pg.click('form[data-f="auth.setup"] button.primary'); self.pg.wait_for_selector('#recok', timeout=45000)
         self.recovery = self.pg.inner_text('#rec')
         self.pg.check('#recok'); self.pg.click('[data-a="auth.recDone"]'); self.pg.wait_for_selector('.top')
         self.pg.wait_for_selector('[data-perm-onboard]', timeout=5000)
@@ -464,6 +465,18 @@ def scenario_shared(browser):
         assert 'Bicicleta sanitaria' in ops, ops
         return 'tipo «Bicicleta sanitaria» creado en la tablet → disponible en el móvil sin hacer nada'
     check('Tipos de recurso: el tipo nuevo aparece en el otro dispositivo', tipo_compartido)
+    def dispositivos_panel():
+        T.pg.evaluate('() => window.__UCO.go("actualizaciones")'); T.pg.wait_for_selector('[data-act="servidor"]', timeout=20000)
+        txt = ''
+        for _ in range(15):
+            if T.pg.locator('[data-act="dispositivos"]').count():
+                txt = T.pg.inner_text('[data-act="dispositivos"]')
+                if 'Tablet mando' in txt and 'Móvil sector 2' in txt: break
+            T.pg.wait_for_timeout(2000); T.a('act.cargar')
+        assert 'Tablet mando' in txt and 'Móvil sector 2' in txt and not re.search(r'\nDispositivo\t\d', txt), repr(txt)
+        T.shot('05-actualizaciones')
+        return 'Sistema → Actualizaciones muestra el servidor y los 2 dispositivos con su nombre y versión'
+    check('Actualizaciones: estado del servidor y de los dispositivos', dispositivos_panel)
     def caida_servidor():
         SRV['p'].terminate(); SRV['p'].wait(10)
         T.nav('avisos'); T.a('a.new'); T.fill('desc', 'Con el servidor caído'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(500); T.close_sheets()

@@ -12,7 +12,8 @@ export const TAREA = 'GestorUCO Servidor';
 export const SCHTASKS = process.env.UCO_SCHTASKS || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe');
 export const TAILSCALE = process.env.UCO_TAILSCALE || win32.join(process.env.ProgramFiles || 'C:\\Program Files', 'Tailscale', 'tailscale.exe');
 export const CMD = win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe');
-export const ICACLS = win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'icacls.exe');
+export const ICACLS = process.env.UCO_ICACLS || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'icacls.exe');
+export const TAKEOWN = process.env.UCO_TAKEOWN || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'takeown.exe');
 export const POWERCFG = process.env.UCO_POWERCFG || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'powercfg.exe');
 export const NODE = process.env.UCO_NODE || process.execPath;
 export const RUTAS = {
@@ -97,7 +98,8 @@ export const utf16 = s => Buffer.from('\ufeff' + s.replace(/\r?\n/g, '\r\n'), 'u
 
 /** Ejecuta una orden y devuelve { code, out } (con eco opcional en pantalla) */
 export function run(exe, args, { eco = false } = {}) {
-  const r = spawnSync(exe, args, { encoding: 'utf8', stdio: eco ? 'inherit' : 'pipe', windowsHide: true });
+  // Nunca se queda esperando: sin entrada y con un tiempo máximo (p. ej. si una orden pidiera confirmación)
+  const r = spawnSync(exe, args, { encoding: 'utf8', stdio: eco ? ['ignore', 'inherit', 'inherit'] : ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 300000 });
   if (r.error) return { code: -1, out: String(r.error.message) };
   return { code: r.status ?? -1, out: (r.stdout || '') + (r.stderr || '') };
 }

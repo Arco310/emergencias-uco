@@ -17,7 +17,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { crearActualizador } from './actualizador.mjs';
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 /** Versión mínima de la aplicación compatible con este servidor (las anteriores deben actualizarse) */
 const MIN_CLIENTE = '1.1.0';
 /** Versión del formato de los datos del servidor (migraciones al arrancar) */
@@ -73,12 +73,19 @@ function secretoServidor() {
 const normCodigo = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 // Límite de intentos con código erróneo (global: detrás de Tailscale todas las peticiones llegan desde 127.0.0.1)
 const fallos = { n: 0, desde: 0 };
+/** Lee un código protegido; si no se puede, lo explica (en vez de un «Error interno») */
+function leerCodigo(fn) {
+  try { return normCodigo(fn()); }
+  catch (e) { throw Object.assign(new Error('El servidor no puede leer sus códigos (permisos de la carpeta datos\\_servidor: ' + e.code + '). Vuelve a ejecutar el instalador en el PC servidor.'), { status: 500 }); }
+}
+/** ¿Puede el servidor leer sus archivos protegidos? (lo comprueban el instalador y el panel de actualizaciones) */
+function archivosProtegidos() { try { codigoAdmin(); codigoPruebas(); secretoServidor(); return 'ok'; } catch { return 'error'; } }
 function comprobarCodigo(codigo, { pruebas = false } = {}) {
   if (Date.now() - fallos.desde > 15 * 60000) { fallos.n = 0; fallos.desde = Date.now(); }
   if (fallos.n >= 10) throw Object.assign(new Error('Demasiados intentos fallidos; espera 15 minutos'), { status: 429 });
   const c = normCodigo(codigo);
-  if (c && safeEq(c, normCodigo(codigoAdmin()))) return 'admin';
-  if (c && pruebas && safeEq(c, normCodigo(codigoPruebas()))) return 'pruebas';
+  if (c && safeEq(c, leerCodigo(codigoAdmin))) return 'admin';
+  if (c && pruebas && safeEq(c, leerCodigo(codigoPruebas))) return 'pruebas';
   fallos.n++;
   throw Object.assign(new Error('Código de administración del servidor incorrecto'), { status: 403 });
 }
@@ -344,7 +351,7 @@ async function api(req, res, url) {
   // Versiones: la app comprueba aquí si debe actualizarse y si el servidor está actualizándose
   if (parts[2] === 'version' && req.method === 'GET') {
     const e = ACT.estado();
-    return send(res, 200, { ok: true, version: VERSION, minCliente: MIN_CLIENTE, esquema: ESQUEMA, lanzador: e.lanzador, mantenimiento: ACT.mantenimiento, despliegue: { estado: e.despliegue.estado, fecha: e.despliegue.fecha }, disponible: e.actualizable ? e.disponible.version : null });
+    return send(res, 200, { ok: true, version: VERSION, minCliente: MIN_CLIENTE, esquema: ESQUEMA, lanzador: e.lanzador, mantenimiento: ACT.mantenimiento, despliegue: { estado: e.despliegue.estado, fecha: e.despliegue.fecha }, disponible: e.actualizable ? e.disponible.version : null, archivos: archivosProtegidos() });
   }
   // Durante el reinicio controlado de una actualización no se aceptan escrituras (los dispositivos reintentan)
   if (ACT.mantenimiento && req.method !== 'GET') return send(res, 503, { error: 'El servidor se está actualizando: vuelve a intentarlo en un minuto' }, { 'Retry-After': '30' });
@@ -449,7 +456,8 @@ const server = args.cert && args.key
   : http.createServer(handler);
 migrarDatos();
 server.listen(PORT, HOST, () => {
-  codigoAdmin(); codigoPruebas(); secretoServidor();
+  // Si no se pueden leer los códigos, el servidor sigue sincronizando los preventivos y lo avisa
+  if (archivosProtegidos() !== 'ok') log('AVISO: no se pueden leer los códigos del servidor en', path.dirname(ADMIN_FILE), '— vuelve a ejecutar el instalador en este PC (repara los permisos)');
   log(`Servidor de sincronización UCO ${VERSION} en ${args.cert ? 'https' : 'http'}://${HOST}:${PORT}  datos: ${DATA}${STATIC ? '  app: ' + STATIC : ''}`);
 });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { log('Deteniendo servidor'); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000).unref(); });

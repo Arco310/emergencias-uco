@@ -1,0 +1,51 @@
+{
+ "fecha": "2026-11-18 17:17:03",
+ "app": "https://desktop-g5s6ch9.tailb6d0d2.ts.net/?entorno=pruebas",
+ "resultados": [
+  {
+   "comprobacion": "Servidor real: versión y estado",
+   "resultado": "CORRECTA",
+   "detalle": "servidor 1.2.0 con lanzador, esquema 2, versión mínima de la app 1.1.0; sin espacio de pruebas previo"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: activación del espacio de pruebas",
+   "resultado": "CORRECTA",
+   "detalle": "espacio central de pruebas activado con el código de pruebas; separado del espacio real"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: alta de usuario",
+   "resultado": "CORRECTA",
+   "detalle": "usuario creado y su cuenta publicada en el servidor real"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: dispositivo nuevo con usuario y contraseña",
+   "resultado": "CORRECTA",
+   "detalle": "el móvil entra solo con usuario y contraseña a través de Internet"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: preventivo compartido que aparece solo",
+   "resultado": "CORRECTA",
+   "detalle": "creado en la tablet sin pedir servidor; aparece solo en el móvil con sus 2 unidades"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: avisos simultáneos",
+   "resultado": "CORRECTA",
+   "detalle": "números 1 y 2 asignados por el servidor real, sin duplicados"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: desconexión y reconexión",
+   "resultado": "CORRECTA",
+   "detalle": "trabajo sin red en el móvil, reconexión y convergencia sin pérdidas"
+  },
+  {
+   "comprobacion": "CLAUDE_TEST: panel Sistema → Actualizaciones",
+   "resultado": "A REVISAR",
+   "detalle": "' Dispositivos del servidor central\\n\\nVersión de la aplicación con la que se conectó cada dispositivo por última vez. Se actualizan solos al abrir la aplicación.\\n\\nDispositivo\\tVersión\\tEstado\\tÚltima conexión\\nDispositivo\\t1.2.0\\tAl día\\"
+  },
+  {
+   "comprobacion": "Limpieza: espacio de pruebas borrado",
+   "resultado": "CORRECTA",
+   "detalle": "1 preventivo(s) de prueba borrado(s)"
+  }
+ ]
+}
