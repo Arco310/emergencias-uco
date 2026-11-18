@@ -83,7 +83,7 @@ Las versiones siguientes ya no requieren el instalador (punto 9).
 
 ## 10. Recuperación si una actualización falla
 
-- **Servidor:** si la versión nueva no responde con la versión esperada durante el periodo de prueba, el lanzador vuelve sola a la anterior. A mano: Sistema → Actualizaciones → «Volver a la versión anterior». Copias de datos en `C:\ProgramData\GestorUCO\copias\datos-*` (5) y registro en `datos\_servidor\despliegues.log`.
+- **Servidor:** si la versión nueva no responde con la versión esperada durante el periodo de prueba, el lanzador vuelve solo a la anterior. A mano: Sistema → Actualizaciones → «Volver a la versión anterior». Copias de datos en `C:\ProgramData\GestorUCO\copias\datos-*` (5) y registro en `datos\_servidor\despliegues.log`.
 - **App:** si una versión no arranca aparece la pantalla de recuperación: «Reintentar», «Usar la versión anterior» o «Buscar una versión corregida». Los datos no se tocan. Antes de migrar datos se crea una copia de seguridad (Sistema → Copias de seguridad).
 
 ## 11. Ejecutar y acceder
@@ -103,7 +103,7 @@ Alta y clave de recuperación, permisos del dispositivo, preventivos independien
 | Punto | Resultado |
 |---|---|
 | 1–2. Funcionalidades probadas y pruebas | Las de los puntos 6 y 12: 94 + 68 pruebas automáticas ejecutadas |
-| 3–4. Errores encontrados y corregidos | Punto 7 (todos corregidos con prueba que lo comprueba) |
+| 3–4. Errores encontrados y corregidos | Punto 7: todos corregidos; los de código quedan cubiertos por las pruebas |
 | 5. Errores pendientes | Ninguno conocido en el código; pendientes de entorno en el punto 7 |
 | 6. Capturas | `docs/evidencias/1.2.0/` (teselas sustituidas por cuadrícula en el entorno de pruebas) |
 | 7. Sincronización | Superada: dos dispositivos, avisos simultáneos sin duplicados, conflictos, caída del servidor |
