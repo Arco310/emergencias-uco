@@ -77,14 +77,22 @@ class App:
     def toast_text(self):
         return ' | '.join(self.pg.locator('#toasts .toast').all_inner_texts())
     # ---- flujos ----
+    def rellenar(self, pares):
+        """Rellena campos de la pantalla de acceso y comprueba que conservan su valor. Al arrancar, la pantalla
+        puede repintarse por un evento (service worker, versión, servidor central): la aplicación conserva lo
+        escrito, pero el valor que Playwright escribe de golpe puede caer en el campo que se está sustituyendo."""
+        for _ in range(4):
+            for sel, val in pares:
+                if self.pg.input_value(sel) != val: self.pg.fill(sel, val)
+            self.pg.wait_for_timeout(150)
+            if all(self.pg.input_value(sel) == val for sel, val in pares): return
+        raise AssertionError('los campos no conservan lo escrito: ' + ', '.join(sel for sel, val in pares if self.pg.input_value(sel) != val))
     def setup(self, nombre, usuario, pw, dev, code, codigo=None):
         self.goto(); self.pg.wait_for_selector('form[data-f="auth.setup"], form[data-f="auth.central"]', timeout=20000)
         if self.pg.locator('form[data-f="auth.central"]').count():
             # el servidor central ya está activo: este dispositivo se configura sin él
             self.pg.click('[data-a="auth.local"]'); self.pg.wait_for_selector('form[data-f="auth.setup"]')
-        self.pg.fill('#f_nombre', nombre); self.pg.fill('#f_usuario', usuario); self.pg.fill('#f_p1', pw); self.pg.fill('#f_p2', pw)
-        self.pg.fill('#f_dev', dev); self.pg.fill('#f_code', code)
-        if codigo: self.pg.fill('#f_codigo', codigo)
+        self.rellenar([('#f_nombre', nombre), ('#f_usuario', usuario), ('#f_p1', pw), ('#f_p2', pw), ('#f_dev', dev), ('#f_code', code)] + ([('#f_codigo', codigo)] if codigo else []))
         # El alta deriva claves (PBKDF2): con el equipo cargado puede tardar más de lo normal
         self.pg.click('form[data-f="auth.setup"] button.primary'); self.pg.wait_for_selector('#recok', timeout=45000)
         self.recovery = self.pg.inner_text('#rec')
@@ -97,15 +105,15 @@ class App:
     def central_login(self, usuario, pw, dev=''):
         """Dispositivo nuevo con el servidor central activo: solo usuario y contraseña"""
         self.pg.wait_for_selector('form[data-f="auth.central"]', timeout=20000)
-        self.pg.fill('#f_u', usuario); self.pg.fill('#f_p', pw)
-        if dev: self.pg.click('form[data-f="auth.central"] summary'); self.pg.fill('#f_dev', dev)
+        self.rellenar([('#f_u', usuario), ('#f_p', pw)])
+        if dev: self.pg.click('form[data-f="auth.central"] summary'); self.rellenar([('#f_u', usuario), ('#f_p', pw), ('#f_dev', dev)])
         self.pg.click('form[data-f="auth.central"] button.primary')
     def login(self, usuario, pw):
         self.pg.wait_for_selector('form[data-f="auth.login"]')
         u = self.pg.locator('#f_u')
-        if u.evaluate('e => e.tagName') == 'SELECT': u.select_option(usuario)
-        else: u.fill(usuario)
-        self.pg.fill('#f_p', pw); self.pg.click('form[data-f="auth.login"] button.primary'); self.pg.wait_for_selector('.top', timeout=20000); self.pg.wait_for_timeout(500)
+        if u.evaluate('e => e.tagName') == 'SELECT': u.select_option(usuario); self.rellenar([('#f_p', pw)])
+        else: self.rellenar([('#f_u', usuario), ('#f_p', pw)])
+        self.pg.click('form[data-f="auth.login"] button.primary'); self.pg.wait_for_selector('.top', timeout=20000); self.pg.wait_for_timeout(500)
     def logout(self):
         self.pg.click('[data-a="user.menu"]'); self.a('session.logout'); self.pg.wait_for_selector('form[data-f="auth.login"]')
     def new_prev(self, nombre, modalidad='independiente', activar=True, server='', origen=None):

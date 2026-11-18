@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-18 17:44:41",
+ "fecha": "2026-11-18 18:20:06",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave 5B2EJ…"
+   "detalle": "clave 6WX0Q…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -50,7 +50,7 @@
   {
    "prueba": "Descansos: temporizador real que se recupera tras recargar",
    "resultado": "SUPERADA",
-   "detalle": "cuenta atrás 1:00 → tras recargar 0:56; unidad en gris"
+   "detalle": "cuenta atrás 0:59 → tras recargar 0:56; unidad en gris"
   },
   {
    "prueba": "Avisos: finalizar y apartado de finalizados",
@@ -155,7 +155,7 @@
   {
    "prueba": "Compartido: desconexión, trabajo local y reconexión",
    "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional AH-2), reconexión y convergencia sin pérdidas"
+   "detalle": "trabajo sin red (ref. provisional EH-2), reconexión y convergencia sin pérdidas"
   },
   {
    "prueba": "Compartido: resolución de conflictos",

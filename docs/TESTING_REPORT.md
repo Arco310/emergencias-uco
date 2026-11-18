@@ -1,4 +1,4 @@
-# Informe de pruebas — Evolución integral (versión 1.2.0)
+# Informe de pruebas — Evolución integral (versión 1.2.1)
 
 Fecha: 18/11/2026. Solo se recogen pruebas ejecutadas de verdad, con su resultado real.
 
@@ -10,31 +10,36 @@ Fecha: 18/11/2026. Solo se recogen pruebas ejecutadas de verdad, con su resultad
 | Navegador | Google Chrome for Testing 153 con Playwright 1.63, sin interfaz |
 | Dispositivos emulados | Móvil 390×844 táctil; tablet 1280×800 táctil; Chrome para Android 14 (agente de usuario, vibración, notificaciones, bloqueo de pantalla y selector de archivos simulados) |
 | Servidor | `server/server.mjs` local con datos temporales y código de administración de pruebas. Para las actualizaciones del servidor, una instalación temporal con la misma estructura que en Windows y una API de versiones local con el formato de GitHub. |
-| Datos | Ficticios, creados y borrados por cada prueba. **No se ha tocado el servidor real ni ningún dato real.** |
+| Servidor real | DESKTOP-G5S6CH9 (Windows 10) con la 1.2.1 y el lanzador, por HTTPS (Tailscale Funnel). Solo se usa su **entorno de pruebas aislado** (`?entorno=pruebas`, perfil CLAUDE_TEST, código de pruebas que no puede tocar el espacio real). |
+| Datos | Ficticios, creados y borrados por cada prueba. En el servidor real, el espacio de pruebas y sus preventivos se borran al terminar. **No se ha tocado ningún dato real.** |
 
-Ejecución: `npm test` (unidad, servidor, integración, instalador) y `python3 tests/e2e/run_e2e.py [1-6]` (navegador; capturas en `tests/e2e/capturas/`, resultados en `tests/e2e/resultados.json`).
+Ejecución: `npm test` (unidad, servidor, integración, instalador), `python3 tests/e2e/run_e2e.py [1-6]` (navegador; capturas en `tests/e2e/capturas/`, resultados en `tests/e2e/resultados.json`) y `python3 tests/checks/central_en_vivo.py` (en vivo contra el servidor real; resultados en `tests/checks/resultados-central-en-vivo.json`).
 
 ## 2. Resultados
 
 | Conjunto | Pruebas | Superadas |
 |---|---|---|
-| Unidad, servidor, integración e instalador (`npm test`, 13 archivos) | 94 | **94** |
-| Navegador (6 escenarios) | 68 | **68** |
+| Unidad, servidor, integración e instalador (`npm test`, 14 archivos) | 97 | **97** |
+| Navegador (6 escenarios) | 69 | **69** |
 | — 1. Móvil, preventivo independiente (funciones anteriores) | 24 | 24 |
-| — 2. Tablet + móvil con el servidor central, y 3. Chrome para Android | 18 | 18 |
+| — 2. Tablet + móvil con el servidor central | 14 | 14 |
+| — 3. Chrome para Android | 5 | 5 |
 | — 4. Tipos de recurso, OTROS y unidades plantilla | 6 | 6 |
 | — 5. Cartografía y plano de coordinación | 12 | 12 |
 | — 6. Actualizaciones de la aplicación | 8 | 8 |
+| En vivo con el servidor real, entorno CLAUDE_TEST (§4) | 10 | **10** |
 
-Pruebas nuevas de esta evolución: `central_cuentas` (13), `central_config` (4), `actualizaciones` (7), `instalador_windows` (3), `recursos_plantillas` (7), `cartografia` (4), `migraciones_versiones` (8) y los escenarios de navegador 2 (parte central), 4, 5 y 6.
+Ejecución final: 18/11/2026, con el código de la 1.2.1: `npm test` 97/97 y navegador 69/69 (terminada a las 18:20); en vivo 10/10 (18:00 y 21:55).
+
+Pruebas nuevas de esta evolución: `central_cuentas` (13), `central_config` (4), `actualizaciones` (7), `instalador_windows` (4), `archivos_protegidos` (2), `recursos_plantillas` (7), `cartografia` (4), `migraciones_versiones` (8), los escenarios de navegador 2 (parte central), 4, 5 y 6, y la prueba en vivo `tests/checks/central_en_vivo.py` (10).
 
 ## 3. Escenarios de aceptación (apartado de validación del pliego)
 
 | Nº | Escenario | Prueba | Resultado |
 |---|---|---|---|
-| 1 | Crear un preventivo sin pedir dirección del servidor | Navegador 2: «crear preventivo sin pedir servidor» | Superada |
+| 1 | Crear un preventivo sin pedir dirección del servidor | Navegador 2: «crear preventivo sin pedir servidor»; en vivo: «preventivo compartido que aparece solo» | Superada (también en vivo) |
 | 2 | Varios preventivos usan el mismo servidor central | Navegador 2: «varios preventivos usan el mismo servidor» | Superada |
-| 3 | Diferentes dispositivos comparten la información | Navegador 2: «aparece solo en el otro dispositivo», «avisos simultáneos sin duplicados» | Superada |
+| 3 | Diferentes dispositivos comparten la información | Navegador 2: «aparece solo en el otro dispositivo», «avisos simultáneos sin duplicados»; en vivo: las mismas por Internet | Superada (también en vivo) |
 | 4 | El servidor se desconecta y la app sigue trabajando | Navegador 2: «caída temporal del servidor» (se detiene el proceso, se trabaja, vuelve y converge) | Superada |
 | 5 | Tipo de recurso personalizado tras reiniciar | Navegador 4: «persistencia de tipos y plantillas» | Superada |
 | 6 | El tipo nuevo aparece en otro dispositivo | Navegador 2: «el tipo nuevo aparece en el otro dispositivo»; `central_config` | Superada |
@@ -50,26 +55,49 @@ Pruebas nuevas de esta evolución: `central_cuentas` (13), `central_config` (4),
 | 16 | Aviso haciendo clic en el plano | Navegador 5: «aviso haciendo clic en el mapa» | Superada |
 | 17 | Aviso dibujando una zona | Navegador 5: «aviso por zona» | Superada |
 | 18 | Ambos avisos en el sistema general | Ídem (comprueba el listado de avisos) | Superada |
-| 19 | Mismo preventivo en dos dispositivos | Navegador 2 | Superada |
-| 20 | Un dispositivo sin conexión sincroniza al volver | Navegador 2: «desconexión, trabajo local y reconexión», «resolución de conflictos» | Superada |
-| 21 | Publicar una versión y que el servidor se actualice solo | `actualizaciones`: descarga, verificación, prueba con copia, reinicio controlado, periodo de prueba | Superada (API simulada; ver §4) |
+| 19 | Mismo preventivo en dos dispositivos | Navegador 2; en vivo (tablet y móvil contra el servidor real) | Superada (también en vivo) |
+| 20 | Un dispositivo sin conexión sincroniza al volver | Navegador 2: «desconexión, trabajo local y reconexión», «resolución de conflictos»; en vivo: «desconexión y reconexión» | Superada (también en vivo) |
+| 21 | Publicar una versión y que el servidor se actualice solo | `actualizaciones`: descarga, verificación, prueba con copia, reinicio controlado, periodo de prueba. En vivo: el servidor real consulta GitHub real sin error | Superada (descarga con API simulada; ver §4) |
 | 22 | Los dispositivos reciben la versión nueva | Navegador 6: detección, aviso con sesión, aplicación sola sin sesión | Superada |
 | 23 | La actualización no borra datos | `actualizaciones` (datos y copia previa), navegador 6 (mismo preventivo y unidades), `migraciones_versiones` | Superada |
 | 24 | Fallo durante la actualización → versión anterior | `actualizaciones`: versión que falla en el periodo de prueba → vuelve sola; navegador 6: versión que no arranca → recuperación | Superada |
 | 25 | Las funciones anteriores siguen funcionando | Navegador 1 y 3 completos, `reglas`, `sync_y_datos`, `servidor`, `integracion` | Superada |
 
-## 4. Lo que no se ha podido probar aquí
+## 4. Prueba en vivo con el servidor real (perfil CLAUDE_TEST)
 
-- **Servidor real**: sigue en la 1.0.3 porque instalar la 1.2.0 exige aprobar el aviso de permisos de Windows (UAC) en el propio PC. La prueba en vivo con CLAUDE_TEST queda para después de esa instalación.
+18/11/2026 a las 18:00, con la 1.2.1 instalada en el PC servidor, y repetida a las 21:55 tras 4 horas en servicio. Tablet y móvil emulados entran por Internet en `https://desktop-g5s6ch9.tailb6d0d2.ts.net/?entorno=pruebas`. Resultado: **10/10** las dos veces.
+
+| Comprobación | Resultado |
+|---|---|
+| Servidor real: versión y estado | 1.2.1 con lanzador, esquema 2, versión mínima de la app 1.1.0, códigos protegidos legibles; sin espacio de pruebas previo |
+| Activación del espacio de pruebas | Con el código de pruebas; el espacio real no se ve ni se toca |
+| Alta de usuario | Creado en la tablet; su cuenta queda publicada en el servidor real |
+| Dispositivo nuevo con usuario y contraseña | El móvil entra solo con usuario y contraseña, con su rol |
+| Preventivo compartido que aparece solo | Creado en la tablet sin pedir servidor; aparece solo en el móvil con sus 2 unidades |
+| Avisos simultáneos | Números 1 y 2 asignados por el servidor real, sin duplicados |
+| Desconexión y reconexión | El móvil trabaja sin red, se reconecta y converge sin pérdidas |
+| Panel Sistema → Actualizaciones | Servidor 1.2.1 con despliegue activo; los 2 dispositivos con su nombre y su versión (1.2.1); «Comprobar versiones publicadas» hace una consulta nueva a GitHub real (cambia «Última consulta») y muestra «Aún no hay versiones publicadas», sin error |
+| Sin errores de JavaScript | Ninguno en los dos dispositivos |
+| Limpieza | Espacio de pruebas y su preventivo borrados del servidor |
+
+Con la 1.2.0 en el servidor, la misma prueba dio 8/9: la lista de dispositivos mostraba «Dispositivo» en lugar del nombre (corregido en la 1.2.1).
+
+## 5. Lo que no se ha podido probar aquí
+
+- **Actualización del servidor desde una versión publicada de verdad en GitHub**: aún no hay ninguna (ver §8). Se ha comprobado en vivo que el servidor consulta GitHub real y trata bien la ausencia de versiones; la descarga, la verificación y la instalación están probadas con una API local con el mismo formato.
 - **Google Maps Platform con clave real** (no hay clave). Se ha probado la configuración de la clave (validación, guardado cifrado, auditoría y retirada) y el funcionamiento completo con OpenStreetMap.
 - **Dispositivos físicos** (Android real). Las pruebas emulan móvil, tablet y Chrome para Android.
-- La actualización del servidor contra **GitHub real** se comprueba al publicar la 1.2.0 (ver §6).
+- El **espacio central real** no se ha usado: lo activa el usuario con su código y su contraseña.
 
-## 5. Fallos encontrados por las pruebas y corregidos
+## 6. Fallos encontrados por las pruebas y corregidos
 
-Ver `docs/IMPLEMENTATION_STATUS.md` §5. Los más relevantes de esta fase: el mapa tapaba las hojas abiertas encima (la prueba falla sin la corrección y pasa con ella); los repintados por eventos borraban lo que se estaba escribiendo; la instancia de prueba de una versión del servidor heredaba el entorno del lanzador; faltaba la copia de datos previa en el actualizador.
+Ver `docs/IMPLEMENTATION_STATUS.md` §5. Los más relevantes: el mapa tapaba las hojas abiertas encima (la prueba falla sin la corrección y pasa con ella); los repintados por eventos borraban lo que se estaba escribiendo; la instancia de prueba de una versión del servidor heredaba el entorno del lanzador; faltaba la copia de datos previa en el actualizador. En el PC real (1.2.1): el instalador dejaba los códigos del servidor sin poder leerse; «sin versiones publicadas» aparecía como error; los dispositivos aparecían sin nombre.
 
-## 6. Capturas (`docs/evidencias/1.2.0/`)
+**Fallo de las propias pruebas:** en una ejecución completa, el escenario 6 falló al dar de alta el dispositivo (62/69) y por separado pasó 8/8. Causa comprobada registrando los repintados de la pantalla: poco después de cargar (hasta ~2 s) se repinta por un evento y el valor que Playwright escribe de golpe en un campo puede caer en el que se está sustituyendo (la contraseña quedaba vacía). Quien teclea no se ve afectado: la aplicación conserva lo escrito. Las pruebas ahora comprueban cada campo y lo vuelven a escribir si hace falta.
+
+**Limitación detectada en vivo, sin corregir:** tras instalar una versión nueva del servidor, el panel muestra el resultado de la última consulta hecha por la versión anterior (aquí, el error 404 que mostraba la 1.2.0) hasta la siguiente consulta automática (cada 6 h) o hasta pulsar «Comprobar versiones publicadas». No afecta al funcionamiento; queda propuesta para la próxima versión (consultar al arrancar una versión nueva).
+
+## 7. Capturas (`docs/evidencias/1.2.0/` y `docs/evidencias/1.2.1/`)
 
 En el entorno de pruebas no hay acceso a los servidores de mapas: las teselas se sustituyen por una cuadrícula gris; la geometría, las coordenadas y la interacción son las reales.
 
@@ -84,11 +112,13 @@ En el entorno de pruebas no hay acceso a los servidores de mapas: las teselas se
 | `fase2-02-upr-creada.png`, `fase2-03-sector-otros.png`, `fase2-04-unidades-plantilla.png` | Unidad plantilla UPR, sector OTROS y configuración de plantillas |
 | `tablet-00-central-activado.png`, `movil2-00-acceso-central.png`, `movil2-01-movil-disponible.png` | Servidor central: activación, acceso con usuario y contraseña, preventivo que aparece solo |
 | `tablet-03-conflicto.png` | Conflicto detectado y pendiente de resolver |
+| `1.2.1/vivo-01-activado.png` | En vivo: espacio de pruebas activado en el servidor real (banda roja CLAUDE_TEST) |
+| `1.2.1/vivo-02-actualizaciones.png` | En vivo: Sistema → Actualizaciones con el servidor real 1.2.1 y «Aún no hay versiones publicadas» |
 
 Las capturas de la 1.0.3 están en `docs/evidencias/1.0.3/`.
 
-## 7. Publicación de la 1.2.0
+## 8. Publicación y despliegue de la 1.2.1
 
-- **Aplicación 1.2.0 publicada en GitHub Pages** (compilación `83698b53b0b2`, comprobada en la rama `gh-pages`).
-- **Versión en GitHub Releases: no publicada.** La plataforma deniega a esta sesión crear versiones en GitHub (HTTP 403, «Creating, editing, or deleting releases is not permitted for this session type»). No se ha intentado eludir: se ha añadido el flujo `.github/workflows/publicar-version.yml`, que lanza una persona desde GitHub (Actions → «Publicar versión»), ejecuta las pruebas y publica con la misma herramienta.
-- Por lo mismo, la comprobación del actualizador contra GitHub real queda pendiente de esa publicación; la cadena completa está probada con una API local con el mismo formato (`tests/server/actualizaciones.test.mjs`, 7/7).
+- **Aplicación 1.2.1 en GitHub Pages y en el servidor** (compilación `e8469f3a85a8`): comprobado que ambos sirven el mismo `version.json`.
+- **Servidor 1.2.1 instalado en el PC servidor** el 18/11 a las 17:52 con el instalador (aviso de permisos de Windows aprobado en el PC). `/api/v1/version`: 1.2.1, lanzador activo, despliegue activo, `archivos: ok`.
+- **Versión en GitHub Releases: no publicada.** La plataforma deniega a esta sesión crear versiones en GitHub (HTTP 403, «Creating, editing, or deleting releases is not permitted for this session type»). No se ha intentado eludir: el flujo `.github/workflows/publicar-version.yml` lo lanza una persona desde GitHub (Actions → «Publicar versión» → `1.2.1`), ejecuta las pruebas y publica con la misma herramienta.

@@ -1,7 +1,7 @@
 # Estado de la implementación — Evolución integral (pliego «Prompt maestro» + apartado 18)
 
 Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo desde otra sesión.
-Última actualización: 18/11/2026 (versión 1.2.0).
+Última actualización: 18/11/2026 (versión 1.2.1, instalada en el PC servidor).
 
 ## 1. Auditoría técnica del proyecto existente (versión 1.0.3)
 
@@ -46,12 +46,12 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 
 | Fase | Estado | Notas |
 |---|---|---|
-| 1. Servidor central automático | Terminada; **instalación en el PC servidor pendiente de la aprobación UAC** | Cuentas comunes, espacio principal, código de pruebas, servidor preconfigurado, preventivos que aparecen solos, instalador con copia y vuelta atrás. |
+| 1. Servidor central automático | Terminada e **instalada en el PC servidor** (1.2.1 con el lanzador, 18/11 17:52) | Cuentas comunes, espacio principal, código de pruebas, servidor preconfigurado, preventivos que aparecen solos, instalador con copia y vuelta atrás. |
 | 2. Tipos de recurso, OTROS y unidades plantilla | Terminada | Tipos generales compartidos y persistentes, sector OTROS con nombre libre, unidades plantilla UPR/SVB/VIRES configurables (solo piden el número). |
 | 3. Cartografía y biblioteca de planos | Terminada (Google sin probar con clave real) | Buscador, selección de zona, plano georreferenciado, biblioteca Bernabéu/Metropolitano/Sol + guardados, clave de Google en Configuración general. |
 | 4. Plano interactivo de coordinación | Terminada | Arrastre (también desde pendientes), doble clic/pulsación larga para la clave, avisos por punto o zona, sincronización y bitácora. |
-| 5. Web, PWA y actualizaciones | Terminada | App (D8–D10) y servidor (D7, D7b, D11); panel Sistema → Actualizaciones. Versión 1.2.0. |
-| 6. Validación integral | Terminada en el entorno de pruebas | Los 25 escenarios de aceptación con pruebas automáticas (ver `docs/TESTING_REPORT.md`). Pendiente la prueba en vivo con el servidor real cuando esté instalada la 1.2.0. |
+| 5. Web, PWA y actualizaciones | Terminada | App (D8–D10) y servidor (D7, D7b, D11); panel Sistema → Actualizaciones. Versión 1.2.1 en GitHub Pages y en el servidor. |
+| 6. Validación integral | Terminada | Los 25 escenarios de aceptación con pruebas automáticas y la prueba en vivo con el servidor real en el entorno CLAUDE_TEST: 10/10 (ver `docs/TESTING_REPORT.md`). |
 
 ## 4. Bloqueos que requieren intervención humana
 
@@ -59,8 +59,8 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 |---|---|
 | Clave de Google Maps Platform (requiere facturación) | Pendiente del usuario; mientras tanto, OpenStreetMap. Se configura en Configuración general → Cartografía (restringirla por dominio en Google Cloud). |
 | Confirmar que se mantiene el acceso por Internet (Tailscale Funnel) | **Resuelto**: se mantiene (18/11) |
-| **Publicar la versión 1.2.0 en GitHub Releases** | Esta sesión no tiene permiso para crear versiones en GitHub (respuesta 403 de la plataforma). Se lanza desde GitHub → Actions → «Publicar versión» → Run workflow → `1.2.0`. La aplicación 1.2.0 ya está publicada en GitHub Pages. |
-| **Instalar la 1.2.0 en el PC servidor** (una sola vez) | El instalador necesita permisos de administrador (UAC). La pantalla segura de UAC no se puede manejar a distancia: el usuario debe aprobarla en el PC. Desde esa instalación, las siguientes versiones se instalan desde la app. El servidor sigue en la 1.0.3 y funcionando. |
+| **Publicar la versión 1.2.1 en GitHub Releases** | Esta sesión no tiene permiso para crear versiones en GitHub (respuesta 403 de la plataforma). Se lanza desde GitHub → Actions → «Publicar versión» → Run workflow → `1.2.1`. La aplicación 1.2.1 ya está publicada en GitHub Pages. |
+| Instalar el servidor con el lanzador en el PC servidor (una sola vez) | **Resuelto** (18/11 17:52): 1.2.1 instalada con el instalador; el aviso de permisos de Windows (UAC) se aprobó en el PC. Las siguientes versiones se instalan desde la app. |
 | Activar el espacio central real (una vez, con el código de administración) | Lo hace el usuario: exige elegir su propia contraseña de administrador; las pruebas usan solo el espacio CLAUDE_TEST |
 
 ## 5. Errores detectados y corregidos (esta evolución)
@@ -82,6 +82,8 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | **En el PC real, el servidor no podía leer su código de administración** («Error interno» al activar el espacio central) y la 1.2.0 se habría detenido en el siguiente reinicio | El instalador aplicaba los permisos con herencia archivo por archivo (`icacls … /T`): los archivos que ya existían quedaron sin permisos para nadie | Reparado en el PC (propiedad para Administradores, permisos en la carpeta y herencia restablecida; comprobado con `icacls`). En la 1.2.1 el instalador lo hace así y repara instalaciones afectadas antes de nada; el servidor ya no se detiene si no puede leerlos y lo indica en `/api/v1/version` (`archivos`) |
 | «No se pudo descargar …/releases/latest (404)» en el panel | Sin versiones publicadas GitHub responde 404 | Se muestra «Aún no hay versiones publicadas» |
 | La lista de dispositivos mostraba «Dispositivo» para un dispositivo recién dado de alta | El primer latido salía antes de guardar el nombre y no se repetía hasta pasado un minuto | El latido se repite en cuanto cambian el nombre o la versión |
+| La prueba en vivo daba por fallido el servidor 1.2.1 | Comprobaba versiones escritas a mano (1.2.0) | Lee las versiones esperadas del código del repositorio; comprueba también `archivos` y la consulta a GitHub |
+| Fallo intermitente de las pruebas de navegador al dar de alta un dispositivo (escenario 6 en una ejecución completa; antes, una vez el 3) | La pantalla de acceso se repinta por un evento poco después de cargar (registrado: hasta ~2 s); la aplicación conserva lo escrito, pero el valor que Playwright escribe de golpe puede caer en el campo que se está sustituyendo. No afecta a quien teclea | Las pruebas comprueban que cada campo conserva su valor y lo vuelven a escribir si hace falta (`rellenar` en `tests/e2e/run_e2e.py`) |
 
 ## 6. Cuestión estructural detectada (para decidir)
 
@@ -96,7 +98,8 @@ Recomendación: la 2 cuando se quiera la validación en servidor estricta (el se
 
 ## 7. Pendiente y limitaciones conocidas
 
-- **Instalar la 1.2.0 en el PC servidor** (UAC, ver §4) y, después, la prueba en vivo con el entorno CLAUDE_TEST contra el servidor real.
+- **Publicar la 1.2.1 en GitHub Releases** (ver §4). Hasta entonces, la descarga e instalación desde GitHub real no se ha podido probar (sí con una API local con el mismo formato).
+- Tras instalar una versión nueva del servidor, el panel muestra el resultado de la última consulta de la versión anterior hasta la siguiente (cada 6 h) o hasta pulsar «Comprobar versiones publicadas». Propuesta para la próxima versión: consultar al arrancar una versión nueva. No afecta al funcionamiento.
 - Google Maps Platform no se ha probado con una clave real (no hay clave); el código sigue la documentación oficial (sesión de Map Tiles API, atribución, Places API (New)).
 - Pruebas en dispositivos físicos: las de navegador emulan móvil, tablet y Chrome para Android; falta probar en un Android real.
 - Firma de las versiones con clave propia (además de HTTPS, repositorio oficial y SHA-256): mejora opcional; exige custodiar una clave privada.

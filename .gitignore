@@ -5,3 +5,4 @@ datos/
 datos-servidor/
 *.log
 tests/e2e/capturas/
+dist/release/

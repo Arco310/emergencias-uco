@@ -6,8 +6,13 @@ propio servidor y por Internet: activación, alta de usuario, dispositivo nuevo 
 preventivo compartido que aparece solo, avisos simultáneos, desconexión y reconexión, y el panel de
 actualizaciones con el servidor real. Al terminar BORRA el espacio de pruebas y sus preventivos.
 Uso: python3 tests/checks/central_en_vivo.py [URL_APP]"""
-import json, os, sys, time, urllib.request
+import json, os, re, sys, time, urllib.request
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'e2e'))
+# Versiones esperadas del servidor y de la aplicación: las del código del repositorio (no se fijan a mano)
+RAIZ = os.path.join(os.path.dirname(__file__), '..', '..')
+def _version(ruta, patron): return re.search(patron, open(os.path.join(RAIZ, ruta), encoding='utf-8').read()).group(1)
+VERSION = _version('server/server.mjs', r"const VERSION = '([^']+)'")
+APP_VERSION = _version('src/core/defaults.js', r"export const APP_VERSION = '([^']+)'")
 import run_e2e as E
 from playwright.sync_api import sync_playwright
 
@@ -55,10 +60,10 @@ def main():
         try:
             def servidor():
                 v = api('GET', '/version')
-                assert v['version'] == '1.2.0' and v['lanzador'] is True and v['mantenimiento'] is False, v
+                assert v['version'] == VERSION and v['lanzador'] is True and v['mantenimiento'] is False and v.get('archivos') == 'ok', v
                 c = api('GET', '/central?entorno=pruebas')
                 assert c.get('org') is None, 'ya hay un espacio de pruebas: ' + str(c.get('org'))
-                return f"servidor {v['version']} con lanzador, esquema {v['esquema']}, versión mínima de la app {v['minCliente']}; sin espacio de pruebas previo"
+                return f"servidor {v['version']} con lanzador, esquema {v['esquema']}, versión mínima de la app {v['minCliente']}, códigos protegidos legibles; sin espacio de pruebas previo"
             paso('Servidor real: versión y estado', servidor)
             def activar():
                 T.setup('Prueba Coordinación', 'coord', 'clave-de-prueba-1', 'Tablet CLAUDE_TEST', 'CT', codigo=CODIGO); T.perms(False)
@@ -115,12 +120,27 @@ def main():
             paso('CLAUDE_TEST: desconexión y reconexión', sin_red)
             def panel():
                 T.pg.evaluate('() => window.__UCO.go("actualizaciones")'); T.pg.wait_for_selector('[data-act="servidor"]', timeout=20000)
-                ok = esperar(lambda: T.pg.locator('[data-act="dispositivos"]').count() and '1.2.0' in T.pg.inner_text('[data-act="servidor"]'), 30)
-                assert ok, T.pg.inner_text('main')[:300]
+                ok = esperar(lambda: T.pg.locator('[data-act="dispositivos"]').count() and VERSION in T.pg.inner_text('[data-act="servidor"]'), 30)
+                assert ok, repr(T.pg.inner_text('main')[:300])
                 txt = T.pg.inner_text('[data-act="dispositivos"]')
-                assert 'Tablet CLAUDE_TEST' in txt and 'Móvil CLAUDE_TEST' in txt and txt.count('1.2.0') >= 2, repr(txt)
+                assert 'Tablet CLAUDE_TEST' in txt and 'Móvil CLAUDE_TEST' in txt and txt.count(APP_VERSION) >= 2, repr(txt)
+                # «Comprobar versiones publicadas» (sin código): el servidor real consulta GitHub y no muestra error
+                # aunque el repositorio aún no tenga versiones publicadas (404). Se espera a que cambie «Última
+                # consulta» para no dar por buena la consulta anterior (el servidor admite una consulta por minuto).
+                def ultima():
+                    m = re.search(r'Última consulta\s+(.+)', T.pg.inner_text('[data-act="servidor"]'))
+                    return m.group(1).strip() if m else ''
+                antes = ultima()
+                T.pg.locator('[data-act="servidor"] [data-a="act.srv"][data-accion="comprobar"]').click()
+                def comprobado():
+                    s = T.pg.inner_text('[data-act="servidor"]')
+                    sin_error = T.pg.locator('[data-act="servidor"] .note.bad').count() == 0
+                    return s if ultima() != antes and sin_error and any(t in s for t in ('Aún no hay versiones publicadas', 'Ninguna más reciente', 'Descargar y verificar')) else None
+                s = esperar(comprobado, 40)
+                assert s, repr(T.pg.inner_text('[data-act="servidor"]')[:400])
+                estado = 'aún no hay versiones publicadas' if 'Aún no hay versiones publicadas' in s else 'consulta correcta'
                 T.shot('vivo-02-actualizaciones')
-                return 'panel con el servidor real (1.2.0, despliegue activo) y los 2 dispositivos en la 1.2.0'
+                return f'panel con el servidor real ({VERSION}, despliegue activo), los 2 dispositivos con su nombre en la {APP_VERSION} y la consulta a GitHub sin error ({estado})'
             paso('CLAUDE_TEST: panel Sistema → Actualizaciones', panel)
             res('CLAUDE_TEST: sin errores de JavaScript', not (T.errors + M.errors), '; '.join((T.errors + M.errors)[:3]))
         except Exception:
