@@ -41,13 +41,13 @@ function seccionApp() {
   let estado;
   if (!s.soportado) estado = chip('No disponible en esta forma de abrir la aplicación', 'muted');
   else if (s.aplicando) estado = chip('Aplicando la versión nueva…', 'info');
-  else if (lista) estado = chip('Versión ' + (lista.version || 'nueva') + ' lista para aplicar', 'warn');
+  else if (lista) estado = chip((lista.version || 'Versión nueva') + ' lista para aplicar', 'warn');
   else if (s.comprobando) estado = chip('Comprobando…', 'info');
   else if (s.activa && s.activa.revertida) estado = chip('Usando la versión anterior (recuperación)', 'warn');
   else estado = chip('Al día', 'ok');
   const gestion = can('actualizaciones.gestionar');
   return `<section class="card pad" data-act="app"><h2>${icon('descargar')} Esta aplicación</h2>
-    <dl class="kv">${fila('Versión en este dispositivo', esc(APP_VERSION) + (s.activa && s.activa.build ? ` <small class="muted">(compilación ${esc(s.activa.build)})</small>` : ''))}
+    <dl class="kv">${fila('Versión', esc(APP_VERSION) + (s.activa && s.activa.build ? ` <small class="muted">(compilación ${esc(s.activa.build)})</small>` : ''))}
     ${fila('Estado', estado)}
     ${fila('Última comprobación', s.ultima ? fecha(s.ultima) : '—')}</dl>
     ${s.error ? `<p class="note warn">${esc(s.error)}</p>` : ''}
@@ -83,13 +83,13 @@ function seccionServidor() {
   const historial = srv && srv.despliegue && srv.despliegue.historial || [];
   return `<section class="card pad" data-act="servidor"><h2>${icon('sync')} Servidor central</h2>
     <dl class="kv">${fila('Versión instalada', esc(v.version || '?'))}
-    ${fila('Estado del servidor', v.mantenimiento ? chip('Reiniciándose para actualizarse', 'warn') : chip('En servicio', 'ok'))}
+    ${fila('Estado', v.mantenimiento ? chip('Reiniciándose para actualizarse', 'warn') : chip('En servicio', 'ok'))}
     ${fila('Último despliegue', chip(est[0], est[1]) + (dep.fecha ? ' · ' + fecha(dep.fecha) : ''))}
     ${ult ? fila('Resultado', esc((ult.version || '') + ': ' + ((RESULTADO[ult.resultado] || [ult.resultado])[0]) + (ult.motivo ? ' — ' + ult.motivo : ''))) : ''}
-    ${fila('Versión disponible', actualizable && disp ? chip(disp.version + (disp.publicada ? ' · ' + fecha(Date.parse(disp.publicada)) : ''), 'info') : 'Ninguna más reciente')}
-    ${fila('Versión mínima de la aplicación', esc(v.minCliente || '—'))}
-    ${fila('Esquema de datos del servidor', esc(String(v.esquema || '—')))}
-    ${srv && srv.comprobado ? fila('Última consulta de versiones', fecha(srv.comprobado)) : ''}</dl>
+    ${fila('Disponible', actualizable && disp ? chip(disp.version + (disp.publicada ? ' · ' + fecha(Date.parse(disp.publicada)) : ''), 'info') : 'Ninguna más reciente')}
+    ${fila('Versión mínima de la app', esc(v.minCliente || '—'))}
+    ${fila('Esquema de datos', esc(String(v.esquema || '—')))}
+    ${srv && srv.comprobado ? fila('Última consulta', fecha(srv.comprobado)) : ''}</dl>
     ${srv && srv.tarea ? `<p class="note info">${srv.tarea === 'preparando' ? 'Descargando, verificando y probando la versión nueva con una copia de los datos…' : 'Consultando versiones…'}</p>` : ''}
     ${prep ? `<p class="note ok">Versión ${esc(prep.version)} descargada, verificada (SHA-256) y probada con una copia de los datos: lista para instalar.</p>` : ''}
     ${prog ? `<p class="note warn">Instalación programada ${prog.modo === 'ventana' ? 'para la próxima ventana segura (30 minutos sin cambios en ningún preventivo)' : 'ahora'}.</p>` : ''}
@@ -136,7 +136,7 @@ export function renderActualizaciones() {
 }
 
 A['act.cargar'] = () => cargar(true);
-A['act.comprobar'] = async () => { await comprobar(); const s = estadoApp(); toast(s.lista ? 'Versión ' + (s.lista.version || 'nueva') + ' lista para aplicar' : 'La aplicación está al día', s.lista ? 'info' : 'ok'); };
+A['act.comprobar'] = async () => { await comprobar(); const s = estadoApp(); toast(s.error ? s.error : s.lista ? 'Versión ' + (s.lista.version || 'nueva') + ' lista para aplicar' : 'La aplicación está al día', s.error ? 'error' : s.lista ? 'info' : 'ok', s.error ? 7000 : 3800); };
 A['act.aplicar'] = async () => {
   const c = core(); const s = estadoApp();
   const pend = c.cur ? await c.repo.countPending(c.cur).catch(() => 0) : 0;

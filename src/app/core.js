@@ -326,13 +326,16 @@ export class AppCore {
     try { v = await this.central._req(srv, '/version', { timeout: 8000 }); }
     catch (e) { v = e.status === 404 ? { antiguo: true, version: await this.central.detectar(srv) } : null; }
     if (!v) return this.versionRemota;
+    const previa = this.versionRemota;
     this.versionRemota = { ...v, server: normServer(srv), consultada: now() };
     const antes = this.bloqueoSync;
     this.bloqueoSync = v.minCliente && posterior(v.minCliente, APP_VERSION)
       ? 'Esta aplicación (' + APP_VERSION + ') es anterior a la mínima que admite el servidor central (' + v.minCliente + '). Tus cambios se guardan en este dispositivo y se enviarán en cuanto se actualice.'
       : null;
     if (antes && !this.bloqueoSync) { this.central.kick(); if (this.cur) this.sync.kick(this.cur); }
-    this.emit('version', this.versionRemota);
+    // Solo se avisa (y se repinta) si algo cambia
+    const clave = x => x ? [x.version, x.minCliente, x.mantenimiento, x.disponible, x.antiguo].join('|') : '';
+    if (antes !== this.bloqueoSync || clave(previa) !== clave(this.versionRemota)) this.emit('version', this.versionRemota);
     return this.versionRemota;
   }
   /** Antes de recargar para actualizar: intenta enviar los cambios pendientes (no es imprescindible:

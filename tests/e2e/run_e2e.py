@@ -36,9 +36,10 @@ def check(name, fn):
         traceback.print_exc()
 
 class App:
-    def __init__(self, browser, name, opts):
+    def __init__(self, browser, name, opts, base=None):
+        self.base = base or URL
         self.ctx = browser.new_context(locale='es-ES', timezone_id='Europe/Madrid', accept_downloads=True, **opts)
-        self.ctx.grant_permissions(['geolocation', 'notifications'], origin=URL[:-1])
+        self.ctx.grant_permissions(['geolocation', 'notifications'], origin=self.base[:-1])
         self.ctx.set_geolocation({'latitude': 37.8847, 'longitude': -4.7792})
         self.name = name
         self.errors = []
@@ -50,7 +51,7 @@ class App:
         os.makedirs(SHOTS, exist_ok=True)
         self.pg.screenshot(path=os.path.join(SHOTS, f'{self.name}-{name}.png'), full_page=full)
     def goto(self, hash_=''):
-        self.pg.goto(URL + hash_); self.pg.wait_for_selector('#app :is(.auth-box, .top, .splash)')
+        self.pg.goto(self.base + hash_); self.pg.wait_for_selector('#app :is(.auth-box, .top, .splash)')
     def sheet(self):
         return self.pg.locator('.sheet-wrap').last
     def a(self, action, scope=None, **data):
@@ -128,12 +129,13 @@ class App:
         while self.pg.locator('.sheet-wrap').count():
             self.sheet().locator('.sheet-head [data-a="sheet.close"]').click(); self.pg.wait_for_timeout(200)
 
-def start_server(data):
+def start_server(data, port=None, static=None):
+    port = port or PORT
     env = dict(os.environ, UCO_CODIGO_ADMIN=ADMIN_CODE)
-    p = subprocess.Popen(['node', os.path.join(ROOT, 'server/server.mjs'), '--port', str(PORT), '--static', os.path.join(ROOT, 'dist/app'), '--data', data, '--host', '127.0.0.1', '--quiet'], env=env)
+    p = subprocess.Popen(['node', os.path.join(ROOT, 'server/server.mjs'), '--port', str(port), '--static', static or os.path.join(ROOT, 'dist/app'), '--data', data, '--host', '127.0.0.1', '--quiet'], env=env)
     for _ in range(60):
         try:
-            import urllib.request; urllib.request.urlopen(URL + 'api/v1/salud', timeout=1); return p
+            import urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{port}/api/v1/salud', timeout=1); return p
         except Exception: time.sleep(0.2)
     raise RuntimeError('servidor no disponible')
 
@@ -697,8 +699,153 @@ def scenario_coordinacion(b):
         n = A.pg.locator('.coord-map .mk[data-mk="u"]').count(); assert n == 1, n
         return 'plano cartográfico y posiciones conservados tras cerrar y abrir'
     check('Plano: persistencia tras recargar', persiste)
+    def clave_google():
+        if A.pg.locator('[data-a="prev.exit"]').count(): A.a('prev.exit')
+        A.nav('config'); f = A.pg.locator('form[data-f="carto.clave"]'); f.wait_for()
+        sec = A.pg.locator('section', has=f)
+        assert 'OpenStreetMap' in sec.inner_text(), 'sin clave se usa OpenStreetMap'
+        f.locator('[name=googleKey]').fill('clave no valida!'); f.locator('button.primary').click(); A.pg.wait_for_timeout(500)
+        assert 'formato' in A.toast_text(), A.toast_text()
+        f.locator('[name=googleKey]').fill('AIzaPRUEBA_clave_ficticia_0123456789'); f.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        sec = A.pg.locator('section', has=A.pg.locator('form[data-f="carto.clave"]'))
+        assert 'Google Maps' in sec.inner_text(), sec.inner_text()[:200]
+        aud = A.pg.evaluate("() => window.__UCO.core.repo.listAudit().then(l => l.filter(a => (a.elemento || '').startsWith('Cartografía')).length)")
+        assert aud >= 1, 'cambio registrado en la auditoría'
+        A.pg.locator('[data-a="carto.quitarClave"]').click(); A.pg.wait_for_timeout(500)
+        assert 'OpenStreetMap' in A.pg.locator('section', has=A.pg.locator('form[data-f="carto.clave"]')).inner_text()
+        return 'clave validada, guardada cifrada (proveedor Google Maps), auditada y retirada (vuelve OpenStreetMap)'
+    check('Cartografía: clave de Google Maps Platform en la configuración general', clave_google)
     check('Sin errores de JavaScript (plano de coordinación)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
     A.ctx.close()
+
+# ---------------- Fase 5: actualizaciones de la aplicación (service worker) ----------------
+PORT_ACT = PORT + 10
+URL_ACT = f'http://127.0.0.1:{PORT_ACT}/'
+
+def publicar(dest, version, rompe=False, sha_mal=False):
+    """Publica en dest una «versión» de la aplicación a partir de dist/app: otro número de versión,
+    opcionalmente con un fallo de arranque o con una suma de integridad incorrecta en el service worker."""
+    import hashlib
+    src = os.path.join(ROOT, 'dist', 'app')
+    html = open(os.path.join(src, 'index.html'), encoding='utf-8').read()
+    base = re.search(r'="(\d+\.\d+\.\d+)",', html).group(1)
+    assert html.count(f'="{base}",') == 1
+    html = html.replace(f'="{base}",', f'="{version}",')
+    if rompe:
+        i = html.index('<script>', html.index('<script>') + 1) + len('<script>')
+        html = html[:i] + 'throw new Error("Fallo de arranque simulado");' + html[i:]
+    data = html.encode('utf-8'); sha = hashlib.sha256(data).hexdigest()
+    sw = open(os.path.join(src, 'sw.js'), encoding='utf-8').read()
+    sw = re.sub(r"const VERSION = '[0-9a-f]+';", f"const VERSION = '{sha[:12]}';", sw)
+    sw = re.sub(r"const SHA256 = '[0-9a-f]+';", "const SHA256 = '%s';" % ('0' * 64 if sha_mal else sha), sw)
+    sw = re.sub(r"const APP_VERSION = '[^']+';", f"const APP_VERSION = '{version}';", sw)
+    for f in os.listdir(src):
+        p = os.path.join(src, f)
+        if os.path.isdir(p): shutil.copytree(p, os.path.join(dest, f), dirs_exist_ok=True)
+        elif f not in ('index.html', 'sw.js'): shutil.copy(p, os.path.join(dest, f))
+    # Primero index.html y después sw.js (como al desplegar): el service worker nuevo encuentra ya su app
+    open(os.path.join(dest, 'index.html'), 'wb').write(data)
+    open(os.path.join(dest, 'sw.js'), 'w', encoding='utf-8').write(sw)
+    json.dump({'version': version, 'build': sha[:12], 'sha256': sha}, open(os.path.join(dest, 'version.json'), 'w'))
+
+def scenario_actualizaciones(b):
+    print('\n[6] Actualizaciones automáticas de la aplicación (service worker)')
+    static = tempfile.mkdtemp(prefix='uco-act-app-'); data = tempfile.mkdtemp(prefix='uco-act-datos-')
+    publicar(static, '1.2.0')
+    srv = start_server(data, PORT_ACT, static)
+    A = App(b, 'act', PHONE, base=URL_ACT)
+    ver = lambda: A.pg.evaluate('() => window.__UCO && window.__UCO.version')
+    sw_listo = lambda: A.pg.wait_for_function('() => navigator.serviceWorker && navigator.serviceWorker.controller', timeout=20000)
+    def buscar():
+        A.pg.evaluate('() => window.__UCO.go("actualizaciones")'); A.pg.wait_for_selector('[data-act="app"]')
+        A.pg.click('[data-act="app"] [data-a="act.comprobar"]')
+    def aplicar_y_entrar():
+        A.pg.wait_for_selector('[data-act-bar="lista"]', timeout=30000)
+        A.pg.click('[data-act-bar="lista"] [data-a="act.aplicar"]')
+        A.sheet().locator('button[type=submit]').click()
+        A.pg.wait_for_selector('form[data-f="auth.login"]', timeout=30000)
+        A.login('coord', 'clave-coordinador')
+    try:
+        def instalar():
+            A.setup('Coordinadora', 'coord', 'clave-coordinador', 'Móvil actualizaciones', 'AC'); A.perms()
+            sw_listo()
+            A.new_prev('Preventivo actualizaciones'); A.new_unit('ACT 1')
+            return 'versión ' + ver() + ' con funcionamiento sin conexión activo'
+        check('Actualización: aplicación instalada (1.2.0) y controlada por el service worker', instalar)
+
+        def nueva_con_sesion():
+            publicar(static, '1.2.1')
+            buscar()
+            A.pg.wait_for_selector('[data-act-bar="lista"]', timeout=30000)
+            assert 'Versión 1.2.1' in A.pg.inner_text('[data-act-bar="lista"]')
+            A.pg.wait_for_timeout(1500)
+            assert ver() == '1.2.0', 'con la sesión abierta no se recarga sola'
+            assert A.pg.evaluate('() => !!window.__UCO.core.session'), 'la sesión sigue abierta'
+            A.shot('01-version-lista')
+            return 'aviso «Versión 1.2.1 lista» sin interrumpir el trabajo'
+        check('Actualización: versión nueva detectada, descargada y verificada sin interrumpir la sesión', nueva_con_sesion)
+
+        def aplicar_controlado():
+            aplicar_y_entrar()
+            assert ver() == '1.2.1', 'versión aplicada: ' + str(ver())
+            assert A.pg.evaluate("() => window.__UCO.core.state && window.__UCO.core.state.prev.nombre") == 'Preventivo actualizaciones', 'vuelve al mismo preventivo'
+            assert A.unit_id('ACT 1'), 'la unidad sigue ahí'
+            aud = A.pg.evaluate("() => window.__UCO.core.repo.listAudit().then(l => l.filter(a => a.accion === 'Actualización de la aplicación').map(a => a.anterior + '>' + a.nuevo))")
+            assert '1.2.0>1.2.1' in aud, aud
+            return 'recarga controlada → 1.2.1, mismo preventivo y datos; anotado en la auditoría'
+        check('Actualización: aplicación controlada, datos conservados y auditoría', aplicar_controlado)
+
+        def integridad():
+            publicar(static, '1.2.9', sha_mal=True)
+            buscar(); A.pg.wait_for_timeout(5000)
+            assert not A.pg.locator('[data-act-bar="lista"]').count(), 'no debe ofrecer una versión que no supera la verificación'
+            esperando = A.pg.evaluate('() => navigator.serviceWorker.getRegistration().then(r => !!(r.waiting || r.installing))')
+            assert not esperando, 'la versión manipulada no queda instalada'
+            assert ver() == '1.2.1'
+            return 'la versión con suma SHA-256 incorrecta se rechaza; sigue la 1.2.1'
+        check('Actualización: comprobación de integridad (SHA-256) de la versión descargada', integridad)
+
+        def recuperacion():
+            publicar(static, '1.2.2', rompe=True)
+            buscar(); aplicar = A.pg.wait_for_selector('[data-act-bar="lista"]', timeout=30000)
+            A.pg.click('[data-act-bar="lista"] [data-a="act.aplicar"]'); A.sheet().locator('button[type=submit]').click()
+            A.pg.wait_for_selector('#uco-recuperacion', timeout=40000)
+            A.shot('02-recuperacion')
+            txt = A.pg.inner_text('#uco-recuperacion')
+            assert 'Tus datos están a salvo' in txt and 'Fallo de arranque simulado' in txt, txt
+            A.pg.locator('#uco-recuperacion button', has_text='Usar la versión anterior').click()
+            A.pg.wait_for_selector('form[data-f="auth.login"]', timeout=30000)
+            assert ver() == '1.2.1', 'vuelve a la versión anterior: ' + str(ver())
+            A.login('coord', 'clave-coordinador')
+            assert A.unit_id('ACT 1'), 'datos intactos'
+            A.pg.evaluate('() => window.__UCO.go("actualizaciones")'); A.pg.wait_for_selector('[data-act="app"]')
+            assert 'versión anterior' in A.pg.inner_text('[data-act="app"]')
+            return 'pantalla de recuperación → versión anterior (1.2.1) con los datos intactos'
+        check('Actualización: recuperación ante una versión que no arranca', recuperacion)
+
+        def corregida():
+            publicar(static, '1.2.3')
+            buscar(); aplicar_y_entrar()
+            assert ver() == '1.2.3', str(ver())
+            assert A.unit_id('ACT 1')
+            return 'versión corregida 1.2.3 aplicada tras la recuperación'
+        check('Actualización: versión corregida tras la recuperación', corregida)
+
+        def sin_sesion():
+            A.logout()
+            publicar(static, '1.2.4')
+            A.pg.evaluate('() => navigator.serviceWorker.getRegistration().then(r => r.update())')
+            A.pg.wait_for_function('() => window.__UCO && window.__UCO.version === "1.2.4"', timeout=40000)
+            A.pg.wait_for_selector('form[data-f="auth.login"]')
+            assert 'v1.2.4' in A.pg.inner_text('.auth-head')
+            A.login('coord', 'clave-coordinador')
+            assert A.unit_id('ACT 1')
+            return 'en la pantalla de acceso se aplica sola (1.2.4)'
+        check('Actualización: sin sesión abierta se aplica sola', sin_sesion)
+        errores = [e for e in A.errors if 'Fallo de arranque simulado' not in e]
+        check('Actualización: sin errores de JavaScript', lambda: (_ for _ in ()).throw(Exception('; '.join(errores[:5]))) if errores else 'ninguno')
+    finally:
+        A.ctx.close(); srv.terminate(); shutil.rmtree(static, ignore_errors=True); shutil.rmtree(data, ignore_errors=True)
 
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
@@ -714,6 +861,7 @@ def main():
             if only in ('', '3'): scenario_android(b)
             if only in ('', '4'): scenario_recursos(b)
             if only in ('', '5'): scenario_coordinacion(b)
+            if only in ('', '6'): scenario_actualizaciones(b)
             b.close()
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)

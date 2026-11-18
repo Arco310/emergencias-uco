@@ -17,7 +17,13 @@ const S = {
   comprobando: false, ultima: 0, error: null, aplicando: false,
 };
 export const estadoApp = () => S;
-const cambio = () => { try { G.render(); } catch { } };
+// Solo se repinta si cambia algo visible: el aviso (versión lista, aplicando) o las pantallas que lo muestran
+let visto = '';
+const cambio = () => {
+  const firma = [!!S.lista && S.lista.version, S.aplicando, !!(G.core && G.core.bloqueoSync)].join('|');
+  if (firma === visto && !['actualizaciones', 'sistema', 'acerca'].includes(G.ui.route)) return;
+  visto = firma; try { G.render(); } catch { }
+};
 
 /** Mensaje a un service worker con respuesta (o null si no responde) */
 function mensaje(sw, msg, ms = 3000) {
@@ -75,11 +81,23 @@ async function leerActiva() {
   const c = navigator.serviceWorker && navigator.serviceWorker.controller;
   S.activa = c ? await mensaje(c, { tipo: 'ESTADO' }) : null; cambio();
 }
+/** Espera a que termine la instalación (descarga y verificación) de una versión nueva */
+function esperarInstalacion(w, ms = 30000) {
+  const fin = ['installed', 'activating', 'activated', 'redundant'];
+  return new Promise(res => {
+    if (!w || fin.includes(w.state)) return res(w && w.state);
+    const t = setTimeout(() => res('tiempo'), ms);
+    w.addEventListener('statechange', () => { if (fin.includes(w.state)) { clearTimeout(t); res(w.state); } });
+  });
+}
 /** Busca versión nueva de la aplicación y consulta la versión del servidor central */
 export async function comprobar() {
   if (!S.reg || S.comprobando) return;
   S.comprobando = true; S.error = null; cambio();
-  try { await S.reg.update(); } catch (e) { if (navigator.onLine !== false) S.error = 'No se pudo comprobar: ' + (e.message || e); }
+  try {
+    await S.reg.update();
+    if (S.reg.installing) { const r = await esperarInstalacion(S.reg.installing); if (r === 'redundant') S.error = 'Se encontró una versión nueva pero no superó la verificación de integridad: se sigue usando la actual y se reintentará.'; }
+  } catch (e) { if (navigator.onLine !== false) S.error = 'No se pudo comprobar: ' + (e.message || e); }
   try { if (G.core) await G.core.versionServidor(); } catch { }
   S.comprobando = false; S.ultima = Date.now();
   if (S.reg.waiting && navigator.serviceWorker.controller && (!S.lista || S.lista.sw !== S.reg.waiting)) await anotarLista(S.reg.waiting);

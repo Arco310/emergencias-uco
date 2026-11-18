@@ -14,6 +14,7 @@ import { SYNC_ESTADOS } from '../../data/sync.js';
 import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './catalogs.js';
 import { overriddenVis } from '../../core/visual.js';
 import { estadoApp } from '../actualizacion.js';
+import { seccionCartografia } from './cartografia.js';
 
 const core = () => G.core;
 const S = () => G.core.state; const P = () => G.core.state.prev;
@@ -262,6 +263,7 @@ export function renderGlobalConfig() {
     <p class="muted small">Comunes a todos los preventivos y, con el servidor central, a todos los dispositivos. Se conservan al cerrar la aplicación o reiniciar el equipo.</p>
     <div class="grid-btns"><button class="tile" data-a="gcat.open" data-cat="tiposRecurso">${icon('unidades')}<span>Tipos de recurso</span></button><button class="tile" data-a="nav" data-v="uplantillas">${icon('plantilla')}<span>Unidades plantilla</span></button></div>
   </section>
+  ${seccionCartografia()}
   <section class="card pad"><h2>Valores por defecto de los preventivos nuevos</h2>
     ${catalogButtons('gcat.open')}
     <form data-f="gcfg.prev">${fieldsHtml([

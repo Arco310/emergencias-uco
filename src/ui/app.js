@@ -19,6 +19,7 @@ import { iniciarActualizaciones, arranqueOk, estadoApp } from './actualizacion.j
 
 /* global __PREVIEW__ */
 G.preview = typeof __PREVIEW__ !== 'undefined' && __PREVIEW__;
+G.version = APP_VERSION;
 
 const VIEWS = {
   // Fuera de un preventivo
@@ -70,10 +71,26 @@ const pruebasBar = () => G.pruebas ? `<div class="pruebas-bar" role="status">${i
 function actBar() {
   const s = estadoApp(); const b = (t, a, cls, data = {}) => `<button type="button" class="btn sm ${cls}" data-a="${a}"${Object.entries(data).map(([k, v]) => ` data-${k}="${esc(v)}"`).join('')}>${esc(t)}</button>`;
   if (s.aplicando) return `<div class="act-bar" role="status" data-act-bar="aplicando">${icon('sync')}<span>Aplicando la versión nueva…</span></div>`;
-  if (G.core && G.core.bloqueoSync) return `<div class="act-bar bad" role="alert" data-act-bar="obsoleta">${icon('alerta')}<span>${esc(G.core.bloqueoSync)}</span>${s.lista ? b('Actualizar', 'act.aplicar', 'primary') : b('Buscar actualización', 'act.comprobar', '')}</div>`;
-  if (s.lista) return `<div class="act-bar" role="status" data-act-bar="lista">${icon('descargar')}<span>Versión ${esc(s.lista.version || 'nueva')} de la aplicación lista para aplicar.</span>${b('Actualizar', 'act.aplicar', 'primary')}${G.core && G.core.session ? b('Ver', 'nav', 'ghost', { v: 'actualizaciones' }) : ''}</div>`;
+  if (G.core && G.core.bloqueoSync) return `<div class="act-bar bad" role="alert" data-act-bar="obsoleta" title="${esc(G.core.bloqueoSync)}">${icon('alerta')}<span>Actualiza la aplicación para seguir sincronizando</span>${s.lista ? b('Actualizar', 'act.aplicar', 'primary') : b('Ver', 'nav', '', { v: 'actualizaciones' })}</div>`;
+  if (s.lista) return `<div class="act-bar" role="status" data-act-bar="lista">${icon('descargar')}<span>Versión ${esc(s.lista.version || 'nueva')} lista</span>${b('Actualizar', 'act.aplicar', 'primary')}${G.core && G.core.session ? b('Detalles', 'nav', 'ghost', { v: 'actualizaciones' }) : ''}</div>`;
   return '';
 }
+/** Valores escritos por el usuario (distintos de los iniciales) en los campos de la pantalla */
+function camposEscritos(root) {
+  const out = new Map();
+  for (const el of root.querySelectorAll('input[id], textarea[id], select[id]')) {
+    if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'hidden') continue;
+    const cambiado = el.tagName === 'SELECT' ? [...el.options].some(o => o.selected !== o.defaultSelected) : el.value !== el.defaultValue;
+    if (cambiado) out.set(el.id, el.value);
+  }
+  return out;
+}
+function restaurarCampos(root, vals) {
+  for (const [id, v] of vals) { const el = root.querySelector('#' + CSS.escape(id)); if (el && (el.tagName === 'SELECT' ? [...el.options].some(o => o.value === v) : true)) el.value = v; }
+}
+/** Repintado por un evento (sincronización, versión, servidor central…): nunca borra lo que el usuario
+ *  está escribiendo en la pantalla */
+function renderPasivo() { const app = $('#app'); const vals = app ? camposEscritos(app) : new Map(); render(); if (vals.size && app) restaurarCampos(app, vals); }
 export function render() {
   renderQueued = false;
   const app = $('#app'); if (!app) return;
@@ -100,7 +117,7 @@ export function render() {
   if (v.after) v.after();
   plano.afterRender && route === 'plano' && plano.afterRender();
 }
-export function queueRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(render); } }
+export function queueRender() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(renderPasivo); } }
 
 function layout(route, v, body) {
   const core = G.core; const s = core.state; const inPrev = !!core.cur && !!s;
