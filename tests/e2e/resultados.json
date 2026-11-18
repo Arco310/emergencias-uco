@@ -1,5 +1,5 @@
 {
- "fecha": "2026-11-18 13:19:53",
+ "fecha": "2026-11-18 16:28:05",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
@@ -25,7 +25,7 @@
   {
    "prueba": "Plano: cambiar la clave con doble clic",
    "resultado": "SUPERADA",
-   "detalle": "doble clic → selector de claves → C6 aplicada con las reglas de siempre"
+   "detalle": "doble clic → selector de claves → C6 aplicada con las reglas de siempre y visible en el listado de unidades"
   },
   {
    "prueba": "Plano: devolver una unidad a pendientes de asignación",
@@ -40,12 +40,12 @@
   {
    "prueba": "Avisos: crear un aviso por zona",
    "resultado": "SUPERADA",
-   "detalle": "zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano"
+   "detalle": "zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general"
   },
   {
    "prueba": "Biblioteca de planos predefinidos",
    "resultado": "SUPERADA",
-   "detalle": "Bernabéu, Metropolitano y Sol en la biblioteca; Bernabéu incorporado con su encuadre y referencia geográfica"
+   "detalle": "Metropolitano, Sol y Bernabéu incorporados uno tras otro con su encuadre y referencia geográfica; las unidades se conservan"
   },
   {
    "prueba": "Plano: persistencia tras recargar",

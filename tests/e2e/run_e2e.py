@@ -18,6 +18,7 @@ SHOTS = os.path.join(ROOT, 'tests', 'e2e', 'capturas')
 CHROME = os.environ.get('CHROME', '/usr/bin/google-chrome')
 PLANO = os.path.join(ROOT, 'tests', 'e2e', 'plano-prueba.png')
 RESULTS = []
+SRV = {}  # servidor de las pruebas (para simular su caída)
 PHONE = dict(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
 TABLET = dict(viewport={'width': 1280, 'height': 800}, is_mobile=True, has_touch=True, device_scale_factor=1.5)
 # Código de administración FICTICIO, solo para el servidor local que arrancan estas pruebas
@@ -27,6 +28,7 @@ def record(name, ok, detail=''):
     RESULTS.append({'prueba': name, 'resultado': 'SUPERADA' if ok else 'FALLIDA', 'detalle': detail})
     print(('  ✔ ' if ok else '  ✘ ') + name + (' — ' + detail if detail else ''), flush=True)
 
+APPS = []  # aplicaciones abiertas: en un fallo se guarda una captura de cada una
 def check(name, fn):
     try:
         d = fn()
@@ -34,6 +36,9 @@ def check(name, fn):
     except Exception as e:
         record(name, False, (str(e).splitlines() or ['error'])[0][:300])
         traceback.print_exc()
+        for app in APPS:
+            try: app.pg.screenshot(path=os.path.join(SHOTS, f'FALLO-{len(RESULTS):02d}-{app.name}.png'))
+            except Exception: pass
 
 class App:
     def __init__(self, browser, name, opts, base=None):
@@ -43,7 +48,7 @@ class App:
         self.ctx.set_geolocation({'latitude': 37.8847, 'longitude': -4.7792})
         self.name = name
         self.errors = []
-        self.pg = self.ctx.new_page()
+        self.pg = self.ctx.new_page(); APPS.append(self)
         self.pg.on('pageerror', lambda e: self.errors.append(str(e)))
         self.pg.on('console', lambda m: self.errors.append(m.text) if m.type == 'error' and 'Failed to load resource' not in m.text and 'net::' not in m.text else None)
         self.pg.set_default_timeout(15000)
@@ -433,6 +438,48 @@ def scenario_shared(browser):
         assert na == nb == 'Nombre móvil' and pend == 0, (na, nb, pend)
         return 'conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador'
     check('Compartido: resolución de conflictos', conflict)
+    def varios():
+        T.new_prev('Concierto estadio', 'compartida', True)
+        r = T.pg.evaluate("() => { const c = window.__UCO.core; return c.summaries.filter(s => c.meta(s.id).modalidad === 'compartida').map(s => [c.meta(s.id).server, !!c.meta(s.id).central]); }")
+        srv = T.pg.evaluate('() => window.__UCO.core.servidorCentral()')
+        assert len(r) >= 2 and all(x[0] == srv and x[1] for x in r), (r, srv)
+        T.a('prev.exit'); T.pg.locator('[data-a="home.open"]', has_text='Maratón ciudad').first.click(); T.pg.wait_for_selector('.kpis'); T.pg.wait_for_timeout(500)
+        return f'{len(r)} preventivos compartidos, todos con el servidor central {srv} sin haberlo pedido'
+    check('Servidor central: varios preventivos usan el mismo servidor', varios)
+    def tipo_compartido():
+        # Tipo de recurso nuevo creado en la tablet desde el formulario de una unidad
+        T.nav('unidades'); T.a('u.new'); T.pg.wait_for_selector('.sheet-wrap :is([data-a="u.newBlank"], form[data-f="u.save"])')
+        if T.pg.locator('.sheet-wrap [data-a="u.newBlank"]').count(): T.a('u.newBlank')
+        f = T.sheet().locator('form[data-f="u.save"]'); f.locator('[name=ind]').fill('BICI-1')
+        f.locator('[data-a="u.nuevoTipo"]').click(); T.pg.wait_for_timeout(300)
+        t = T.sheet().locator('form[data-f="cat.nuevoTipo"]'); t.locator('[name=nombre]').fill('Bicicleta sanitaria'); t.locator('button.primary').click(); T.pg.wait_for_timeout(600)
+        T.sheet().locator('form[data-f="u.save"] button.primary').click(); T.pg.wait_for_timeout(600); T.close_sheets()
+        # En el móvil aparece solo, también en el formulario de unidades
+        for _ in range(30):
+            M.pg.evaluate('() => window.__UCO.core.central.syncNow()'); M.pg.wait_for_timeout(600)
+            if M.pg.evaluate("() => window.__UCO.core.tiposRecursoGenerales().some(t => t.nombre === 'Bicicleta sanitaria')"): break
+        M.nav('unidades'); M.a('u.new'); M.pg.wait_for_selector('.sheet-wrap :is([data-a="u.newBlank"], form[data-f="u.save"])')
+        if M.pg.locator('.sheet-wrap [data-a="u.newBlank"]').count(): M.a('u.newBlank')
+        ops = M.sheet().locator('form[data-f="u.save"] [name=tipo]').inner_text(); M.close_sheets()
+        assert 'Bicicleta sanitaria' in ops, ops
+        return 'tipo «Bicicleta sanitaria» creado en la tablet → disponible en el móvil sin hacer nada'
+    check('Tipos de recurso: el tipo nuevo aparece en el otro dispositivo', tipo_compartido)
+    def caida_servidor():
+        SRV['p'].terminate(); SRV['p'].wait(10)
+        T.nav('avisos'); T.a('a.new'); T.fill('desc', 'Con el servidor caído'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(500); T.close_sheets()
+        a1 = T.unit_id('A1'); T.open_unit('A1'); T.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); T.pg.wait_for_timeout(400); T.close_sheets()
+        T.pg.evaluate('() => window.__UCO.core.sync.syncNow(window.__UCO.core.cur)'); T.pg.wait_for_timeout(800)
+        est = T.pg.evaluate('() => window.__UCO.core.sync.status(window.__UCO.core.cur)')
+        assert est['estado'] in ('sin_conexion', 'error') and est.get('pendientes', 0) >= 1, est
+        assert T.state("return s.units['%s'].clave" % a1) == 'C6', 'sigue funcionando en local'
+        SRV['p'] = start_server(SRV['data']); time.sleep(10)
+        for app in (T, M): app.pg.evaluate('() => window.__UCO.core.sync.syncNow(window.__UCO.core.cur)')
+        time.sleep(4)
+        ok_m = M.state("return Object.values(s.avisos).some(a => a.desc === 'Con el servidor caído' && a.num) && s.units['%s'].clave === 'C6'" % a1)
+        pend = T.pg.evaluate('() => window.__UCO.core.sync.status(window.__UCO.core.cur).pendientes || 0')
+        assert ok_m and pend == 0, (ok_m, pend)
+        return f"servidor detenido: se sigue trabajando en local ({est['estado']}, {est.get('pendientes')} pendiente(s)); al volver se envía todo y el otro dispositivo lo recibe"
+    check('Servidor central: caída temporal del servidor sin interrumpir el trabajo', caida_servidor)
     def tablet_layout():
         T.nav('panel'); T.pg.wait_for_timeout(500); T.shot('04-panel-tablet')
         cols = T.pg.evaluate("() => getComputedStyle(document.querySelector('.panel-grid')).gridTemplateColumns.split(' ').length")
@@ -650,7 +697,11 @@ def scenario_coordinacion(b):
         A.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); A.pg.wait_for_timeout(600)
         c = A.pg.evaluate(f"() => window.__UCO.core.state.units['{uid('UPR 101')}'].clave"); assert c == 'C6', c
         A.close_sheets()
-        return 'doble clic → selector de claves → C6 aplicada con las reglas de siempre'
+        # El listado general de unidades refleja el cambio hecho en el plano
+        A.nav('unidades'); card = A.pg.locator(f'.ucard[data-id="{uid("UPR 101")}"]'); card.wait_for()
+        assert 'C6' in card.inner_text(), card.inner_text()
+        A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(400)
+        return 'doble clic → selector de claves → C6 aplicada con las reglas de siempre y visible en el listado de unidades'
     check('Plano: cambiar la clave con doble clic', doble_clic)
     def devolver():
         mk = A.pg.locator(f'.mk[data-id="{uid("UPR 102")}"]'); bb = mk.bounding_box(); pb = A.pg.locator('[data-pendientes]').bounding_box()
@@ -680,19 +731,31 @@ def scenario_coordinacion(b):
         assert a['zona'] and len(a['zona']['pts']) == 4 and a['zona']['pts'][0]['lat'] and a['loc']['lat'], a
         assert A.pg.locator('.coord-map path.leaflet-interactive').count() >= 1
         A.shot('04-plano-coordinacion')
-        return 'zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano'
+        # Ambos avisos aparecen en el apartado general de avisos
+        A.nav('avisos'); A.pg.wait_for_timeout(400); lista = A.pg.inner_text('main')
+        assert 'Desvanecimiento en la plaza' in lista and 'Aglomeración en zona norte' in lista, lista[:400]
+        A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(400)
+        return 'zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general'
     check('Avisos: crear un aviso por zona', aviso_zona)
     def biblioteca():
         A.a('plan.biblio'); s = A.sheet(); t = s.inner_text()
         assert 'Santiago Bernabéu' in t and 'Metropolitano' in t and 'Puerta del Sol' in t, t
-        s.locator('[data-biblio="lib_bernabeu"] [data-a="biblio.abrir"]').click(); A.pg.wait_for_timeout(600)
-        s = A.sheet(); s.locator('#carto-map .leaflet-tile').first.wait_for(timeout=15000)
-        s.locator('form[data-f="carto.ok"] button.primary').click(); A.pg.wait_for_timeout(400)
-        A.pg.locator('.sheet-wrap button.primary', has_text='Cambiar').click(); A.pg.wait_for_timeout(1000)
-        pl = A.pg.evaluate('() => window.__UCO.core.state.prev.plano')
-        assert pl['nombre'] == 'Estadio Santiago Bernabéu' and pl['bounds']['s'] < 40.45304 < pl['bounds']['n'], pl
-        assert A.pg.locator('.coord-map .mk[data-mk="u"]').count() == 1, 'las unidades conservan su posición relativa'
-        return 'Bernabéu, Metropolitano y Sol en la biblioteca; Bernabéu incorporado con su encuadre y referencia geográfica'
+        A.close_sheets()
+        # La hoja queda por encima del mapa en todos sus puntos (el mapa no la tapa)
+        encima = lambda: A.pg.evaluate("() => { const r = [...document.querySelectorAll('.sheet')].pop().getBoundingClientRect(); return [[r.left + 15, r.top + 40], [r.right - 15, r.top + 40], [r.left + r.width / 2, r.top + r.height / 2], [r.right - 30, r.bottom - 30]].every(([x, y]) => { const e = document.elementFromPoint(x, y); return e && e.closest('.sheet'); }) }")
+        # Los tres planos predefinidos se incorporan y se usan (el último, el Bernabéu, se queda)
+        for lib, nombre, lat in [('lib_metropolitano', 'Estadio Metropolitano (Wanda)', 40.43601), ('lib_sol', 'Puerta del Sol y alrededores', 40.41686), ('lib_bernabeu', 'Estadio Santiago Bernabéu', 40.45304)]:
+            A.a('plan.biblio'); s = A.sheet(); A.pg.wait_for_timeout(400)
+            assert encima(), 'el mapa tapa la hoja de la biblioteca'
+            s.locator(f'[data-biblio="{lib}"] [data-a="biblio.abrir"]').click(); A.pg.wait_for_timeout(600)
+            s = A.sheet(); s.locator('#carto-map .leaflet-tile').first.wait_for(timeout=15000)
+            s.locator('form[data-f="carto.ok"] button.primary').click(); A.pg.wait_for_timeout(400)
+            A.pg.locator('.sheet-wrap button.primary', has_text='Cambiar').click(); A.pg.wait_for_timeout(1000)
+            pl = A.pg.evaluate('() => window.__UCO.core.state.prev.plano')
+            assert pl['nombre'] == nombre and pl['bounds']['s'] < lat < pl['bounds']['n'], pl
+            A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000)
+            assert A.pg.locator('.coord-map .mk[data-mk="u"]').count() == 1, 'las unidades conservan su posición relativa'
+        return 'Metropolitano, Sol y Bernabéu incorporados uno tras otro con su encuadre y referencia geográfica; las unidades se conservan'
     check('Biblioteca de planos predefinidos', biblioteca)
     def persiste():
         A.goto(); A.login('raul', 'secreto5'); A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(600)
@@ -851,7 +914,7 @@ def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
     data = tempfile.mkdtemp(prefix='uco-e2e-')
-    srv = start_server(data)
+    srv = start_server(data); SRV.update(p=srv, data=data)
     try:
         with sync_playwright() as p:
             b = p.chromium.launch(executable_path=CHROME, args=['--no-sandbox'])
@@ -864,7 +927,7 @@ def main():
             if only in ('', '6'): scenario_actualizaciones(b)
             b.close()
     finally:
-        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+        SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)
     ok = sum(1 for r in RESULTS if r['resultado'] == 'SUPERADA')
     print(f'\nResultado: {ok}/{len(RESULTS)} pruebas superadas')
     json.dump({'fecha': time.strftime('%Y-%m-%d %H:%M:%S'), 'navegador': 'Google Chrome (Playwright)', 'resultados': RESULTS}, open(os.path.join(ROOT, 'tests', 'e2e', 'resultados.json'), 'w'), ensure_ascii=False, indent=1)

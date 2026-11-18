@@ -27,6 +27,19 @@ La aplicación ya conoce la dirección del servidor: no hay que escribirla en ni
 - Después, en cada móvil o tablet basta con abrir la aplicación e iniciar sesión con el
   usuario y la contraseña. Los preventivos compartidos aparecen solos.
 
+Actualizaciones
+Basta con instalar este paquete una vez. Las versiones siguientes se instalan desde la
+aplicación, sin descargar nada a mano: Sistema → Actualizaciones (usuario con el permiso
+«Gestionar las actualizaciones» y el código de administración del servidor).
+- El servidor consulta las versiones publicadas del repositorio oficial cada 6 horas.
+- «Descargar y verificar»: comprueba la suma SHA-256 publicada por GitHub y la lista de
+  sumas de la versión, y prueba la versión nueva con una copia de los datos.
+- «Instalar ahora» o «en la ventana segura» (cuando lleva 30 minutos sin cambios en ningún
+  preventivo). Antes se hace una copia de los datos en C:\ProgramData\GestorUCO\copias.
+- Si la versión nueva no responde durante su periodo de prueba, vuelve sola a la anterior.
+  También se puede volver a la anterior a mano desde el mismo panel.
+- Registro de despliegues: C:\ProgramData\GestorUCO\datos\_servidor\despliegues.log
+
 Comprobar y desinstalar
 - estado-servidor.bat: muestra si funciona en el PC, si responde desde Internet y si el
   servidor central está activado.

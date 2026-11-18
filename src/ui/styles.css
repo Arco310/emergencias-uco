@@ -305,6 +305,9 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;overflow-wrap:anywhere}
 .uchip.arrastrando{opacity:.4}
 .ghost-arrastre{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-50%) scale(1.15);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .coord-host{position:relative;min-height:340px}
+/* El mapa crea su propio contexto de apilamiento: sus capas (z-index 400-1000 de Leaflet) nunca tapan
+   las hojas, los avisos ni la cabecera que se abren encima */
+.leaflet-container{isolation:isolate;z-index:0}
 .coord-map{height:calc(100vh - var(--top) - var(--bot) - 250px);min-height:340px;border:1px solid var(--line);border-radius:var(--r);background:var(--soft)}
 @media (min-width:900px){.coord-map{height:calc(100vh - var(--top) - 200px)}}
 .leaflet-container{font:inherit}
