@@ -28,13 +28,15 @@ const libre = p => new Promise(res => { const s = createServer(); s.once('error'
 /** Detiene el servidor instalado (tarea programada y proceso) */
 async function detener(puerto) {
   U.run(U.SCHTASKS, ['/End', '/TN', U.TAREA]);
-  if (U.SIM) { try { process.kill(Number(readFileSync(join(U.BASE, 'pid-prueba.txt'), 'utf8'))); } catch { } }
-  else { const pid = U.pidEnPuerto(puerto); if (pid) U.run('taskkill', ['/F', '/T', '/PID', pid]); }
+  // El lanzador (si lo hay) se detiene antes que el servidor para que no lo vuelva a arrancar
+  let lpid = null; try { lpid = readFileSync(join(U.RUTAS.datos, '_servidor', 'lanzador.pid'), 'utf8').trim(); } catch { }
+  if (U.SIM) { for (const p of [lpid, (() => { try { return readFileSync(join(U.BASE, 'pid-prueba.txt'), 'utf8'); } catch { return null; } })()]) if (p) try { process.kill(Number(p)); } catch { } }
+  else { if (lpid && /^\d+$/.test(lpid)) U.run('taskkill', ['/F', '/T', '/PID', lpid]); const pid = U.pidEnPuerto(puerto); if (pid) U.run('taskkill', ['/F', '/T', '/PID', pid]); }
   await U.esperar(async () => !(await U.salud(U.local(puerto), 1000)), 15);
 }
 function arrancar(puerto) {
   if (U.SIM) {
-    const ch = spawn(U.NODE, U.argsServidor(puerto), { detached: true, stdio: 'ignore' }); ch.unref();
+    const ch = spawn(U.NODE, U.argsLanzador(puerto), { detached: true, stdio: 'ignore' }); ch.unref();
     writeFileSync(join(U.BASE, 'pid-prueba.txt'), String(ch.pid));
   } else U.run(U.SCHTASKS, ['/Run', '/TN', U.TAREA]);
 }
@@ -66,7 +68,8 @@ async function main() {
   const habia = existsSync(U.RUTAS.servidor);
   if (habia) {
     rmSync(ANT, { recursive: true, force: true }); mkdirSync(ANT, { recursive: true });
-    copyFileSync(U.RUTAS.servidor, join(ANT, 'server.mjs'));
+    mkdirSync(join(ANT, 'servidor'), { recursive: true });
+    for (const f of readdirSync(dirname(U.RUTAS.servidor))) if (f.endsWith('.mjs')) copyFileSync(join(dirname(U.RUTAS.servidor), f), join(ANT, 'servidor', f));
     if (existsSync(U.RUTAS.app)) cpSync(U.RUTAS.app, join(ANT, 'app'), { recursive: true });
     if (existsSync(U.RUTAS.datos)) {
       const d = join(COPIAS, 'datos-' + sello()); cpSync(U.RUTAS.datos, d, { recursive: true });
@@ -76,7 +79,8 @@ async function main() {
     if (!U.SIM) U.run(U.ICACLS, [COPIAS, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '/T', '/C', '/Q']);
   }
   mkdirSync(dirname(U.RUTAS.servidor), { recursive: true });
-  cpSync(join(AQUI, 'servidor', 'server.mjs'), U.RUTAS.servidor);
+  // Código del servidor: server.mjs, actualizador y lanzador (actualizaciones automáticas verificadas)
+  for (const f of readdirSync(join(AQUI, 'servidor'))) if (f.endsWith('.mjs')) copyFileSync(join(AQUI, 'servidor', f), join(dirname(U.RUTAS.servidor), f));
   rmSync(U.RUTAS.app, { recursive: true, force: true }); cpSync(join(AQUI, 'app'), U.RUTAS.app, { recursive: true });
   mkdirSync(U.RUTAS.datos, { recursive: true });
   const SRV = join(U.RUTAS.datos, '_servidor'); mkdirSync(SRV, { recursive: true });
@@ -102,7 +106,7 @@ async function main() {
     // Vuelta atrás automática: se restaura la versión anterior, que sí funcionaba
     console.log('[AVISO] La nueva versión no arranca: se restaura la anterior.');
     await detener(puerto);
-    copyFileSync(join(ANT, 'server.mjs'), U.RUTAS.servidor);
+    for (const f of readdirSync(join(ANT, 'servidor'))) copyFileSync(join(ANT, 'servidor', f), join(dirname(U.RUTAS.servidor), f));
     if (existsSync(join(ANT, 'app'))) { rmSync(U.RUTAS.app, { recursive: true, force: true }); cpSync(join(ANT, 'app'), U.RUTAS.app, { recursive: true }); }
     arrancar(puerto);
     const va = await U.esperar(() => U.salud(U.local(puerto)), 40);

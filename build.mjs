@@ -70,7 +70,7 @@ const { zipStore } = await import('./src/core/zip.js');
 const PW = path.join(DIST, 'servidor-uco-windows');
 fs.cpSync(path.join(ROOT, 'servidor-windows'), PW, { recursive: true });
 fs.mkdirSync(path.join(PW, 'servidor'), { recursive: true });
-fs.copyFileSync(path.join(ROOT, 'server/server.mjs'), path.join(PW, 'servidor', 'server.mjs'));
+for (const f of ['server.mjs', 'actualizador.mjs', 'lanzador.mjs']) fs.copyFileSync(path.join(ROOT, 'server', f), path.join(PW, 'servidor', f));
 fs.cpSync(APP, path.join(PW, 'app'), { recursive: true });
 const zfiles = [];
 const addDir = (dir, prefix) => { for (const f of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const p = path.join(dir, f.name); if (f.isDirectory()) addDir(p, prefix + f.name + '/'); else zfiles.push({ name: prefix + f.name, data: fs.readFileSync(p) }); } };

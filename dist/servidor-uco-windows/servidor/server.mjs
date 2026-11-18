@@ -15,8 +15,13 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { crearActualizador } from './actualizador.mjs';
 
 const VERSION = '1.1.0';
+/** Versión mínima de la aplicación compatible con este servidor (las anteriores deben actualizarse) */
+const MIN_CLIENTE = '1.1.0';
+/** Versión del formato de los datos del servidor (migraciones al arrancar) */
+const ESQUEMA = 2;
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
   if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : 'true']);
   return acc;
@@ -105,6 +110,20 @@ const ID_RE = /^[A-Za-z0-9_:.-]{1,120}$/;
 const cache = new Map();
 
 function log(...a) { if (!args.quiet) console.log(new Date().toISOString(), ...a); }
+// Actualizaciones del servidor (solo activables si lo arrancó el lanzador de la instalación)
+const ACT = crearActualizador({
+  DATA, BASE: process.env.UCO_BASE_INSTALACION || args.base || null, version: VERSION, lanzador: process.env.UCO_LANZADOR === '1', periodico: process.env.UCO_PRUEBA_ACTUALIZACION !== '1', log,
+  ...(process.env.UCO_GITHUB_API ? { api: process.env.UCO_GITHUB_API } : {}), ...(process.env.UCO_REPO ? { repo: process.env.UCO_REPO } : {}),
+  ...(process.env.UCO_VENTANA_MIN ? { idleMin: Number(process.env.UCO_VENTANA_MIN) } : {}),
+});
+/** Migraciones del formato de datos del servidor: se registran y nunca borran nada */
+function migrarDatos() {
+  const f = path.join(DATA, '_servidor', 'esquema.json');
+  let cur = 1; try { cur = JSON.parse(fs.readFileSync(f, 'utf8')).version || 1; } catch { }
+  if (cur > ESQUEMA) { log('AVISO: los datos son de una versión posterior (esquema ' + cur + ')'); return; }
+  // 1 → 2: espacio central (_org, _servidor). No requiere transformar los preventivos existentes.
+  if (cur < ESQUEMA) { fs.mkdirSync(path.dirname(f), { recursive: true }); writeAtomic(f, JSON.stringify({ version: ESQUEMA, migrado: Date.now(), desde: cur })); log('Datos migrados del esquema', cur, 'al', ESQUEMA); }
+}
 function sha256hex(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 function safeEq(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 function writeAtomic(file, data) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, data); fs.renameSync(tmp, file); }
@@ -246,6 +265,22 @@ async function apiOrg(req, res, url, parts) {
   if (!orgAuth(req, o)) return send(res, 401, { error: 'Credenciales del espacio central no válidas' });
   const what = parts[4];
   if (!what && req.method === 'GET') return send(res, 200, { org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, creado: o.meta.creado, seq: o.meta.seq, version: VERSION, principal: principal()[o.meta.pruebas ? 'pruebas' : 'produccion'] === org });
+  // Actualizaciones del servidor: consulta para los dispositivos del espacio; las acciones exigen además
+  // el código de administración del servidor (no basta con ser un dispositivo dado de alta)
+  if (what === 'admin' && parts[5] === 'actualizaciones') {
+    if (req.method === 'GET') return send(res, 200, ACT.estado());
+    if (req.method === 'POST') {
+      const b = await readJson(req);
+      comprobarCodigo(b.codigo);
+      log('Actualizaciones: acción', b.accion, 'desde', String(req.headers['x-uco-dispositivo'] || '').slice(0, 60));
+      if (b.accion === 'comprobar') return send(res, 200, await ACT.comprobar());
+      if (b.accion === 'preparar') { ACT.preparar().catch(() => { }); return send(res, 202, ACT.estado()); }
+      if (b.accion === 'ahora' || b.accion === 'ventana') return send(res, 200, ACT.programar(b.accion, { forzar: !!b.forzar }));
+      if (b.accion === 'cancelar') return send(res, 200, ACT.cancelar());
+      if (b.accion === 'revertir') return send(res, 200, ACT.revertir());
+      return send(res, 400, { error: 'Acción no válida' });
+    }
+  }
   // Cuentas: las publica un dispositivo ya dado de alta (al crear un usuario o cambiar su contraseña)
   if (what === 'cuentas' && UID_RE.test(parts[5] || '')) {
     if (req.method === 'PUT') {
@@ -302,6 +337,13 @@ async function apiOrg(req, res, url, parts) {
 async function api(req, res, url) {
   const parts = url.pathname.split('/').filter(Boolean); // api v1 ...
   if (parts[2] === 'salud') return send(res, 200, { ok: true, servicio: 'gestor-emergencias-uco', version: VERSION, hora: Date.now() });
+  // Versiones: la app comprueba aquí si debe actualizarse y si el servidor está actualizándose
+  if (parts[2] === 'version' && req.method === 'GET') {
+    const e = ACT.estado();
+    return send(res, 200, { ok: true, version: VERSION, minCliente: MIN_CLIENTE, esquema: ESQUEMA, lanzador: e.lanzador, mantenimiento: ACT.mantenimiento, despliegue: { estado: e.despliegue.estado, fecha: e.despliegue.fecha }, disponible: e.actualizable ? e.disponible.version : null });
+  }
+  // Durante el reinicio controlado de una actualización no se aceptan escrituras (los dispositivos reintentan)
+  if (ACT.mantenimiento && req.method !== 'GET') return send(res, 503, { error: 'El servidor se está actualizando: vuelve a intentarlo en un minuto' }, { 'Retry-After': '30' });
   if (parts[2] === 'org') return apiOrg(req, res, url, parts);
   // Espacio central principal (público: solo identifica el espacio; acceder exige una cuenta)
   if (parts[2] === 'central' && req.method === 'GET') {
@@ -344,7 +386,7 @@ async function api(req, res, url) {
       p.ids.set(rec.id, rec); p.ops.push(rec); lines += JSON.stringify(rec) + '\n'; metaChanged = true;
       out.push({ id: rec.id, sq: rec.sq, num: rec.num });
     }
-    if (lines) appendDurable(path.join(p.dir, 'ops.jsonl'), lines);
+    if (lines) { appendDurable(path.join(p.dir, 'ops.jsonl'), lines); ACT.escritura(pid); }
     if (metaChanged) writeAtomic(path.join(p.dir, 'meta.json'), JSON.stringify(p.meta));
     return send(res, 200, { res: out, last: p.meta.nextSq - 1 });
   }
@@ -401,6 +443,7 @@ async function handler(req, res) {
 const server = args.cert && args.key
   ? https.createServer({ cert: fs.readFileSync(args.cert), key: fs.readFileSync(args.key) }, handler)
   : http.createServer(handler);
+migrarDatos();
 server.listen(PORT, HOST, () => {
   codigoAdmin(); codigoPruebas(); secretoServidor();
   log(`Servidor de sincronización UCO ${VERSION} en ${args.cert ? 'https' : 'http'}://${HOST}:${PORT}  datos: ${DATA}${STATIC ? '  app: ' + STATIC : ''}`);

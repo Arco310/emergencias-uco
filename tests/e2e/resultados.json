@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-18 12:20:43",
+ "fecha": "2026-11-18 12:26:54",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave 60D97…"
+   "detalle": "clave Z438F…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -119,6 +119,166 @@
   },
   {
    "prueba": "Sin errores de JavaScript (móvil)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Servidor central: activación única con el código del servidor",
+   "resultado": "SUPERADA",
+   "detalle": "espacio central activado una sola vez durante el alta inicial; estado conectado"
+  },
+  {
+   "prueba": "Servidor central: alta de usuario",
+   "resultado": "SUPERADA",
+   "detalle": "usuario creado en la tablet; su cuenta queda publicada en el servidor central"
+  },
+  {
+   "prueba": "Servidor central: dispositivo nuevo con usuario y contraseña",
+   "resultado": "SUPERADA",
+   "detalle": "el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza"
+  },
+  {
+   "prueba": "Compartido: crear preventivo sin pedir servidor",
+   "resultado": "SUPERADA",
+   "detalle": "creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central"
+  },
+  {
+   "prueba": "Compartido: el preventivo aparece solo en el otro dispositivo",
+   "resultado": "SUPERADA",
+   "detalle": "aparece solo en el móvil y se abre con un toque, con sus 3 unidades"
+  },
+  {
+   "prueba": "Compartido: avisos simultáneos sin duplicados",
+   "resultado": "SUPERADA",
+   "detalle": "números definitivos únicos 1 y 2 en ambos dispositivos"
+  },
+  {
+   "prueba": "Compartido: desconexión, trabajo local y reconexión",
+   "resultado": "SUPERADA",
+   "detalle": "trabajo sin red (ref. provisional BZ-2), reconexión y convergencia sin pérdidas"
+  },
+  {
+   "prueba": "Compartido: resolución de conflictos",
+   "resultado": "SUPERADA",
+   "detalle": "conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador"
+  },
+  {
+   "prueba": "Tablet: panel operativo multicolumna",
+   "resultado": "SUPERADA",
+   "detalle": "panel de 3 columnas y navegación lateral"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (multidispositivo)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Android: «Probar» notificaciones muestra un aviso real",
+   "resultado": "SUPERADA",
+   "detalle": "aviso mostrado por el service worker; el constructor prohibido en Android no se usa"
+  },
+  {
+   "prueba": "Android: botón «Probar» de vibración visible",
+   "resultado": "SUPERADA",
+   "detalle": "botón «Probar» visible con la vibración disponible"
+  },
+  {
+   "prueba": "Android: pantalla encendida se recupera al volver a la aplicación",
+   "resultado": "SUPERADA",
+   "detalle": "tras salir y volver 3 veces la pantalla sigue encendida (3 de 3 recuperaciones)"
+  },
+  {
+   "prueba": "Android: importar copias y paquetes sin archivos en gris",
+   "resultado": "SUPERADA",
+   "detalle": "el selector muestra todos los archivos (sin filtro) y uno erróneo se rechaza: «El archivo no es una copia válida»"
+  },
+  {
+   "prueba": "Android: aviso de fin de descanso",
+   "resultado": "SUPERADA",
+   "detalle": "aviso «Fin del descanso: AND-1 Android uno» mostrado por el service worker"
+  },
+  {
+   "prueba": "Unidades plantilla: UPR solo pide el número",
+   "resultado": "SUPERADA",
+   "detalle": "AÑADIR UNIDAD → UPR → «8025»: UPR 8025, vehículo ligero, triángulo azul, C0, pendiente de asignación"
+  },
+  {
+   "prueba": "Sectores: opción OTROS con ubicación personalizada",
+   "resultado": "SUPERADA",
+   "detalle": "OTROS → «Puerta 7» asignado a la unidad, sin crear sectores nuevos"
+  },
+  {
+   "prueba": "Tipos de recurso: crear uno nuevo al crear una unidad",
+   "resultado": "SUPERADA",
+   "detalle": "tipo «Dron» creado desde el formulario de la unidad: guardado en la configuración general y usado por la unidad"
+  },
+  {
+   "prueba": "Configuración → Unidades plantilla",
+   "resultado": "SUPERADA",
+   "detalle": "crear, duplicar y desactivar plantillas desde Configuración → Unidades plantilla"
+  },
+  {
+   "prueba": "Persistencia de tipos y plantillas",
+   "resultado": "SUPERADA",
+   "detalle": "tipo y plantilla siguen disponibles tras recargar la aplicación"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (fase 2)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Cartografía: importar zona desde el buscador de mapas",
+   "resultado": "SUPERADA",
+   "detalle": "búsqueda «Puerta del Sol» → encuadre → plano cartográfico con su extensión geográfica (EPSG:3857, coordenadas WGS84)"
+  },
+  {
+   "prueba": "Plano: arrastrar una unidad pendiente al mapa (coordenadas reales)",
+   "resultado": "SUPERADA",
+   "detalle": "arrastrada desde «pendientes» al plano: lat 40.416938, lon -3.703833"
+  },
+  {
+   "prueba": "Plano: colocar tocando (alternativa táctil)",
+   "resultado": "SUPERADA",
+   "detalle": "tocar la unidad pendiente y luego el plano también la coloca"
+  },
+  {
+   "prueba": "Plano: mover una unidad arrastrándola",
+   "resultado": "SUPERADA",
+   "detalle": "arrastrar mueve la unidad, con respuesta visual; se guarda al soltar"
+  },
+  {
+   "prueba": "Plano: cambiar la clave con doble clic",
+   "resultado": "SUPERADA",
+   "detalle": "doble clic → selector de claves → C6 aplicada con las reglas de siempre"
+  },
+  {
+   "prueba": "Plano: devolver una unidad a pendientes de asignación",
+   "resultado": "SUPERADA",
+   "detalle": "arrastrada del plano a «pendientes»: vuelve a quedar pendiente de asignación sin eliminarse"
+  },
+  {
+   "prueba": "Avisos: crear un aviso haciendo clic en el mapa",
+   "resultado": "SUPERADA",
+   "detalle": "clic en el mapa → formulario habitual con la ubicación ya puesta → aviso nº 1 con marcador en el plano"
+  },
+  {
+   "prueba": "Avisos: crear un aviso por zona",
+   "resultado": "SUPERADA",
+   "detalle": "zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano"
+  },
+  {
+   "prueba": "Biblioteca de planos predefinidos",
+   "resultado": "SUPERADA",
+   "detalle": "Bernabéu, Metropolitano y Sol en la biblioteca; Bernabéu incorporado con su encuadre y referencia geográfica"
+  },
+  {
+   "prueba": "Plano: persistencia tras recargar",
+   "resultado": "SUPERADA",
+   "detalle": "plano cartográfico y posiciones conservados tras cerrar y abrir"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (plano de coordinación)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

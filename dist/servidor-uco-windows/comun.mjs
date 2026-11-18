@@ -16,7 +16,7 @@ export const ICACLS = win32.join(process.env.SystemRoot || 'C:\\Windows', 'Syste
 export const POWERCFG = process.env.UCO_POWERCFG || win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'powercfg.exe');
 export const NODE = process.env.UCO_NODE || process.execPath;
 export const RUTAS = {
-  servidor: join(BASE, 'servidor', 'server.mjs'), app: join(BASE, 'app'), datos: join(BASE, 'datos'),
+  servidor: join(BASE, 'servidor', 'server.mjs'), lanzador: join(BASE, 'servidor', 'lanzador.mjs'), app: join(BASE, 'app'), datos: join(BASE, 'datos'),
   arrancar: join(BASE, 'arrancar.cmd'), tarea: join(BASE, 'tarea.xml'), registro: join(BASE, 'registro.txt'), direccion: join(BASE, 'DIRECCION.txt'),
 };
 
@@ -24,11 +24,15 @@ export const RUTAS = {
 export function argsServidor(puerto = PUERTO) {
   return [RUTAS.servidor, '--port', String(puerto), '--host', '127.0.0.1', '--data', RUTAS.datos, '--static', RUTAS.app];
 }
+/** El lanzador arranca el servidor, aplica actualizaciones verificadas y vuelve atrás si fallan */
+export function argsLanzador(puerto = PUERTO) {
+  return [RUTAS.lanzador, '--port', String(puerto), '--host', '127.0.0.1', '--data', RUTAS.datos, '--static', RUTAS.app, '--base', BASE];
+}
 const q = s => '"' + s + '"';
 
 /** Script que mantiene el servidor en marcha: si se detiene, vuelve a arrancarlo a los 10 segundos */
 export function arrancarCmd(puerto = PUERTO) {
-  const [srv, ...resto] = argsServidor(puerto);
+  const [srv, ...resto] = argsLanzador(puerto);
   const args = resto.map(a => (/[\s\\:]/.test(a) ? q(a) : a)).join(' ');
   return ['@echo off', 'cd /d ' + q(BASE), ':bucle',
     `${q(NODE)} ${q(srv)} ${args} >> ${q(RUTAS.registro)} 2>&1`,
