@@ -330,3 +330,11 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;overflow-wrap:anywhere}
 .carto-marco{position:absolute;inset:6%;border:3px dashed #C62828;border-radius:6px;pointer-events:none;z-index:500;box-shadow:0 0 0 2000px rgba(0,0,0,.12)}
 .carto-mapa{overflow:hidden;border-radius:var(--r)}
 .glogo{font-family:Arial,sans-serif;font-weight:700;letter-spacing:-.02em}
+
+/* Actualizaciones */
+.note.info{background:#E8F4FD;color:#0D3C61}:root[data-theme=dark] .note.info{background:var(--soft);color:var(--ink)}
+pre.notas{white-space:pre-wrap;font:inherit;font-size:.85rem;max-height:240px;overflow:auto;background:var(--soft);padding:.6rem;border-radius:var(--r-s)}
+.tbl tr.sel td{background:var(--soft)}
+.act-bar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.45rem .8rem;background:#E8F4FD;color:#0D3C61;font-size:.9rem;border-bottom:1px solid var(--line)}
+.act-bar.bad{background:#FDECEA;color:#611A15}.act-bar .btn{min-height:36px}.act-bar span{flex:1;min-width:12rem}
+:root[data-theme=dark] .act-bar{background:var(--soft);color:var(--ink)}

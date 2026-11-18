@@ -179,6 +179,8 @@ export class CentralSync {
       const meta = await this.meta();
       if (!meta) return this._set({ estado: 'sin_configurar' });
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return this._set({ estado: 'sin_conexion', server: meta.server });
+      const bloqueo = this.h.bloqueo && this.h.bloqueo();
+      if (bloqueo) return this._set({ estado: 'bloqueado', error: bloqueo, server: meta.server });
       this._set({ estado: 'sincronizando', server: meta.server });
       const k = await this.keys(meta); const tok = k.token; const base = '/org/' + encodeURIComponent(meta.org);
       const pend = await this.datos(); const cambiados = [];
@@ -245,6 +247,18 @@ export class CentralSync {
     const meta = await this.meta(); if (!meta) return {};
     const k = await this.keys(meta);
     return (await this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/dispositivos', { token: k.token })).dispositivos;
+  }
+  /** Estado de las actualizaciones del servidor central (lo pueden consultar los dispositivos del espacio) */
+  async adminActualizaciones() {
+    const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
+    const k = await this.keys(meta);
+    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { token: k.token });
+  }
+  /** Acción sobre las actualizaciones del servidor: exige además el código de administración del servidor */
+  async accionActualizaciones(body) {
+    const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
+    const k = await this.keys(meta);
+    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { method: 'POST', token: k.token, body, timeout: 60000 });
   }
   start() {
     this.stop();

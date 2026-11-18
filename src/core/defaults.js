@@ -3,7 +3,7 @@
 import { clone } from './util.js';
 
 export const APP_NAME = 'Gestor de Emergencias UCO';
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 export const SCHEMA_VERSION = 1;
 
 /**

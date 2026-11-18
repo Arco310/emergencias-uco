@@ -9,6 +9,7 @@ try { esbuild = (await import('esbuild')).default; }
 catch { esbuild = (await import('/opt/npm-tools/node_modules/esbuild/lib/main.js')).default; }
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
+const { APP_VERSION } = await import('./src/core/defaults.js');
 const DIST = path.join(ROOT, 'dist');
 const APP = path.join(DIST, 'app');
 fs.rmSync(DIST, { recursive: true, force: true });
@@ -25,6 +26,32 @@ async function bundle(preview) {
 const LEAFLET = path.join(ROOT, 'node_modules/leaflet');
 const css = (await esbuild.transform(fs.readFileSync(path.join(LEAFLET, 'dist/leaflet.css'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src/ui/styles.css'), 'utf8'), { loader: 'css', minify: true })).code;
 const favicon = 'data:image/png;base64,' + fs.readFileSync(path.join(ROOT, 'pwa/icons/favicon-64.png')).toString('base64');
+
+// Arranque vigilado: si la aplicación no llega a arrancar (error o bloqueo), se muestra una pantalla de
+// recuperación sin dependencias: reintentar, volver a la versión anterior guardada en el dispositivo o
+// buscar una versión corregida. Los datos (IndexedDB) no se tocan.
+const RECUPERACION = `(function(){
+var ok=false,errs=[],visto=false;
+window.__ucoArranqueOk=function(){ok=true;var r=document.getElementById('uco-recuperacion');if(r)r.remove();};
+window.__ucoFallo=function(m){errs.push(String(m));mostrar()};
+function sw(msg){return new Promise(function(res){try{var c=navigator.serviceWorker&&navigator.serviceWorker.controller;if(!c)return res(null);var ch=new MessageChannel();ch.port1.onmessage=function(e){res(e.data)};c.postMessage(msg,[ch.port2]);setTimeout(function(){res(null)},3000)}catch(e){res(null)}})}
+function boton(t,fn,prim){var b=document.createElement('button');b.type='button';b.textContent=t;b.style.cssText='display:block;width:100%;min-height:48px;margin:10px 0 0;border-radius:10px;font:600 16px system-ui,sans-serif;border:1px solid #556;cursor:pointer;'+(prim?'background:#B71C1C;color:#fff;border-color:#B71C1C':'background:#232a31;color:#fff');b.onclick=fn;return b}
+function mostrar(){if(ok||visto)return;visto=true;var d=document.createElement('div');d.id='uco-recuperacion';d.setAttribute('role','alertdialog');
+d.style.cssText='position:fixed;inset:0;z-index:99999;background:#14181C;color:#eef;font:15px/1.45 system-ui,sans-serif;padding:24px;overflow:auto';
+var w=document.createElement('div');w.style.cssText='max-width:440px;margin:6vh auto 0';
+var h=document.createElement('h1');h.textContent='La aplicación no ha podido arrancar';h.style.cssText='font-size:21px;margin:0 0 10px';
+var p=document.createElement('p');p.textContent='Tus datos están a salvo en este dispositivo: no se ha borrado nada. Puedes reintentar o volver a la versión anterior de la aplicación.';
+var det=document.createElement('pre');det.textContent=errs.slice(0,3).join('\\n')||'La aplicación tarda demasiado en arrancar.';det.style.cssText='white-space:pre-wrap;font-size:12px;opacity:.75;margin:10px 0;max-height:120px;overflow:auto';
+w.appendChild(h);w.appendChild(p);w.appendChild(det);
+w.appendChild(boton('Reintentar',function(){location.reload()},true));
+sw({tipo:'ESTADO'}).then(function(e){if(e&&e.anterior&&!e.revertida)w.appendChild(boton('Usar la versión anterior'+(e.versionAnterior?' ('+e.versionAnterior+')':''),function(){sw({tipo:'REVERTIR'}).then(function(r){if(r&&r.ok){try{sessionStorage.setItem('uco:revertida','1')}catch(x){}location.reload()}else alert((r&&r.error)||'No se pudo')})}));
+w.appendChild(boton('Buscar una versión corregida',function(){navigator.serviceWorker&&navigator.serviceWorker.getRegistration().then(function(g){return g&&g.update()}).catch(function(){}).then(function(){setTimeout(function(){location.reload()},1500)})}));
+if(!errs.length)w.appendChild(boton('Seguir esperando',function(){visto=false;d.remove();setTimeout(mostrar,20000)}))});
+d.appendChild(w);(document.body||document.documentElement).appendChild(d)}
+window.addEventListener('error',function(e){if(ok)return;errs.push(String(e.message||e.error||'Error'));setTimeout(mostrar,1200)});
+window.addEventListener('unhandledrejection',function(e){if(ok)return;var r=e.reason;errs.push(String(r&&r.message||r||'Error'));setTimeout(mostrar,1200)});
+setTimeout(mostrar,25000);
+})();`;
 
 function html({ js, preview }) {
   // Cartografía: teselas de OpenStreetMap y, si se configura una clave, Google Maps Platform (dominios
@@ -49,6 +76,7 @@ ${preview ? '' : `<meta http-equiv="Content-Security-Policy" content="${csp}">\n
 <div id="layer"></div>
 <div id="toasts" aria-live="polite"></div>
 <noscript><p style="padding:2rem">Esta aplicación necesita JavaScript.</p></noscript>
+<script>${RECUPERACION}</script>
 <script>${js}</script>
 </body>
 </html>
@@ -57,8 +85,12 @@ ${preview ? '' : `<meta http-equiv="Content-Security-Policy" content="${csp}">\n
 
 const appHtml = html({ js: await bundle(false), preview: false });
 fs.writeFileSync(path.join(APP, 'index.html'), appHtml);
-const version = crypto.createHash('sha256').update(appHtml).digest('hex').slice(0, 12);
-fs.writeFileSync(path.join(APP, 'sw.js'), fs.readFileSync(path.join(ROOT, 'pwa/sw.js'), 'utf8').replace('__VERSION__', version));
+// Integridad: el service worker de esta compilación solo instala un index.html con esta suma SHA-256
+const sha = crypto.createHash('sha256').update(appHtml).digest('hex');
+const version = sha.slice(0, 12);
+fs.writeFileSync(path.join(APP, 'sw.js'), fs.readFileSync(path.join(ROOT, 'pwa/sw.js'), 'utf8').replace('__VERSION__', version).replace('__SHA256__', sha).replace('__APP_VERSION__', APP_VERSION));
+// Versión publicada (la consultan la app y el panel de actualizaciones; siempre sin caché)
+fs.writeFileSync(path.join(APP, 'version.json'), JSON.stringify({ version: APP_VERSION, build: version, sha256: sha, fecha: new Date().toISOString() }, null, 1));
 fs.copyFileSync(path.join(ROOT, 'pwa/manifest.webmanifest'), path.join(APP, 'manifest.webmanifest'));
 for (const f of fs.readdirSync(path.join(ROOT, 'pwa/icons'))) fs.copyFileSync(path.join(ROOT, 'pwa/icons', f), path.join(APP, 'icons', f));
 fs.writeFileSync(path.join(APP, '.nojekyll'), '');
@@ -78,5 +110,5 @@ addDir(PW, 'servidor-uco-windows/');
 fs.writeFileSync(path.join(DIST, 'servidor-uco-windows.zip'), zipStore(zfiles, new Date(2026, 0, 1, 12, 0, 0)));
 const kb = f => (fs.statSync(f).size / 1024).toFixed(0) + ' KB';
 console.log('Servidor para Windows: dist/servidor-uco-windows.zip (' + kb(path.join(DIST, 'servidor-uco-windows.zip')) + ', ' + zfiles.length + ' archivos)');
-console.log('Aplicación: dist/app/index.html (' + kb(path.join(APP, 'index.html')) + ') versión ' + version);
+console.log('Aplicación: dist/app/index.html (' + kb(path.join(APP, 'index.html')) + ') versión ' + APP_VERSION + ' (compilación ' + version + ')');
 console.log('Vista previa: dist/preview.html (' + kb(path.join(DIST, 'preview.html')) + ')');

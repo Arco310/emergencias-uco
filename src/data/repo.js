@@ -4,6 +4,7 @@ import { uid, now, b64, unb64, stableStringify, AppError, clone, base32, randomB
 import * as K from '../core/crypto.js';
 import { defaultGlobalConfig, SCHEMA_VERSION, APP_VERSION } from '../core/defaults.js';
 import { defaultRoles, permsOf, PERM_KEYS } from '../core/perms.js';
+import { ESQUEMA_DATOS } from './migraciones.js';
 
 const LOCK_AFTER = 5;
 const credV = u => (u && u.cred && u.cred.v) || 'v0';
@@ -18,7 +19,7 @@ export class Repo {
     if (!d) {
       d = { k: 'device', v: { id: 'dev_' + base32(randomBytes(8)).toLowerCase(), nombre: 'Dispositivo', code: base32(randomBytes(2)).slice(0, 2).replace(/[0-9]/g, c => 'ABCDEFGHJK'[c]), creado: now() } };
       await this.db.put('meta', d);
-      await this.db.put('meta', { k: 'schema', v: SCHEMA_VERSION });
+      await this.db.put('meta', { k: 'schema', v: ESQUEMA_DATOS }); // dispositivo nuevo: ya con el esquema actual
     }
     this.device = d.v;
     return this.device;
@@ -357,10 +358,10 @@ export class Repo {
     const p = await this._collect();
     const rec = { id: uid('bak_'), t: now(), tipo, nota, size: p.ops.length, integridad: p.integridad, enc: await this.enc(p) };
     await this.db.put('backups', rec);
-    if (tipo === 'auto') {
-      const cfg = await this.getCfg();
-      const autos = (await this.db.getAll('backups')).filter(b => b.tipo === 'auto').sort((a, b) => b.t - a.t);
-      for (const old of autos.slice(cfg.copiasAutoMax || 20)) await this.db.del('backups', old.id);
+    if (tipo === 'auto' || tipo === 'migracion') {
+      const max = tipo === 'auto' ? (await this.getCfg()).copiasAutoMax || 20 : 5;
+      const autos = (await this.db.getAll('backups')).filter(b => b.tipo === tipo).sort((a, b) => b.t - a.t);
+      for (const old of autos.slice(max)) await this.db.del('backups', old.id);
     }
     if (tipo !== 'auto') await this.audit('Copia de seguridad', 'Copia ' + tipo, '', nota || '');
     return rec.id;

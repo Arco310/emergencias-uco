@@ -33,6 +33,7 @@ export const PERMISOS = [
   ['copias.gestionar', 'Copias de seguridad y restauración', 'Sistema'],
   ['usuarios.admin', 'Administrar usuarios y roles', 'Sistema'],
   ['central.gestionar', 'Configurar el servidor central y dar de alta dispositivos', 'Sistema'],
+  ['actualizaciones.gestionar', 'Gestionar las actualizaciones del servidor central y de la aplicación', 'Sistema'],
 ];
 export const PERM_KEYS = PERMISOS.map(p => p[0]);
 export const PERM_LABEL = Object.fromEntries(PERMISOS.map(p => [p[0], p[1]]));

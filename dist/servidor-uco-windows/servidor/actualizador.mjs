@@ -78,8 +78,9 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
     return binario ? Buffer.from(await r.arrayBuffer()) : r.json();
   }
   /** Consulta la última versión publicada en el repositorio oficial */
-  async function comprobar() {
+  async function comprobar({ minIntervalo = 0 } = {}) {
     if (ocupado) return estado();
+    if (minIntervalo && est.comprobado && Date.now() - est.comprobado < minIntervalo) return estado();
     ocupado = 'comprobando';
     try {
       const j = await obtener(`${api}/repos/${repo}/releases/latest`);
@@ -171,9 +172,20 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
   }
   function cancelar() { est.programada = null; persistir(); registro('Activación cancelada'); return estado(); }
   let mantenimiento = false;
+  /** Copia de seguridad de los datos antes de activar otra versión (se conservan las 5 más recientes) */
+  function copiaDatos(motivo) {
+    const dir = path.join(BASE, 'copias'); fs.mkdirSync(dir, { recursive: true });
+    const destino = path.join(dir, 'datos-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + motivo);
+    fs.cpSync(DATA, destino, { recursive: true });
+    const c = fs.readdirSync(dir).filter(x => x.startsWith('datos-')).sort();
+    for (const x of c.slice(0, Math.max(0, c.length - 5))) fs.rmSync(path.join(dir, x), { recursive: true, force: true });
+    return destino;
+  }
   function activar() {
     if (mantenimiento || !est.programada || !est.preparada) return;
-    mantenimiento = true;
+    mantenimiento = true; // desde aquí no se aceptan escrituras: la copia es coherente
+    try { registro('Copia de seguridad de los datos:', copiaDatos('antes-de-v' + est.preparada.version)); }
+    catch (e) { mantenimiento = false; est.error = 'No se pudo hacer la copia de seguridad previa: ' + e.message; persistir(); registro('Activación cancelada:', est.error); return; }
     registro('Reinicio controlado para activar la versión', est.preparada.version);
     est.programada = null; persistir();
     setTimeout(() => salir(SALIDA_ACTUALIZAR), 800);
@@ -183,8 +195,11 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
     if (!lanzador || !BASE) throw Object.assign(new Error('Solo es posible con el lanzador de actualizaciones'), { status: 409 });
     if (!fs.existsSync(path.join(BASE, 'copias', 'anterior', 'servidor', 'server.mjs'))) throw Object.assign(new Error('No hay ninguna versión anterior guardada'), { status: 409 });
     fs.mkdirSync(path.join(BASE, 'actualizaciones'), { recursive: true });
+    mantenimiento = true;
+    try { registro('Copia de seguridad de los datos:', copiaDatos('antes-de-revertir-v' + version)); }
+    catch (e) { mantenimiento = false; throw Object.assign(new Error('No se pudo hacer la copia de seguridad previa: ' + e.message), { status: 500 }); }
     fs.writeFileSync(path.join(BASE, 'actualizaciones', 'REVERTIR'), String(Date.now()));
-    registro('Vuelta a la versión anterior solicitada'); mantenimiento = true;
+    registro('Vuelta a la versión anterior solicitada');
     setTimeout(() => salir(SALIDA_ACTUALIZAR), 800);
     return estado();
   }
@@ -205,6 +220,7 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
   }, 60000) : null; if (reloj) reloj.unref();
   return {
     comprobar, preparar, programar, cancelar, revertir, estado, activar,
+    auditar: texto => registro(texto),
     get mantenimiento() { return mantenimiento; },
     escritura(pid) { act.ultimaEscritura = Date.now(); act.escrituras++; if (pid) act.preventivos.set(pid, Date.now()); },
     detener() { if (reloj) clearInterval(reloj); },

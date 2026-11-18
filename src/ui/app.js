@@ -14,6 +14,8 @@ import * as ops from './views/ops.js';
 import * as plano from './views/plano.js';
 import * as analysis from './views/analysis.js';
 import * as admin from './views/admin.js';
+import * as actualizaciones from './views/actualizaciones.js';
+import { iniciarActualizaciones, arranqueOk, estadoApp } from './actualizacion.js';
 
 /* global __PREVIEW__ */
 G.preview = typeof __PREVIEW__ !== 'undefined' && __PREVIEW__;
@@ -32,6 +34,7 @@ const VIEWS = {
   cuenta: { t: 'Mi cuenta', ic: 'usuario', scope: 'g', r: admin.renderAccount, parent: 'sistema' },
   acerca: { t: 'Acerca de', ic: 'info', scope: 'g', r: admin.renderAbout, parent: 'sistema' },
   central: { t: 'Servidor central', ic: 'sync', scope: 'g', r: admin.renderCentral, parent: 'sistema' },
+  actualizaciones: { t: 'Actualizaciones', ic: 'descargar', scope: 'g', r: actualizaciones.renderActualizaciones, parent: 'sistema' },
   // Dentro de un preventivo
   panel: { t: 'Centro de control', ic: 'panel', scope: 'p', r: ops.renderPanel },
   unidades: { t: 'Unidades', ic: 'unidades', scope: 'p', r: ops.renderUnits },
@@ -63,11 +66,19 @@ F['dlg.submit'] = form => dialogSubmit(form);
 let renderQueued = false;
 /** Entorno de pruebas (CLAUDE_TEST): aviso permanente, datos y espacio central separados de los reales */
 const pruebasBar = () => G.pruebas ? `<div class="pruebas-bar" role="status">${icon('alerta')} ENTORNO DE PRUEBAS · CLAUDE_TEST — datos ficticios, separados de los reales</div>` : '';
+/** Aviso de versión nueva de la aplicación lista (o de que hay que actualizar para seguir sincronizando) */
+function actBar() {
+  const s = estadoApp(); const b = (t, a, cls, data = {}) => `<button type="button" class="btn sm ${cls}" data-a="${a}"${Object.entries(data).map(([k, v]) => ` data-${k}="${esc(v)}"`).join('')}>${esc(t)}</button>`;
+  if (s.aplicando) return `<div class="act-bar" role="status" data-act-bar="aplicando">${icon('sync')}<span>Aplicando la versión nueva…</span></div>`;
+  if (G.core && G.core.bloqueoSync) return `<div class="act-bar bad" role="alert" data-act-bar="obsoleta">${icon('alerta')}<span>${esc(G.core.bloqueoSync)}</span>${s.lista ? b('Actualizar', 'act.aplicar', 'primary') : b('Buscar actualización', 'act.comprobar', '')}</div>`;
+  if (s.lista) return `<div class="act-bar" role="status" data-act-bar="lista">${icon('descargar')}<span>Versión ${esc(s.lista.version || 'nueva')} de la aplicación lista para aplicar.</span>${b('Actualizar', 'act.aplicar', 'primary')}${G.core && G.core.session ? b('Ver', 'nav', 'ghost', { v: 'actualizaciones' }) : ''}</div>`;
+  return '';
+}
 export function render() {
   renderQueued = false;
   const app = $('#app'); if (!app) return;
   const core = G.core;
-  if (!core || !core.session || auth.blocking()) { app.className = 'app auth'; app.innerHTML = pruebasBar() + auth.renderAuth(); drawLayer(); return; }
+  if (!core || !core.session || auth.blocking()) { app.className = 'app auth'; app.innerHTML = pruebasBar() + actBar() + auth.renderAuth(); drawLayer(); return; }
   if (G.applyTheme) G.applyTheme();
   let route = G.ui.route;
   const v0 = VIEWS[route];
@@ -99,7 +110,7 @@ function layout(route, v, body) {
   const st = inPrev ? s.prev : null;
   const est = st ? { preparacion: ['En preparación', 'warn'], activo: ['Activo', 'ok'], cerrado: ['Cerrado', 'muted'] }[st.estado] : null;
   return `
-  ${pruebasBar()}${G.preview ? `<div class="preview-bar">${icon('info')} Vista previa: los datos pueden no conservarse y no hay modo sin conexión, sincronización, GPS ni descargas. Para uso real, aloja la aplicación.</div>` : ''}
+  ${pruebasBar()}${actBar()}${G.preview ? `<div class="preview-bar">${icon('info')} Vista previa: los datos pueden no conservarse y no hay modo sin conexión, sincronización, GPS ni descargas. Para uso real, aloja la aplicación.</div>` : ''}
   <header class="top">
     ${inPrev ? `<button class="btn icon ghost" data-a="prev.exit" title="Volver a preventivos" aria-label="Volver a preventivos">${icon('atras')}</button>` : `<span class="logo">${logoSvg()}</span>`}
     <div class="top-title">${inPrev ? `<b>${esc(st.nombre)}</b><span class="chip sm ${est[1]}">${est[0]}${st.archivado ? ' · archivado' : ''}</span>` : `<b>${APP_NAME}</b>`}
@@ -242,7 +253,7 @@ async function boot() {
   const root = document.getElementById('app');
   root.innerHTML = `<div class="splash">${logoSvg()}<p>Cargando…</p></div>`;
   let storage;
-  try { storage = await openStorage(); } catch (e) { root.innerHTML = '<div class="splash"><p>No se pudo abrir el almacenamiento: ' + esc(e.message) + '</p></div>'; return; }
+  try { storage = await openStorage(); } catch (e) { root.innerHTML = '<div class="splash"><p>No se pudo abrir el almacenamiento: ' + esc(e.message) + '</p></div>'; if (window.__ucoFallo) window.__ucoFallo('No se pudo abrir el almacenamiento: ' + e.message); return; }
   G.storageKind = storage.kind;
   if (storage.kind === 'memoria') G.preview = true;
   G.pruebas = entornoPruebas();
@@ -263,12 +274,9 @@ async function boot() {
   setInterval(lockWatch, 15000);
   const h = location.hash.slice(1); if (VIEWS[h]) G.ui.route = G.ui.bootRoute = h; // pantalla a recuperar tras recargar e iniciar sesión
   render();
-  if (!G.preview && 'serviceWorker' in navigator && location.protocol !== 'file:') {
-    try {
-      const reg = await navigator.serviceWorker.register('sw.js');
-      reg.addEventListener('updatefound', () => { const w = reg.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) toast('Nueva versión disponible: se aplicará al volver a abrir la aplicación', 'info', 8000); }); });
-    } catch (e) { console.warn('Service worker no registrado', e); }
-  }
+  arranqueOk(); // la aplicación ha arrancado: no hace falta la pantalla de recuperación
+  // Actualizaciones: service worker con activación controlada y versión del servidor central
+  iniciarActualizaciones().catch(e => console.warn('Actualizaciones', e));
   if (navigator.storage && navigator.storage.persist) { try { G.persisted = await navigator.storage.persisted(); } catch { } }
 }
 /** Tras iniciar sesión: abre el último preventivo usado */

@@ -17,7 +17,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { crearActualizador } from './actualizador.mjs';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 /** Versión mínima de la aplicación compatible con este servidor (las anteriores deben actualizarse) */
 const MIN_CLIENTE = '1.1.0';
 /** Versión del formato de los datos del servidor (migraciones al arrancar) */
@@ -271,9 +271,13 @@ async function apiOrg(req, res, url, parts) {
     if (req.method === 'GET') return send(res, 200, ACT.estado());
     if (req.method === 'POST') {
       const b = await readJson(req);
-      comprobarCodigo(b.codigo);
-      log('Actualizaciones: acción', b.accion, 'desde', String(req.headers['x-uco-dispositivo'] || '').slice(0, 60));
-      if (b.accion === 'comprobar') return send(res, 200, await ACT.comprobar());
+      // Consultar si hay versión nueva lo puede pedir cualquier dispositivo del espacio (como mucho una vez
+      // por minuto); el resto de acciones exige el código de administración del servidor
+      const conCodigo = b.accion !== 'comprobar' || !!b.codigo;
+      if (conCodigo) comprobarCodigo(b.codigo);
+      // Registro de auditoría de los despliegues: acción, dispositivo y usuario que la solicita
+      ACT.auditar('Acción «' + String(b.accion).slice(0, 20) + '»' + (b.forzar ? ' (forzada)' : '') + ' solicitada por ' + String(b.usuario || '?').slice(0, 60) + ' desde ' + String(b.dispositivo || '?').slice(0, 100) + ' en el espacio ' + org);
+      if (b.accion === 'comprobar') return send(res, 200, await ACT.comprobar(conCodigo ? {} : { minIntervalo: 60000 }));
       if (b.accion === 'preparar') { ACT.preparar().catch(() => { }); return send(res, 202, ACT.estado()); }
       if (b.accion === 'ahora' || b.accion === 'ventana') return send(res, 200, ACT.programar(b.accion, { forzar: !!b.forzar }));
       if (b.accion === 'cancelar') return send(res, 200, ACT.cancelar());
@@ -419,7 +423,7 @@ function serveStatic(req, res, url) {
   if (!file.startsWith(STATIC + path.sep) && file !== STATIC) return send(res, 403, { error: 'Prohibido' });
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(res, 404, 'No encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
   const ext = path.extname(file);
-  const noCache = ['.html', '.webmanifest'].includes(ext) || path.basename(file) === 'sw.js';
+  const noCache = ['.html', '.webmanifest'].includes(ext) || ['sw.js', 'version.json'].includes(path.basename(file));
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': noCache ? 'no-cache' : 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
   fs.createReadStream(file).pipe(res);
 }

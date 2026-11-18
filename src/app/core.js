@@ -11,6 +11,8 @@ import * as C from '../core/commands.js';
 import { uid, now, b64, unb64, AppError, clone, same, isHexColor } from '../core/util.js';
 import { contentFromPrev, seedFromTemplate, newTemplate, contentFromConfig } from '../core/templates.js';
 import { counts } from '../core/engine.js';
+import { migrarDatos } from '../data/migraciones.js';
+import { posterior } from '../core/versiones.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -20,8 +22,10 @@ export class AppCore {
     this.servidorFijo = servidor !== undefined ? servidor : typeof window !== 'undefined' ? SERVIDOR_CENTRAL : null;
     this.repo = new Repo(storage);
     this.engines = new Map(); this.metas = new Map(); this.cur = null; this.listeners = new Set(); this.dirty = false;
+    this.bloqueoSync = null; this.versionRemota = null; this.migracion = null; this._actualizada = null;
     this.sync = new SyncManager({
       repo: this.repo,
+      bloqueo: server => this._bloqueo(server),
       onRemoteOps: (pid, ops) => this._remote(pid, ops),
       onNumber: (pid, id, num) => this._number(pid, id, num),
       getPlano: pid => { const e = this.engines.get(pid); return e && e.state.prev ? e.state.prev.plano : null; },
@@ -30,6 +34,7 @@ export class AppCore {
     });
     this.central = new CentralSync({
       repo: this.repo, version: APP_VERSION, pruebas,
+      bloqueo: () => this._bloqueo(this.centralMeta && this.centralMeta.server),
       device: () => ({ id: this.device.id, nombre: this.device.nombre }),
       onPrevs: entries => this._centralPrevs(entries),
       onConfig: ids => this._centralConfig(ids),
@@ -60,6 +65,11 @@ export class AppCore {
   async setup(data) { const r = await this.repo.setup(data); await this._afterLogin(); return r; }
   async recover(code, u, p) { await this.repo.recover(code, u, p); await this._afterLogin(); }
   async _afterLogin() {
+    // Migraciones de los datos locales (con copia de seguridad previa). Si fallan, se sigue con los datos
+    // como estaban y se reintenta en el siguiente inicio de sesión.
+    try { this.migracion = await migrarDatos(this.repo, { migrarCfg: c => this._migrarCfg(c) }); }
+    catch (e) { console.error('Migración de datos fallida', e); this.migracion = { estado: 'error', error: e.message }; }
+    if (this._actualizada) { const a = this._actualizada; this._actualizada = null; await this.repo.audit(a.revertida ? 'Aplicación devuelta a la versión anterior' : 'Actualización de la aplicación', 'Aplicación en este dispositivo', a.de || '', a.a || APP_VERSION); }
     this.cfg = this._migrarCfg(await this.repo.getCfg());
     this.sync.intervalMs = Math.max(2, Number(this.cfg.syncIntervaloSeg) || 5) * 1000;
     this.summaries = await this.repo.listSummaries();
@@ -301,6 +311,58 @@ export class AppCore {
     return this.centralRemoto;
   }
   centralEstado() { return { meta: this.centralMeta, st: this.central.status(), remoto: this.centralRemoto || null, consultado: !!this.centralConsultado, servidor: this.servidorCentral() }; }
+
+  // ------------- versiones y actualizaciones -------------
+  /** Motivo por el que no se sincroniza con ese servidor (aplicación anterior a la mínima que admite) */
+  _bloqueo(server) {
+    if (!this.bloqueoSync || !this.versionRemota) return null;
+    return !server || normServer(server) === this.versionRemota.server ? this.bloqueoSync : null;
+  }
+  /** Versión del servidor central y versión mínima de la aplicación que admite (no requiere sesión) */
+  async versionServidor() {
+    await this._detectarOrigen();
+    const srv = this.servidorCentral(); if (!srv) return null;
+    let v = null;
+    try { v = await this.central._req(srv, '/version', { timeout: 8000 }); }
+    catch (e) { v = e.status === 404 ? { antiguo: true, version: await this.central.detectar(srv) } : null; }
+    if (!v) return this.versionRemota;
+    this.versionRemota = { ...v, server: normServer(srv), consultada: now() };
+    const antes = this.bloqueoSync;
+    this.bloqueoSync = v.minCliente && posterior(v.minCliente, APP_VERSION)
+      ? 'Esta aplicación (' + APP_VERSION + ') es anterior a la mínima que admite el servidor central (' + v.minCliente + '). Tus cambios se guardan en este dispositivo y se enviarán en cuanto se actualice.'
+      : null;
+    if (antes && !this.bloqueoSync) { this.central.kick(); if (this.cur) this.sync.kick(this.cur); }
+    this.emit('version', this.versionRemota);
+    return this.versionRemota;
+  }
+  /** Antes de recargar para actualizar: intenta enviar los cambios pendientes (no es imprescindible:
+   *  todo está guardado en el dispositivo y se enviará al volver) y devuelve los que quedan */
+  async prepararRecarga(ms = 8000) {
+    const tareas = [];
+    if (this.cur && this.isShared()) tareas.push(this.sync.syncNow(this.cur));
+    if (this.centralMeta) tareas.push(this.central.syncNow());
+    await Promise.race([Promise.all(tareas).catch(() => null), new Promise(r => setTimeout(r, ms))]);
+    if (this.repo.dek) await this.autoBackup().catch(() => null);
+    const pendientes = this.cur ? await this.repo.countPending(this.cur).catch(() => 0) : 0;
+    return { pendientes };
+  }
+  /** La aplicación se acaba de actualizar (o de volver a la versión anterior): se anota al iniciar sesión */
+  registrarActualizacion(info) { this._actualizada = info; }
+  async actualizacionesServidor() { return this.central.adminActualizaciones(); }
+  async dispositivosCentral() { return this.central.dispositivos(); }
+  /** Acciones sobre el servidor central: permiso de la aplicación y, en el servidor, su código de administración */
+  async accionActualizacionServidor(accion, { codigo = '', forzar = false } = {}) {
+    if (!this.can('actualizaciones.gestionar')) throw new AppError('No tienes permiso para gestionar las actualizaciones', 'permiso');
+    const NOMBRE = { comprobar: 'Comprobar versiones', preparar: 'Descargar y verificar', ahora: 'Instalar ahora', ventana: 'Instalar en la ventana segura', cancelar: 'Cancelar la instalación programada', revertir: 'Volver a la versión anterior' };
+    if (!NOMBRE[accion]) throw new AppError('Acción no válida');
+    if (accion !== 'comprobar' && !String(codigo).trim()) throw new AppError('Escribe el código de administración del servidor');
+    let r = null; let error = null;
+    try { r = await this.central.accionActualizaciones({ accion, codigo: String(codigo).trim(), forzar: !!forzar, dispositivo: this.device.id + ' (' + (this.device.nombre || '') + ')', usuario: this.user.usuario }); }
+    catch (e) { error = e; }
+    await this.repo.audit('Actualización del servidor central', NOMBRE[accion], '', error ? 'Error: ' + error.message : 'Solicitada' + (forzar ? ' (forzada)' : ''));
+    if (error) throw error;
+    return r;
+  }
   /** Longitud mínima de contraseña: 8 con servidor central (acceso por Internet) */
   minPassword() { return this.repo.minPassword || 6; }
   _needCentral() { if (!this.can('central.gestionar')) throw new AppError('No tienes permiso para configurar el servidor central', 'permiso'); }

@@ -9,6 +9,7 @@ import { prevKeys, seal, open, sealBytes, openBytes } from '../core/crypto.js';
 export const SYNC_ESTADOS = {
   sincronizado: 'Sincronizado', pendiente: 'Cambios pendientes', sin_conexion: 'Sin conexión', error: 'Error de sincronización',
   conflicto: 'Conflictos por resolver', local: 'Solo por archivo', desactivado: 'Independiente', sincronizando: 'Sincronizando…',
+  bloqueado: 'Actualiza la aplicación',
 };
 
 export function encodeJoinCode({ server, pid, secret, nombre }) {
@@ -143,6 +144,9 @@ export class SyncManager {
       if (meta.modalidad !== 'compartida') return this._set(pid, { estado: 'desactivado' });
       if (!meta.server) return this._set(pid, { estado: 'local', pendientes: await this.h.repo.countPending(pid) });
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return this._set(pid, { estado: 'sin_conexion', pendientes: await this.h.repo.countPending(pid) });
+      // Aplicación anterior a la mínima que admite el servidor: los cambios se guardan aquí y se envían al actualizar
+      const bloqueo = this.h.bloqueo && this.h.bloqueo(meta.server);
+      if (bloqueo) return this._set(pid, { estado: 'bloqueado', error: bloqueo, pendientes: await this.h.repo.countPending(pid) });
       this._set(pid, { estado: 'sincronizando' });
       const k = await this.keys(pid);
       if (!meta.registrado) await this.register(pid, { startNum: meta.startNum || 0 });

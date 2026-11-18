@@ -13,6 +13,7 @@ import { prevJSON, csvZip } from '../../core/exporters.js';
 import { SYNC_ESTADOS } from '../../data/sync.js';
 import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './catalogs.js';
 import { overriddenVis } from '../../core/visual.js';
+import { estadoApp } from '../actualizacion.js';
 
 const core = () => G.core;
 const S = () => G.core.state; const P = () => G.core.state.prev;
@@ -359,6 +360,7 @@ export function renderSystemMenu() {
     ${tile('usuario', 'Usuarios y roles', 'nav', { v: 'usuarios' })}
     ${tile('archivar', 'Copias de seguridad', 'nav', { v: 'copias' })}
     ${tile('bitacora', 'Auditoría del sistema', 'nav', { v: 'auditoria' })}
+    ${tile('descargar', 'Actualizaciones', 'nav', { v: 'actualizaciones' }, core().bloqueoSync ? 'Actualización necesaria' : estadoApp().lista ? 'Versión ' + (estadoApp().lista.version || 'nueva') + ' lista' : 'Versión ' + APP_VERSION)}
     ${tile('escudo', 'Permisos del dispositivo', 'nav', { v: 'permisos' })}
     ${tile('llave', 'Mi cuenta', 'nav', { v: 'cuenta' })}
     ${tile('info', 'Acerca de', 'nav', { v: 'acerca' })}
@@ -675,7 +677,8 @@ F['acc.pw'] = async form => { const v = readForm(form); if (v.p1 !== v.p2) { toa
 
 export function renderAbout() {
   const c = core();
-  return `<section class="card pad"><h2>${APP_NAME}</h2><p>Versión ${APP_VERSION} · dispositivo ${esc(c.device.nombre)} (${esc(c.device.code)}) · <code>${esc(c.device.id)}</code></p>
+  const act = estadoApp().activa;
+  return `<section class="card pad"><h2>${APP_NAME}</h2><p>Versión ${APP_VERSION}${act && act.build ? ' (compilación ' + esc(act.build) + ')' : ''} · dispositivo ${esc(c.device.nombre)} (${esc(c.device.code)}) · <code>${esc(c.device.id)}</code></p>
     <p>Almacenamiento: ${G.storageKind === 'indexeddb' ? 'IndexedDB cifrado (AES-256-GCM)' : 'memoria (vista previa, no persistente)'} · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'funcionamiento sin conexión activo' : 'sin conexión no activado todavía (se activa al recargar la aplicación alojada)'}</p></section>
   <section class="card pad"><h2>Servicios externos y costes</h2><ul class="plain">
     <li><b>Google Maps</b> (mapa incrustado y enlaces, sin clave de API): gratuito. Solo se usa al consultar el mapa real y requiere Internet.</li>

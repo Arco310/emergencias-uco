@@ -20,6 +20,9 @@ const BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'uco-act-'));
 const PORT = 20400 + Math.floor(Math.random() * 300);
 const URL0 = `http://127.0.0.1:${PORT}/api/v1`;
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+const FUENTE = fs.readFileSync(path.join(ROOT, 'server/server.mjs'), 'utf8');
+const ACTUAL = /const VERSION = '([^']+)'/.exec(FUENTE)[1];
+const MIN = /const MIN_CLIENTE = '([^']+)'/.exec(FUENTE)[1];
 let gh, ghPort, lanz; const pub = { release: null, files: new Map() };
 
 /** Paquete de una versión «publicada»: el actual con otro número de versión (o modificado) */
@@ -75,12 +78,15 @@ test('utilidades: comparación de versiones y lector ZIP con protección de ruta
 
 test('estado y versiones: la app consulta la versión mínima y el servidor expone su estado', async () => {
   const v = await req('/version');
-  assert.equal(v.j.version, '1.1.0'); assert.equal(v.j.minCliente, '1.1.0'); assert.equal(v.j.lanzador, true); assert.equal(v.j.esquema, 2);
+  assert.equal(v.j.version, ACTUAL); assert.equal(v.j.minCliente, MIN); assert.equal(v.j.lanzador, true); assert.equal(v.j.esquema, 2);
   assert.equal((await req(`/org/${org}/admin/actualizaciones`)).status, 401, 'consultar exige ser un dispositivo del espacio');
   const e = (await req(`/org/${org}/admin/actualizaciones`, { token: tok })).j;
-  assert.equal(e.instalada, '1.1.0'); assert.equal(e.lanzador, true);
-  // Las acciones exigen el código de administración
-  assert.equal((await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'comprobar' } })).status, 403);
+  assert.equal(e.instalada, ACTUAL); assert.equal(e.lanzador, true);
+  // Las acciones exigen el código de administración (consultar si hay versión nueva, no)
+  assert.equal((await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'preparar' } })).status, 403);
+  assert.equal((await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'cancelar', codigo: 'AAAAA-BBBBB-CCCCC-DDDDD' } })).status, 403);
+  assert.equal((await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'comprobar' } })).status, 200);
+  const v2 = await req('/version'); assert.equal(v2.j.disponible, null, 'sin versiones publicadas no hay ninguna disponible');
 });
 
 test('paquete manipulado: se rechaza por integridad y no queda nada preparado', async () => {
@@ -109,7 +115,10 @@ test('actualización completa: verificar, probar, reinicio controlado, periodo d
   assert.equal(v, '9.9.9', 'la versión nueva está en marcha');
   const dep = await esperar(async () => { const d = JSON.parse(fs.readFileSync(path.join(BASE, 'datos', '_servidor', 'despliegue.json'), 'utf8')); return d.estado === 'activa' ? d : null; }, 30000);
   assert.equal(dep.instalada, '9.9.9');
-  assert.ok(fs.readFileSync(path.join(BASE, 'copias', 'anterior', 'servidor', 'server.mjs'), 'utf8').includes("const VERSION = '1.1.0'"), 'se guarda la versión anterior');
+  assert.ok(fs.readFileSync(path.join(BASE, 'copias', 'anterior', 'servidor', 'server.mjs'), 'utf8').includes("const VERSION = '" + ACTUAL + "'"), 'se guarda la versión anterior');
+  const copia = fs.readdirSync(path.join(BASE, 'copias')).find(x => x.startsWith('datos-') && x.endsWith('antes-de-v9.9.9'));
+  assert.ok(copia, 'copia de seguridad de los datos previa a la activación');
+  assert.ok(fs.existsSync(path.join(BASE, 'copias', copia, 'prev_conservar', 'ops.jsonl')), 'la copia contiene los preventivos');
   const ops = await req('/prev/prev_conservar/ops?after=0', { token: pub.tp });
   assert.equal(ops.j.ops.length, 1, 'los datos se conservan'); assert.equal(ops.j.ops[0].c, 'cifrado');
   assert.ok(fs.readFileSync(path.join(BASE, 'datos', '_servidor', 'despliegues.log'), 'utf8').includes('activa y funcionando'), 'registro del despliegue');
@@ -118,12 +127,12 @@ test('actualización completa: verificar, probar, reinicio controlado, periodo d
 test('vuelta a la versión anterior a petición del administrador', async () => {
   const r = await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'revertir', codigo: ADMIN } });
   assert.equal(r.status, 200);
-  const v = await esperar(async () => { const j = await (await fetch(URL0 + '/salud', { signal: AbortSignal.timeout(1500) })).json(); return j.version === '1.1.0' ? j.version : null; }, 40000);
-  assert.equal(v, '1.1.0');
+  const v = await esperar(async () => { const j = await (await fetch(URL0 + '/salud', { signal: AbortSignal.timeout(1500) })).json(); return j.version === ACTUAL ? j.version : null; }, 40000);
+  assert.equal(v, ACTUAL);
   const d = JSON.parse(fs.readFileSync(path.join(BASE, 'datos', '_servidor', 'despliegue.json'), 'utf8'));
-  assert.equal(d.instalada, '1.1.0'); assert.equal(d.historial.slice(-1)[0].version, '9.9.9'); assert.equal(d.historial.slice(-1)[0].a, '1.1.0');
+  assert.equal(d.instalada, ACTUAL); assert.equal(d.historial.slice(-1)[0].version, '9.9.9'); assert.equal(d.historial.slice(-1)[0].a, ACTUAL);
   assert.equal((await req('/prev/prev_conservar/ops?after=0', { token: pub.tp })).j.ops.length, 1);
-  assert.equal((await req(`/org/${org}/admin/actualizaciones`, { token: tok })).j.despliegue.instalada, '1.1.0');
+  assert.equal((await req(`/org/${org}/admin/actualizaciones`, { token: tok })).j.despliegue.instalada, ACTUAL);
 });
 
 test('una versión que falla tras activarse se revierte sola durante el periodo de prueba', async () => {
@@ -136,8 +145,8 @@ test('una versión que falla tras activarse se revierte sola durante el periodo 
   await req(`/org/${org}/admin/actualizaciones`, { method: 'POST', token: tok, body: { accion: 'ahora', codigo: ADMIN, forzar: true } });
   const dep = await esperar(async () => { const d = JSON.parse(fs.readFileSync(path.join(BASE, 'datos', '_servidor', 'despliegue.json'), 'utf8')); return d.estado === 'revertida' && d.historial.some(h => h.version === '9.9.10' && h.resultado === 'revertida') ? d : null; }, 60000);
   assert.ok(dep, 'el lanzador vuelve a la versión anterior');
-  assert.match(dep.historial.slice(-1)[0].motivo, /periodo de prueba/); assert.equal(dep.instalada, '1.1.0');
-  assert.equal(await version(), '1.1.0', 'sigue en servicio con la versión anterior');
+  assert.match(dep.historial.slice(-1)[0].motivo, /periodo de prueba/); assert.equal(dep.instalada, ACTUAL);
+  assert.equal(await version(), ACTUAL, 'sigue en servicio con la versión anterior');
   assert.equal((await req('/prev/prev_conservar/ops?after=0', { token: pub.tp })).j.ops.length, 1);
 });
 
