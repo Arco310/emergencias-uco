@@ -26,7 +26,7 @@ export function sectorNombre(p, x, vacio = '') {
   const sec = ((p && p.cat && p.cat.sectores) || []).find(e => e.id === x.sector);
   return sec ? sec.nombre : x.sector;
 }
-const AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|cierre\.[a-z]+)$/;
+const AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|zona|cierre\.[a-z]+)$/;
 export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tiposRecurso'];
 
 export function emptyState() {
@@ -294,7 +294,7 @@ H['unit.loc'] = (s, op) => {
 H['unit.plan'] = (s, op) => {
   const u = getUnit(s, op.e); const n = op.x.n || null;
   if (same(u.plan, n)) return { noop: true };
-  u.plan = n ? { x: n.x, y: n.y } : null;
+  u.plan = n ? { x: n.x, y: n.y, ...(n.lat != null ? { lat: n.lat, lon: n.lon } : {}) } : null;
 };
 
 H['unit.rest'] = (s, op) => {
@@ -326,7 +326,7 @@ H['aviso.create'] = (s, op) => {
   const a = {
     id: op.e, num: op.num != null ? op.num : null, ref: op.ref || null,
     tipo: d.tipo || null, desc: d.desc || '', t: d.t || op.t, loc: d.loc ? clone(d.loc) : null, sector: d.sector || null,
-    obs: d.obs || '', plan: d.plan ? clone(d.plan) : null, part: [], estado: 'pendiente', hist: [{ t: op.t, o: null, n: 'pendiente' }],
+    obs: d.obs || '', plan: d.plan ? clone(d.plan) : null, zona: d.zona ? clone(d.zona) : null, part: [], estado: 'pendiente', hist: [{ t: op.t, o: null, n: 'pendiente' }],
     creado: op.t, creadoPor: op.u ? op.u.n : '', asignadoEn: null, enCursoEn: null, llegadaEn: null, salidaPuntoEn: null,
     finalizadoEn: null, cierre: null, notas: [], reaperturas: [],
   };
@@ -348,7 +348,7 @@ H['aviso.update'] = (s, op) => {
 H['aviso.plan'] = (s, op) => {
   const a = getAviso(s, op.e); const n = op.x.n || null;
   if (same(a.plan, n)) return { noop: true };
-  a.plan = n ? { x: n.x, y: n.y } : null;
+  a.plan = n ? { x: n.x, y: n.y, ...(n.lat != null ? { lat: n.lat, lon: n.lon } : {}) } : null;
 };
 
 H['aviso.asig'] = (s, op) => {

@@ -515,13 +515,25 @@ A['a.new'] = el => {
     onMount: el2 => { const f = el2.querySelector('form'); if (unit && unit.loc) setFormLoc(f, { txt: unit.loc.txt, lat: unit.loc.lat, lon: unit.loc.lon }); if (unit && unit.sector) f.sector.value = unit.sector; },
   });
 };
+/** Nuevo aviso desde el plano: el formulario de siempre con la ubicación (y la zona) ya puestas */
+export function nuevoAvisoEn({ plan = null, loc = null, zona = null } = {}) {
+  const p = P();
+  openSheet({
+    title: zona ? 'Nuevo aviso en una zona' : 'Nuevo aviso en el plano', size: 'l',
+    render: () => `<form data-f="a.save" data-tdef="${toLocalInput(now())}">${fieldsHtml(avisoFields(p), { t: now() })}
+      <p class="note">${icon(zona ? 'zona' : 'pin')} ${zona ? 'Zona de ' + zona.pts.length + ' puntos marcada en el plano; la ubicación del aviso es su centro.' : 'Ubicación tomada del punto marcado en el plano.'}</p>
+      <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear aviso</button></div></form>`,
+    onMount: el2 => { const f = el2.querySelector('form'); f._plan = plan; f._zona = zona; setFormLoc(f, loc || (plan ? { txt: 'Punto del plano', lat: null, lon: null } : null)); },
+  });
+}
 A['a.formLoc'] = el => { const form = el.closest('form'); openLocEditor({ title: 'Ubicación del aviso', value: form._loc, onSave: loc => setFormLoc(form, loc) }); };
 F['a.save'] = async form => {
   const v = readForm(form);
   // Si no se ha cambiado la hora propuesta, se usa la hora exacta de creación (con segundos)
   const tInput = form.querySelector('[name=t]');
   const t = !form.dataset.id && tInput && tInput.value === form.dataset.tdef ? null : (v.t || null);
-  const d = { tipo: v.tipo || null, desc: v.desc, t, loc: form._loc || null, sector: v.sector || null, obs: v.obs };
+  const d = { tipo: v.tipo || null, desc: v.desc, t, loc: form._loc && (form._loc.txt || form._loc.lat != null) ? form._loc : null, sector: v.sector || null, obs: v.obs, plan: form._plan || null, zona: form._zona || null };
+  if (form._loc && !form._loc.txt && form._loc.lat == null) d.loc = null;
   if (form.dataset.id) {
     const a0 = S().avisos[form.dataset.id];
     const tOld = a0.t ?? a0.creado;

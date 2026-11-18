@@ -20,10 +20,31 @@ self.addEventListener('notificationclick', e => {
     return self.clients.openWindow((e.notification.data && e.notification.data.url) || self.registration.scope);
   })());
 });
+// Teselas de OpenStreetMap ya vistas: se guardan para poder usar el plano sin conexión. Solo las que el
+// usuario ha visto (sin descargas masivas, según la política de uso de OSM) y con un máximo.
+const TESELAS = 'uco-teselas-1'; const MAX_TESELAS = 3000;
+const SEMANA = 7 * 24 * 3600 * 1000;
+async function tesela(req) {
+  const cache = await caches.open(TESELAS);
+  const hit = await cache.match(req);
+  // Reciente: se usa sin volver a pedirla (menos carga para los servidores de OSM)
+  const fecha = hit && Date.parse(hit.headers.get('date') || '');
+  if (hit && fecha && Date.now() - fecha < SEMANA) return hit;
+  try {
+    const res = await fetch(req);
+    if (res && res.ok) {
+      await cache.put(req, res.clone());
+      const keys = await cache.keys(); if (keys.length > MAX_TESELAS) for (const k of keys.slice(0, keys.length - MAX_TESELAS)) await cache.delete(k);
+      return res;
+    }
+    return hit || res;
+  } catch { return hit || new Response('', { status: 504 }); }
+}
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.hostname === 'tile.openstreetmap.org') { e.respondWith(tesela(req)); return; }
   if (url.origin !== location.origin || url.pathname.includes('/api/')) return; // mapas, búsquedas y sincronización: siempre red
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);

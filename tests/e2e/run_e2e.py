@@ -112,7 +112,11 @@ class App:
         if activar: s.locator('[name=activar]').check()
         s.locator('form[data-f="home.create"] button.primary').click(); self.pg.wait_for_selector('.kpis', timeout=20000); self.pg.wait_for_timeout(500)
     def new_unit(self, ind, nombre='', tipo='rt_svb', sector='sec_1', color=None):
-        self.nav('unidades'); self.a('u.new'); s = self.sheet()
+        self.nav('unidades'); self.a('u.new')
+        # Con unidades plantilla, «Añadir unidad» las ofrece primero: se elige la unidad personalizada
+        self.pg.wait_for_selector('.sheet-wrap :is([data-a="u.newBlank"], form[data-f="u.save"])')
+        if self.pg.locator('.sheet-wrap [data-a="u.newBlank"]').count(): self.a('u.newBlank')
+        s = self.sheet()
         self.fill('ind', ind); self.fill('nombre', nombre); self.fill('tipo', tipo); self.fill('sector', sector)
         if color: s.locator('[name=colorC0]').fill(color)
         s.locator('form[data-f="u.save"] button.primary').click(); self.pg.wait_for_timeout(500)
@@ -247,18 +251,19 @@ def scenario_standalone(browser):
     def plano():
         A.nav('plano')
         with A.pg.expect_file_chooser() as fc: A.a('plan.import')
-        fc.value.set_files(PLANO); A.pg.wait_for_selector('#pimg', timeout=20000); A.pg.wait_for_timeout(500)
-        A.a('plan.edit'); A.pg.locator('[data-a="plan.pick"]').first.click(); A.pg.wait_for_timeout(200)
-        box = A.pg.locator('#pv').bounding_box()
-        A.pg.mouse.click(box['x'] + box['width'] * 0.3, box['y'] + box['height'] * 0.4); A.pg.wait_for_timeout(500)
-        A.pg.mouse.click(box['x'] + box['width'] * 0.6, box['y'] + box['height'] * 0.5); A.pg.wait_for_timeout(500)
+        fc.value.set_files(PLANO); A.pg.wait_for_selector('.plano-img', timeout=20000); A.pg.wait_for_timeout(600)
+        # Se elige una unidad pendiente y se toca el plano; la siguiente pendiente queda elegida sola
+        A.pg.locator('[data-a="plan.pick"]').first.click(); A.pg.wait_for_timeout(200)
+        for fx, fy in [(0.3, 0.4), (0.6, 0.5)]:
+            box = A.pg.locator('.plano-img').bounding_box()
+            A.pg.mouse.click(box['x'] + box['width'] * fx, box['y'] + box['height'] * fy); A.pg.wait_for_timeout(500)
         n = A.state('return Object.values(s.units).filter(u => u.plan).length')
         assert n >= 2, n
-        A.a('plan.edit'); A.shot('08-plano')
-        A.pg.reload(); A.login('ana', 'secreto1'); A.nav('plano'); A.pg.wait_for_selector('#pimg'); A.pg.wait_for_timeout(500)
+        A.shot('08-plano')
+        A.pg.reload(); A.login('ana', 'secreto1'); A.nav('plano'); A.pg.wait_for_selector('.plano-img'); A.pg.wait_for_timeout(600)
         mk = A.pg.locator('.mk[data-mk="u"]').count()
         assert mk >= 2, mk
-        return f'imagen importada; {n} unidades colocadas; posiciones persistentes tras recargar'
+        return f'imagen importada; {n} unidades colocadas (coordenadas normalizadas); posiciones persistentes tras recargar'
     check('Plano táctico: importar, colocar unidades y persistencia', plano)
     def stats():
         A.nav('mas'); A.a('nav', v='estadisticas'); A.pg.wait_for_selector('.cols'); A.shot('09-estadisticas', True)
@@ -293,7 +298,7 @@ def scenario_standalone(browser):
         A.pg.reload(); A.login('ana', 'secreto1'); A.pg.wait_for_selector('.net-off')
         A.nav('avisos'); A.a('a.new'); A.fill('desc', 'Aviso sin conexión'); A.sheet().locator('form[data-f="a.save"] button.primary').click(); A.pg.wait_for_timeout(600); A.close_sheets()
         A.open_unit('AMB-02'); A.a('u.rest'); A.dlg_ok(); A.pg.wait_for_timeout(300); A.close_sheets()
-        A.nav('plano'); A.pg.wait_for_selector('#pimg')
+        A.nav('plano'); A.pg.wait_for_selector('.plano-img')
         A.nav('mas'); A.a('nav', v='cierre')
         with A.pg.expect_download() as dl: A.a('rep.do', k='pdf')
         ok = open(dl.value.path(), 'rb').read()[:4] == b'%PDF'
@@ -574,6 +579,127 @@ def scenario_recursos(b):
     check('Sin errores de JavaScript (fase 2)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
     A.ctx.close()
 
+# ---------------- Escenario 5: cartografía y plano de coordinación ----------------
+def tesela_png():
+    """Tesela ficticia (gris claro con retícula) para no depender de servidores externos en las pruebas"""
+    from PIL import Image, ImageDraw
+    im = Image.new('RGB', (256, 256), (233, 237, 241)); d = ImageDraw.Draw(im)
+    for i in range(0, 256, 64): d.line([(i, 0), (i, 255)], fill=(205, 212, 220)); d.line([(0, i), (255, i)], fill=(205, 212, 220))
+    b = io.BytesIO(); im.save(b, 'PNG'); return b.getvalue()
+
+def rutas_cartografia(ctx):
+    tile = tesela_png(); fecha = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
+    ctx.route('https://tile.openstreetmap.org/**', lambda r: r.fulfill(status=200, body=tile, headers={'Content-Type': 'image/png', 'Access-Control-Allow-Origin': '*', 'Date': fecha}))
+    sol = [{'name': 'Puerta del Sol', 'display_name': 'Puerta del Sol, Centro, Madrid, España', 'lat': '40.4168630', 'lon': '-3.7038762', 'boundingbox': ['40.4164803', '40.4172442', '-3.7047263', '-3.7022633']}]
+    ctx.route('https://nominatim.openstreetmap.org/**', lambda r: r.fulfill(status=200, json=sol, headers={'Access-Control-Allow-Origin': '*'}))
+
+def scenario_coordinacion(b):
+    print('\n== Escenario 5: cartografía georreferenciada y plano de coordinación ==')
+    A = App(b, 'coord', dict(TABLET, service_workers='block'))
+    rutas_cartografia(A.ctx)
+    A.setup('Raúl Coordinador', 'raul', 'secreto5', 'Tablet PMA', 'R'); A.perms(False)
+    A.new_prev('San Isidro', 'independiente', True)
+    for n in ['101', '102']:
+        A.nav('unidades'); A.a('u.new'); A.sheet().locator('[data-a="u.fromTpl"]', has_text='UPR').first.click(); A.pg.wait_for_timeout(250)
+        f = A.sheet().locator('form[data-f="u.tplSave"]'); f.locator('[name=numero]').fill(n); f.locator('button.primary').click(); A.pg.wait_for_timeout(500)
+    uid = lambda ind: A.pg.evaluate(f"() => Object.values(window.__UCO.core.state.units).find(u => u.ind === '{ind}').id")
+    plan = lambda ind: A.pg.evaluate(f"() => Object.values(window.__UCO.core.state.units).find(u => u.ind === '{ind}').plan")
+    def importar():
+        A.nav('plano'); A.a('plan.google'); s = A.sheet(); s.locator('#carto-map .leaflet-tile').first.wait_for(timeout=15000)
+        assert 'OpenStreetMap' in s.inner_text(), 'aviso de proveedor sin clave'
+        s.locator('form[data-f="carto.buscar"] [name=q]').fill('Puerta del Sol Madrid'); s.locator('form[data-f="carto.buscar"] button').click(); A.pg.wait_for_timeout(1800)
+        assert s.locator('[name=nombre]').input_value() == 'Puerta del Sol', s.locator('[name=nombre]').input_value()
+        A.shot('01-selector-mapa')
+        s.locator('form[data-f="carto.ok"] button.primary').click(); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(600)
+        pl = A.pg.evaluate('() => window.__UCO.core.state.prev.plano')
+        assert pl['tipo'] == 'mapa' and pl['crs'] == 'EPSG:3857' and pl['bounds']['s'] < 40.41686 < pl['bounds']['n'] and pl['bounds']['w'] < -3.70388 < pl['bounds']['e'], pl
+        assert A.pg.locator('[data-pendientes] [data-arrastre]').count() == 2
+        return 'búsqueda «Puerta del Sol» → encuadre → plano cartográfico con su extensión geográfica (EPSG:3857, coordenadas WGS84)'
+    check('Cartografía: importar zona desde el buscador de mapas', importar)
+    def arrastrar_pendiente():
+        chip = A.pg.locator('[data-arrastre]', has_text='UPR 101'); cb = chip.bounding_box(); mb = A.pg.locator('.coord-map').bounding_box()
+        A.pg.mouse.move(cb['x'] + cb['width'] / 2, cb['y'] + cb['height'] / 2); A.pg.mouse.down()
+        for i in range(1, 11): A.pg.mouse.move(cb['x'] + (mb['x'] + mb['width'] * 0.4 - cb['x']) * i / 10, cb['y'] + (mb['y'] + mb['height'] * 0.45 - cb['y']) * i / 10)
+        A.pg.mouse.up(); A.pg.wait_for_timeout(700)
+        p = plan('UPR 101'); assert p and p.get('lat') and 40.40 < p['lat'] < 40.43 and -3.72 < p['lon'] < -3.69, p
+        assert A.pg.locator('.coord-map .mk[data-mk="u"]').count() == 1
+        return f"arrastrada desde «pendientes» al plano: lat {p['lat']}, lon {p['lon']}"
+    check('Plano: arrastrar una unidad pendiente al mapa (coordenadas reales)', arrastrar_pendiente)
+    def tocar_colocar():
+        A.pg.locator('[data-a="plan.pick"]', has_text='UPR 102').click(); A.pg.wait_for_timeout(200)
+        mb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(mb['x'] + mb['width'] * 0.7, mb['y'] + mb['height'] * 0.6); A.pg.wait_for_timeout(600)
+        p = plan('UPR 102'); assert p and p.get('lat'), p
+        return 'tocar la unidad pendiente y luego el plano también la coloca'
+    check('Plano: colocar tocando (alternativa táctil)', tocar_colocar)
+    def mover():
+        antes = plan('UPR 101'); mk = A.pg.locator(f'.mk[data-id="{uid("UPR 101")}"]'); bb = mk.bounding_box()
+        A.pg.mouse.move(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); A.pg.mouse.down()
+        for i in range(1, 9): A.pg.mouse.move(bb['x'] + bb['width'] / 2 + 12 * i, bb['y'] + bb['height'] / 2 + 6 * i)
+        clase = A.pg.locator('.mk-wrap.arrastrando').count()
+        A.pg.mouse.up(); A.pg.wait_for_timeout(700)
+        despues = plan('UPR 101'); assert despues['lon'] > antes['lon'] and despues['lat'] < antes['lat'], (antes, despues)
+        assert clase == 1, 'respuesta visual durante el arrastre'
+        log = A.pg.evaluate("() => window.__UCO.core.engine().state.log ? 0 : 0")
+        return 'arrastrar mueve la unidad, con respuesta visual; se guarda al soltar'
+    check('Plano: mover una unidad arrastrándola', mover)
+    def doble_clic():
+        mk = A.pg.locator(f'.mk[data-id="{uid("UPR 101")}"]'); mk.dblclick(); A.pg.wait_for_selector('.claves-grid')
+        A.shot('02-selector-claves')
+        A.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); A.pg.wait_for_timeout(600)
+        c = A.pg.evaluate(f"() => window.__UCO.core.state.units['{uid('UPR 101')}'].clave"); assert c == 'C6', c
+        A.close_sheets()
+        return 'doble clic → selector de claves → C6 aplicada con las reglas de siempre'
+    check('Plano: cambiar la clave con doble clic', doble_clic)
+    def devolver():
+        mk = A.pg.locator(f'.mk[data-id="{uid("UPR 102")}"]'); bb = mk.bounding_box(); pb = A.pg.locator('[data-pendientes]').bounding_box()
+        A.pg.mouse.move(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); A.pg.mouse.down()
+        for i in range(1, 13): A.pg.mouse.move(bb['x'] + (pb['x'] + pb['width'] / 2 - bb['x']) * i / 12, bb['y'] + (pb['y'] + pb['height'] / 2 - bb['y']) * i / 12)
+        A.pg.mouse.up(); A.pg.wait_for_timeout(700)
+        assert plan('UPR 102') is None
+        assert A.pg.locator('[data-pendientes] [data-arrastre]', has_text='UPR 102').count() == 1
+        return 'arrastrada del plano a «pendientes»: vuelve a quedar pendiente de asignación sin eliminarse'
+    check('Plano: devolver una unidad a pendientes de asignación', devolver)
+    def aviso_punto():
+        mb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(mb['x'] + mb['width'] * 0.25, mb['y'] + mb['height'] * 0.3); A.pg.wait_for_timeout(400)
+        A.pg.locator('[data-pop="aviso"]').click(); A.pg.wait_for_timeout(300)
+        f = A.sheet().locator('form[data-f="a.save"]'); loc = f.locator('[data-locsum]').inner_text(); assert '40.4' in loc and '-3.7' in loc, loc
+        f.locator('[name=desc]').fill('Desvanecimiento en la plaza'); f.locator('button.primary').click(); A.pg.wait_for_timeout(700); A.close_sheets()
+        a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Desvanecimiento en la plaza')")
+        assert a['plan'] and a['loc']['lat'] and a['num'] == 1, a
+        assert A.pg.locator(f'.mk[data-mk="a"][data-id="{a["id"]}"]').count() == 1
+        return 'clic en el mapa → formulario habitual con la ubicación ya puesta → aviso nº 1 con marcador en el plano'
+    check('Avisos: crear un aviso haciendo clic en el mapa', aviso_punto)
+    def aviso_zona():
+        A.a('plan.zona'); mb = A.pg.locator('.coord-map').bounding_box()
+        for fx, fy in [(0.55, 0.2), (0.75, 0.22), (0.78, 0.4), (0.57, 0.42)]: A.pg.mouse.click(mb['x'] + mb['width'] * fx, mb['y'] + mb['height'] * fy); A.pg.wait_for_timeout(250)
+        A.shot('03-zona-dibujada')
+        A.a('plan.zonaOk'); f = A.sheet().locator('form[data-f="a.save"]'); f.locator('[name=desc]').fill('Aglomeración en zona norte'); f.locator('button.primary').click(); A.pg.wait_for_timeout(700); A.close_sheets()
+        a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Aglomeración en zona norte')")
+        assert a['zona'] and len(a['zona']['pts']) == 4 and a['zona']['pts'][0]['lat'] and a['loc']['lat'], a
+        assert A.pg.locator('.coord-map path.leaflet-interactive').count() >= 1
+        A.shot('04-plano-coordinacion')
+        return 'zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano'
+    check('Avisos: crear un aviso por zona', aviso_zona)
+    def biblioteca():
+        A.a('plan.biblio'); s = A.sheet(); t = s.inner_text()
+        assert 'Santiago Bernabéu' in t and 'Metropolitano' in t and 'Puerta del Sol' in t, t
+        s.locator('[data-biblio="lib_bernabeu"] [data-a="biblio.abrir"]').click(); A.pg.wait_for_timeout(600)
+        s = A.sheet(); s.locator('#carto-map .leaflet-tile').first.wait_for(timeout=15000)
+        s.locator('form[data-f="carto.ok"] button.primary').click(); A.pg.wait_for_timeout(400)
+        A.pg.locator('.sheet-wrap button.primary', has_text='Cambiar').click(); A.pg.wait_for_timeout(1000)
+        pl = A.pg.evaluate('() => window.__UCO.core.state.prev.plano')
+        assert pl['nombre'] == 'Estadio Santiago Bernabéu' and pl['bounds']['s'] < 40.45304 < pl['bounds']['n'], pl
+        assert A.pg.locator('.coord-map .mk[data-mk="u"]').count() == 1, 'las unidades conservan su posición relativa'
+        return 'Bernabéu, Metropolitano y Sol en la biblioteca; Bernabéu incorporado con su encuadre y referencia geográfica'
+    check('Biblioteca de planos predefinidos', biblioteca)
+    def persiste():
+        A.goto(); A.login('raul', 'secreto5'); A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(600)
+        n = A.pg.locator('.coord-map .mk[data-mk="u"]').count(); assert n == 1, n
+        return 'plano cartográfico y posiciones conservados tras cerrar y abrir'
+    check('Plano: persistencia tras recargar', persiste)
+    check('Sin errores de JavaScript (plano de coordinación)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+    A.ctx.close()
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -587,6 +713,7 @@ def main():
             if only in ('', '2'): scenario_shared(b)
             if only in ('', '3'): scenario_android(b)
             if only in ('', '4'): scenario_recursos(b)
+            if only in ('', '5'): scenario_coordinacion(b)
             b.close()
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)

@@ -2,6 +2,7 @@
 // y genera las operaciones. Ninguna pantalla modifica datos sin pasar por aquí.
 import { uid, now, clone, same, AppError, isHexColor, getPath } from './util.js';
 import { require as needPerm, can } from './perms.js';
+import { boundsValidos } from './geo.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
@@ -178,6 +179,10 @@ export function validateCatalog(cat, lista, s) {
 export function planoSet(ctx, meta) {
   needPerm(ctx.user, 'planos.editar');
   const s = editable(ctx);
+  if (meta && meta.tipo === 'mapa') {
+    if (!boundsValidos(meta.bounds)) fail('La zona del mapa no es válida');
+    meta = { tipo: 'mapa', nombre: String(meta.nombre || 'Mapa').slice(0, 120), proveedor: meta.proveedor === 'google' ? 'google' : 'osm', crs: 'EPSG:3857', bounds: { ...meta.bounds }, centro: meta.centro ? { lat: +meta.centro.lat, lon: +meta.centro.lon } : null, zoom: Math.max(1, Math.min(21, Math.round(+meta.zoom || 16))), origen: meta.origen || null };
+  }
   const cur = s.prev.plano || null;
   if (same(cur, meta)) return [];
   return [mkOp(ctx, 'prev.plano', ctx.pid, { o: cur, n: meta }, uid('b_'))];
@@ -323,10 +328,28 @@ export function unitLoc(ctx, id, loc) {
   return [mkOp(ctx, 'unit.loc', id, { o: cur, n }, uid('b_'))];
 }
 
+/** Zona geográfica de un aviso: polígono de 3 a 200 puntos (posiciones del plano, con coordenadas reales si las hay) */
+function zonaValida(z) {
+  const pts = Array.isArray(z && z.pts) ? z.pts : [];
+  if (pts.length < 3 || pts.length > 200) fail('La zona necesita entre 3 y 200 puntos');
+  return { pts: pts.map(posPlano), nombre: String((z && z.nombre) || '').slice(0, 80) };
+}
+/** Posición en el plano: normalizada (0…1) y, en planos cartográficos, también en coordenadas reales */
+function posPlano(pos) {
+  if (!pos) return null;
+  const n = { x: Math.min(1, Math.max(0, +pos.x)), y: Math.min(1, Math.max(0, +pos.y)) };
+  if (isNaN(n.x) || isNaN(n.y)) fail('Posición no válida');
+  if (pos.lat != null || pos.lon != null) {
+    const lat = +pos.lat, lon = +pos.lon;
+    if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) fail('Coordenadas fuera de rango');
+    n.lat = Math.round(lat * 1e6) / 1e6; n.lon = Math.round(lon * 1e6) / 1e6;
+  }
+  return n;
+}
 export function unitPlan(ctx, id, pos) {
   needPerm(ctx.user, 'planos.editar');
   const s = editable(ctx); const u = unit(s, id);
-  const n = pos ? { x: Math.min(1, Math.max(0, +pos.x)), y: Math.min(1, Math.max(0, +pos.y)) } : null;
+  const n = posPlano(pos);
   if (same(u.plan, n)) return [];
   return [mkOp(ctx, 'unit.plan', id, { o: u.plan, n }, uid('b_'))];
 }
@@ -366,7 +389,8 @@ export function avisoCreate(ctx, d, { unidades = [], forzarIncompatible = false 
   const s = operativo(ctx);
   if (!d.tipo && !String(d.desc || '').trim()) fail('Indica el tipo o la descripción del aviso');
   const id = uid('a_'); const b = uid('b_');
-  const a = { tipo: d.tipo || null, desc: String(d.desc || '').trim(), t: d.t || null, loc: d.loc || null, sector: d.sector || null, obs: d.obs || '', plan: d.plan || null };
+  const a = { tipo: d.tipo || null, desc: String(d.desc || '').trim(), t: d.t || null, loc: d.loc || null, sector: d.sector || null, obs: d.obs || '', plan: posPlano(d.plan) };
+  if (d.zona) a.zona = zonaValida(d.zona);
   const op = mkOp(ctx, 'aviso.create', id, { a }, b);
   if (ctx.mode === 'compartida') { op.nn = true; op.nr = true; } else { op.nl = true; }
   const ops = [op];
@@ -388,7 +412,7 @@ export function avisoUpdate(ctx, id, cambios) {
 export function avisoPlan(ctx, id, pos) {
   needPerm(ctx.user, 'planos.editar');
   const s = editable(ctx); const a = aviso(s, id);
-  const n = pos ? { x: Math.min(1, Math.max(0, +pos.x)), y: Math.min(1, Math.max(0, +pos.y)) } : null;
+  const n = posPlano(pos);
   if (same(a.plan, n)) return [];
   return [mkOp(ctx, 'aviso.plan', id, { o: a.plan, n }, uid('b_'))];
 }

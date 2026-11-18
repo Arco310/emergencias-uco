@@ -53,7 +53,7 @@ export function describeOp(s, op, status) {
     case 'prev.estado': acc = x.o === 'cerrado' ? 'Reapertura' : x.n === 'activo' ? 'Activación' : x.n === 'cerrado' ? 'Cierre' : 'Cambio de estado'; ant = PEST[x.o] || x.o; nue = (PEST[x.n] || x.n) + (x.motivo ? ' · Motivo: ' + x.motivo : '') + (x.advertencias ? ' · Cerrado con advertencias' : ''); break;
     case 'prev.archivo': acc = x.n ? 'Archivado' : 'Recuperado del archivo'; break;
     case 'prev.cat': cat = 'configuracion'; elem = 'Catálogo: ' + (CATNAME[x.cat] || x.cat); acc = 'Modificación de catálogo'; ant = catSummary(x.cat, x.o); nue = catSummary(x.cat, x.n); break;
-    case 'prev.plano': cat = 'plano'; elem = 'Plano táctico'; acc = x.n ? 'Plano importado' : 'Plano retirado'; ant = x.o ? x.o.nombre || 'Imagen' : '—'; nue = x.n ? (x.n.nombre || 'Imagen') + ' (' + x.n.w + '×' + x.n.h + ')' : '—'; break;
+    case 'prev.plano': cat = 'plano'; elem = 'Plano'; acc = x.n ? 'Plano importado' : 'Plano retirado'; ant = x.o ? x.o.nombre || 'Imagen' : '—'; nue = x.n ? (x.n.nombre || 'Imagen') + (x.n.tipo === 'mapa' ? ' (cartográfico: ' + x.n.bounds.s.toFixed(4) + ', ' + x.n.bounds.w.toFixed(4) + ' — ' + x.n.bounds.n.toFixed(4) + ', ' + x.n.bounds.e.toFixed(4) + ')' : ' (' + x.n.w + '×' + x.n.h + ')') : '—'; break;
     case 'unit.create': cat = 'unidad'; acc = 'Alta de unidad'; nue = [x.u.ind, x.u.nombre, named(s.prev && s.prev.cat.tiposRecurso, x.u.tipo)].filter(Boolean).join(' · '); break;
     case 'unit.update': cat = 'unidad'; acc = 'Modificación'; ant = fieldsText(s, x.f, 'o'); nue = fieldsText(s, x.f, 'n'); break;
     case 'unit.clave': cat = 'clave'; acc = 'Cambio de clave' + (x.forzado ? ' (forzado)' : ''); ant = cname(s, x.o); nue = cname(s, x.n) + (x.motivo ? ' · Motivo: ' + x.motivo : ''); break;
@@ -65,7 +65,7 @@ export function describeOp(s, op, status) {
     case 'unit.rest': cat = 'descanso'; acc = 'Inicio de descanso'; nue = x.dur + ' min · fin previsto ' + fmtTime(op.t + x.dur * 60000); break;
     case 'unit.restEnd': cat = 'descanso'; acc = 'Fin de descanso'; nue = x.motivo || 'Manual'; break;
     case 'unit.nota': cat = 'nota'; acc = x.tipo === 'incidencia' ? 'Incidencia' : 'Observación'; nue = x.txt; break;
-    case 'aviso.create': cat = 'aviso'; acc = 'Nuevo aviso'; nue = [named(s.prev && s.prev.cat.tiposAviso, x.a.tipo), x.a.desc, x.a.loc && x.a.loc.txt].filter(Boolean).join(' · '); break;
+    case 'aviso.create': cat = 'aviso'; acc = 'Nuevo aviso'; nue = [named(s.prev && s.prev.cat.tiposAviso, x.a.tipo), x.a.desc, x.a.loc && x.a.loc.txt, x.a.zona && 'zona de ' + x.a.zona.pts.length + ' puntos'].filter(Boolean).join(' · '); break;
     case 'aviso.update': cat = 'aviso'; acc = 'Modificación'; ant = fieldsText(s, x.f, 'o'); nue = fieldsText(s, x.f, 'n'); break;
     case 'aviso.plan': cat = 'plano'; acc = x.n ? 'Posición en plano' : 'Retirada del plano'; ant = x.o ? pct(x.o) : '—'; nue = x.n ? pct(x.n) : '—'; break;
     case 'aviso.asig': cat = 'asignacion'; acc = 'Asignación de unidad'; nue = unitLabel(s.units[x.u]); break;
@@ -82,7 +82,8 @@ export function describeOp(s, op, status) {
     estado: status ? status.status : 'ok', motivoEstado: status && status.reason ? status.reason : '',
   };
 }
-function pct(p) { return Math.round(p.x * 100) + '%, ' + Math.round(p.y * 100) + '%'; }
+/** Posición en el plano: coordenadas reales en planos cartográficos; si no, posición relativa */
+function pct(p) { return p.lat != null ? p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) : Math.round(p.x * 100) + '%, ' + Math.round(p.y * 100) + '%'; }
 function catSummary(cat, list) {
   if (!Array.isArray(list)) return '—';
   if (cat === 'motivosEsp') return list.join(', ');

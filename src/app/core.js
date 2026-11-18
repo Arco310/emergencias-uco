@@ -170,6 +170,35 @@ export class AppCore {
     return ops;
   }
 
+  // ------------- cartografía (configuración general, común a todos los dispositivos) -------------
+  /** Clave de Google Maps Platform: nunca en el código; se guarda cifrada y se reparte solo a los
+   *  dispositivos del espacio central (el servidor no puede leerla). */
+  async guardarCartografia({ googleKey = '' } = {}) {
+    if (!this.can('config.editar')) throw new AppError('No tienes permiso para cambiar la cartografía', 'permiso');
+    const k = String(googleKey || '').trim();
+    if (k && !/^[A-Za-z0-9_-]{20,100}$/.test(k)) throw new AppError('La clave de Google Maps no tiene un formato válido');
+    const cfg = clone(this.cfg); cfg.cartografia = { ...(cfg.cartografia || {}), googleKey: k };
+    await this.repo.saveCfg(cfg, 'Cartografía: ' + (k ? 'clave de Google Maps configurada' : 'sin clave de Google Maps')); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
+    if (this.centralMeta) await this.central.guardarConfig('cartografia', cfg.cartografia);
+  }
+  planosBiblioteca() { return this.cfg.bibliotecaPlanos || []; }
+  /** Guarda una zona cartográfica en la biblioteca de planos (común a todos los dispositivos) */
+  async guardarPlanoBiblioteca(pl) {
+    if (!this.can('planos.editar')) throw new AppError('No tienes permiso para gestionar planos', 'permiso');
+    const it = { id: pl.id || uid('map_'), nombre: String(pl.nombre || '').trim() || 'Plano', lugar: pl.lugar || '', bounds: pl.bounds, centro: pl.centro, zoom: pl.zoom, creado: pl.creado || now() };
+    const lista = this.planosBiblioteca().filter(x => x.id !== it.id).concat(it);
+    const cfg = clone(this.cfg); cfg.bibliotecaPlanos = lista;
+    await this.repo.saveCfg(cfg, 'Biblioteca de planos: ' + it.nombre); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
+    if (this.centralMeta) await this.central.guardarConfig('mapa:' + it.id, it);
+    return it;
+  }
+  async borrarPlanoBiblioteca(id) {
+    if (!this.can('planos.editar')) throw new AppError('No tienes permiso para gestionar planos', 'permiso');
+    const cfg = clone(this.cfg); cfg.bibliotecaPlanos = this.planosBiblioteca().filter(x => x.id !== id);
+    await this.repo.saveCfg(cfg, 'Biblioteca de planos: eliminado'); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
+    if (this.centralMeta) await this.central.guardarConfig('mapa:' + id, null, { borrado: true });
+  }
+
   async saveCfg(cfg, detalle) {
     if (!this.can('config.editar')) throw new AppError('No tienes permiso para editar la configuración', 'permiso');
     await this.repo.saveCfg(cfg, detalle); this.cfg = this._migrarCfg(await this.repo.getCfg());
@@ -415,6 +444,8 @@ export class AppCore {
     // Tipos de recurso y unidades plantilla de este dispositivo que aún no estén en el espacio
     for (const [i, t] of this.tiposRecursoGenerales().entries()) if (!d.items['tipo:' + t.id]) await this.central.guardarConfig('tipo:' + t.id, { ...t, orden: i });
     for (const [i, p] of this.plantillasUnidad().entries()) if (!d.items['plt:' + p.id]) await this.central.guardarConfig('plt:' + p.id, { ...p, orden: i });
+    for (const [i, m] of this.planosBiblioteca().entries()) if (!d.items['mapa:' + m.id]) await this.central.guardarConfig('mapa:' + m.id, { ...m, orden: i });
+    if (!d.items.cartografia && this.cfg.cartografia && this.cfg.cartografia.googleKey) await this.central.guardarConfig('cartografia', this.cfg.cartografia);
   }
   /** Aplica cambios de configuración recibidos del espacio central (usuarios, roles…) */
   async _centralConfig(ids) {
@@ -432,8 +463,10 @@ export class AppCore {
     };
     const tipos = this.cfg ? lista(this.cfg.catalogos.tiposRecurso || [], 'tipo:') : null;
     const plts = this.cfg ? lista(this.cfg.plantillasUnidad || [], 'plt:') : null;
-    if ((tipos || plts) && this.repo.dek) {
-      const cfg = clone(this.cfg); if (tipos) cfg.catalogos.tiposRecurso = tipos; if (plts) cfg.plantillasUnidad = plts;
+    const mapas = this.cfg ? lista(this.cfg.bibliotecaPlanos || [], 'mapa:') : null;
+    const carto = ids.includes('cartografia') && d.items.cartografia && !d.items.cartografia.borrado ? d.items.cartografia.data : null;
+    if ((tipos || plts || mapas || carto) && this.repo.dek) {
+      const cfg = clone(this.cfg); if (tipos) cfg.catalogos.tiposRecurso = tipos; if (plts) cfg.plantillasUnidad = plts; if (mapas) cfg.bibliotecaPlanos = mapas; if (carto) cfg.cartografia = carto;
       await this.repo.saveCfg(cfg, 'Configuración recibida del servidor central'); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
     }
     for (const id of ids) {
