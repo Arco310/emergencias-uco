@@ -17,7 +17,7 @@ Fecha: 19/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas 
 
 ## 2. Archivos creados y modificados
 
-**Creados:** `server/actualizador.mjs`, `server/lanzador.mjs`, `src/config/servidor.js`, `src/data/central.js`, `src/data/migraciones.js`, `src/core/versiones.js`, `src/ui/actualizacion.js`, `src/ui/mapa.js`, `src/ui/views/actualizaciones.js`, `src/ui/views/cartografia.js`, `servidor-windows/MOSTRAR-CODIGO-ADMIN.bat`, `tools/publicar-version.mjs`, `.github/workflows/publicar-version.yml`, 9 archivos de pruebas (`tests/server/actualizaciones|archivos_protegidos|central|central_config|central_cuentas`, `tests/unit/cartografia|migraciones_versiones|recursos_plantillas`, `tests/checks/central_en_vivo.py`), `docs/CAMBIOS.md`, `docs/IMPLEMENTATION_STATUS.md`, `docs/TESTING_REPORT.md`, este informe y `docs/evidencias/`.
+**Creados:** `server/actualizador.mjs`, `server/lanzador.mjs`, `src/config/servidor.js`, `src/data/central.js`, `src/data/migraciones.js`, `src/core/versiones.js`, `src/ui/actualizacion.js`, `src/ui/mapa.js`, `src/ui/views/actualizaciones.js`, `src/ui/views/cartografia.js`, `src/core/incidentes.js` y `src/ui/views/incidente.js` (1.3.0), `servidor-windows/MOSTRAR-CODIGO-ADMIN.bat`, `tools/publicar-version.mjs`, `.github/workflows/publicar-version.yml`, 10 archivos de pruebas (`tests/server/actualizaciones|archivos_protegidos|central|central_config|central_cuentas`, `tests/unit/cartografia|incidentes_samur|migraciones_versiones|recursos_plantillas`, `tests/checks/central_en_vivo.py`), `docs/CAMBIOS.md`, `docs/IMPLEMENTATION_STATUS.md`, `docs/TESTING_REPORT.md`, este informe y `docs/evidencias/`.
 
 **Modificados:** `server/server.mjs`, `pwa/sw.js`, `build.mjs`, `package.json`; núcleo `src/app/core.js`, `src/core/{commands,crypto,defaults,engine,exporters,geo,perms,report,timeline}.js`, datos `src/data/{idb,repo,sync}.js`; interfaz `src/ui/{app,dom,icons}.js`, `src/ui/styles.css`, vistas `admin, analysis, auth, catalogs, home, ops, plano`; instalador `servidor-windows/{comun,estado,instalar}.mjs` y `LEEME.txt`; pruebas `tests/e2e/run_e2e.py`, `tests/server/instalador_windows.test.mjs`.
 
@@ -26,7 +26,7 @@ Fecha: 19/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas 
 ```
  Móviles / tablets (PWA)                         PC servidor DESKTOP-G5S6CH9 (Windows 10)
  ┌───────────────────────────────┐   HTTPS     ┌──────────────────────────────────────────┐
- │ App 1.2.1 (un index.html)      │  Tailscale  │ Tarea programada (SISTEMA) → arrancar.cmd │
+ │ App 1.3.0 (un index.html)      │  Tailscale  │ Tarea programada (SISTEMA) → arrancar.cmd │
  │ · IndexedDB cifrada (AES-GCM)  │◀──Funnel───▶│  → lanzador.mjs (periodo de prueba,       │
  │ · registro de operaciones (HLC)│             │     vuelta atrás)                         │
  │ · sync por preventivo + espacio│             │     → server.mjs (API + app)              │
@@ -35,7 +35,7 @@ Fecha: 19/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas 
  │   versión, integridad, recup.  │             │          copia, ventana segura)           │
  │ · Leaflet: OSM / Google Maps   │             │ datos\ (ops cifradas), copias\ (5 copias) │
  └───────────────────────────────┘             └──────────────────────────────────────────┘
- GitHub Pages: app 1.2.1            GitHub Actions «Publicar versión»: pruebas + versión + sumas
+ GitHub Pages: app 1.3.0            GitHub Actions «Publicar versión»: pruebas + versión + sumas
 ```
 
 El servidor nunca puede leer los datos (cifrado de extremo a extremo). Las reglas y permisos se comprueban en la capa de negocio de cada dispositivo y al recibir; las acciones sobre el servidor exigen su código de administración.
@@ -111,7 +111,7 @@ Alta y clave de recuperación, permisos del dispositivo, preventivos independien
 | 1–2. Funcionalidades probadas y pruebas | Las de los puntos 6 y 12: 103 + 78 pruebas automáticas y 10 comprobaciones en vivo ejecutadas |
 | 3–4. Errores encontrados y corregidos | Punto 7: todos corregidos; los de código quedan cubiertos por las pruebas |
 | 5. Errores pendientes | Ninguno conocido en el código; pendientes de entorno en el punto 7 |
-| 6. Capturas | `docs/evidencias/1.2.0/` (teselas sustituidas por cuadrícula en el entorno de pruebas) `docs/evidencias/1.2.1/` (en vivo) y `docs/evidencias/1.3.0/` (códigos de incidente) |
+| 6. Capturas | `docs/evidencias/1.2.0/` (teselas sustituidas por cuadrícula en el entorno de pruebas), `docs/evidencias/1.2.1/` (en vivo) y `docs/evidencias/1.3.0/` (códigos de incidente) |
 | 7. Sincronización | Superada: dos dispositivos, avisos simultáneos sin duplicados, conflictos, caída del servidor; también en vivo con el servidor real |
 | 8. Sin conexión | Superada: modo avión, trabajo local y reconexión sin pérdidas; también en vivo |
 | 9. Actualización | Superada con servidor y API de versiones locales; en vivo, el servidor real consulta GitHub sin error. Descarga desde GitHub real pendiente de publicar la versión |
