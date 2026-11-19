@@ -9,6 +9,8 @@ import { logEntries, CATEGORIAS, unitChronology, CRONO_TIPOS, AVISO_ESTADO } fro
 import { prevStats, unitStats, avisoStats, avisoTimes, TIEMPOS_AVISO } from '../../core/stats.js';
 import { csvTables } from '../../core/exporters.js';
 import { Engine } from '../../core/engine.js';
+import { tipoAvisoDef, etiquetaTipoAviso } from '../../core/incidentes.js';
+import { opcionesTipoAviso } from './incidente.js';
 
 const S = () => G.core.state; const P = () => G.core.state.prev;
 const can = p => G.core.can(p);
@@ -48,28 +50,40 @@ A['log.more'] = () => { const f = filt('log'); f.lim = (f.lim || 200) + 300; G.r
 A['log.csv'] = async () => { const T = csvTables(G.core.engine(), now()); await saveFile(safeName(P().nombre) + '-bitacora-' + fileStamp() + '.csv', T.bitacora, 'text/csv;charset=utf-8'); };
 
 // ======================= cronología de unidad =======================
+const TODAS = '__todas';
 export function renderChrono() {
   const s = S(); const f = filt('cronologia'); const t = now();
   const units = Object.values(s.units).sort((a, b) => (a.ind || '').localeCompare(b.ind || '', 'es', { numeric: true }));
-  const uid = f.unit && s.units[f.unit] ? f.unit : (units[0] && units[0].id);
-  if (!uid) return empty('No hay unidades');
-  const u = s.units[uid];
+  if (!units.length) return empty('No hay unidades');
+  // «Todas las unidades»: registro conjunto, con los acontecimientos más recientes primero
+  const todas = f.unit === TODAS;
+  const uid = todas ? null : f.unit && s.units[f.unit] ? f.unit : units[0].id;
+  const u = uid ? s.units[uid] : null;
   const tipos = f.tipos || Object.keys(CRONO_TIPOS);
-  let ev = unitChronology(G.core.engine(), uid, t).map(e => ({ ...e, prev: P().nombre, pid: G.core.cur }));
-  if (f.otros && f.otros.ind === u.ind) ev = ev.concat(f.otros.ev);
-  ev = ev.filter(e => tipos.includes(e.tipo) && (!f.desde || e.t >= f.desde) && (!f.hasta || e.t <= f.hasta)).sort((a, b) => a.t - b.t);
+  let ev;
+  if (todas) { ev = []; for (const x of units) for (const e of unitChronology(G.core.engine(), x.id, t)) ev.push({ ...e, u: x, prev: P().nombre, pid: G.core.cur }); }
+  else {
+    ev = unitChronology(G.core.engine(), uid, t).map(e => ({ ...e, prev: P().nombre, pid: G.core.cur }));
+    if (f.otros && f.otros.ind === u.ind) ev = ev.concat(f.otros.ev);
+  }
+  ev = ev.filter(e => tipos.includes(e.tipo) && (!f.desde || e.t >= f.desde) && (!f.hasta || e.t <= f.hasta)).sort((a, b) => (todas ? b.t - a.t : a.t - b.t));
+  const total = ev.length; const lim = f.lim || 300; if (todas) ev = ev.slice(0, lim);
+  const unidadChip = x => `<button type="button" class="uchip" data-a="u.open" data-id="${x.id}" style="--bc:${attr(x.colorC0)}">${esc(x.ind)}</button> `;
   return `<div class="toolbar">
-    <select data-c="cr.unit" aria-label="Unidad">${units.map(x => `<option value="${x.id}"${x.id === uid ? ' selected' : ''}>${esc(x.ind)}${x.nombre ? ' · ' + esc(x.nombre) : ''}${x.eliminada ? ' (eliminada)' : x.sit === 'archivada' ? ' (archivada)' : ''}</option>`).join('')}</select>
+    <select data-c="cr.unit" aria-label="Unidad"><option value="${TODAS}"${todas ? ' selected' : ''}>Todas las unidades</option>${units.map(x => `<option value="${x.id}"${x.id === uid ? ' selected' : ''}>${esc(x.ind)}${x.nombre ? ' · ' + esc(x.nombre) : ''}${x.eliminada ? ' (eliminada)' : x.sit === 'archivada' ? ' (archivada)' : ''}</option>`).join('')}</select>
     <label class="fld-inline">Desde <input type="datetime-local" data-c="cr.desde" value="${f.desde ? toLocalI(f.desde) : ''}"></label>
     <label class="fld-inline">Hasta <input type="datetime-local" data-c="cr.hasta" value="${f.hasta ? toLocalI(f.hasta) : ''}"></label>
-    ${btn(f.otros && f.otros.ind === u.ind ? 'Solo este preventivo' : 'Incluir otros preventivos', 'cr.otros', { ic: 'capas' })}
+    ${todas ? '' : btn(f.otros && f.otros.ind === u.ind ? 'Solo este preventivo' : 'Incluir otros preventivos', 'cr.otros', { ic: 'capas' })}
   </div>
   <div class="chips-row">${Object.entries(CRONO_TIPOS).map(([k, l]) => `<button class="tchip${tipos.includes(k) ? ' on' : ''}" data-a="cr.tipo" data-v="${k}">${esc(l)}</button>`).join('')}</div>
-  <div class="row gap"><span>${unitSvg(unitVisual(P(), u, t), { px: 40 })}</span><div><b>${esc(u.ind)}</b> ${esc(u.nombre || '')}<div class="muted small">La cronología se reconstruye desde el registro: no se pierde al cambiar la configuración de la unidad.</div></div></div>
-  <ul class="tl big">${ev.map(e => `<li class="t-${e.tipo}"><time>${fmtDateTime(e.t)}</time><span>${e.color ? `<i class="dot" style="background:${attr(e.color)}"></i>` : ''}${esc(e.texto)}${e.dur != null ? ` <b class="dur">${fmtDur(e.dur)}${e.abierta ? ' (en curso)' : ''}</b>` : ''}${e.pid !== G.core.cur ? ` <span class="chip sm muted">${esc(e.prev)}</span>` : ''}</span></li>`).join('') || '<li class="muted">Sin acontecimientos con estos filtros</li>'}</ul>`;
+  ${todas ? `<p class="muted small">Registro de las ${units.length} unidades a la vez, con lo más reciente primero (${total} acontecimientos). Toca una unidad para abrirla.</p>`
+    : `<div class="row gap"><span>${unitSvg(unitVisual(P(), u, t), { px: 40 })}</span><div><b>${esc(u.ind)}</b> ${esc(u.nombre || '')}<div class="muted small">La cronología se reconstruye desde el registro: no se pierde al cambiar la configuración de la unidad.</div></div></div>`}
+  <ul class="tl big" data-crono="${todas ? 'todas' : 'unidad'}">${ev.map(e => `<li class="t-${e.tipo}"><time>${fmtDateTime(e.t)}</time><span>${e.u ? unidadChip(e.u) : ''}${e.color ? `<i class="dot" style="background:${attr(e.color)}"></i>` : ''}${esc(e.texto)}${e.dur != null ? ` <b class="dur">${fmtDur(e.dur)}${e.abierta ? ' (en curso)' : ''}</b>` : ''}${e.pid !== G.core.cur ? ` <span class="chip sm muted">${esc(e.prev)}</span>` : ''}</span></li>`).join('') || '<li class="muted">Sin acontecimientos con estos filtros</li>'}</ul>
+  ${todas && total > lim ? `<div class="row center">${btn('Mostrar más (quedan ' + (total - lim) + ')', 'cr.more')}</div>` : ''}`;
 }
 function toLocalI(ms) { const d = new Date(ms); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
-CH['cr.unit'] = el => { filt('cronologia').unit = el.value; G.render(); };
+CH['cr.unit'] = el => { filt('cronologia').unit = el.value; filt('cronologia').lim = 0; G.render(); };
+A['cr.more'] = () => { const f = filt('cronologia'); f.lim = (f.lim || 300) + 500; G.render(); };
 CH['cr.desde'] = el => { filt('cronologia').desde = el.value ? new Date(el.value).getTime() : null; G.render(); };
 CH['cr.hasta'] = el => { filt('cronologia').hasta = el.value ? new Date(el.value).getTime() : null; G.render(); };
 A['cr.tipo'] = el => { const f = filt('cronologia'); const all = Object.keys(CRONO_TIPOS); const cur = new Set(f.tipos || all); cur.has(el.dataset.v) ? cur.delete(el.dataset.v) : cur.add(el.dataset.v); f.tipos = [...cur]; G.render(); };
@@ -127,7 +141,7 @@ function statsPrev() {
     <section class="card pad"><h3>Avisos por hora</h3>${cols(st.serie.map(b => ({ label: fmtTime(b.t), value: b.avisos })))}</section>
     <section class="card pad"><h3>Evolución: avisos abiertos y unidades ocupadas</h3>${lineChart([{ name: 'Avisos abiertos', color: '#C62828', values: st.evol.map(e => e.abiertos) }, { name: 'Unidades ocupadas', color: '#1565C0', values: st.evol.map(e => e.ocupadas) }], st.evol.map(e => fmtTime(e.t)))}</section>
     <section class="card pad"><h3>Tiempo acumulado por clave</h3>${hbars(p.cat.claves.map(k => ({ label: k.codigo + ' ' + k.nombre, value: st.claveTotales[k.codigo] || 0, color: k.color })), fmtDur)}</section>
-    <section class="card pad"><h3>Avisos por tipo</h3>${hbars(Object.entries(tot.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : named(p.cat.tiposAviso, k), value: v, color: (p.cat.tiposAviso.find(x => x.id === k) || {}).color })))}</section>
+    <section class="card pad"><h3>Avisos por tipo</h3>${hbars(Object.entries(tot.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : etiquetaTipoAviso(p.cat.tiposAviso, k), value: v, color: (tipoAvisoDef(p.cat.tiposAviso, k) || {}).color })))}</section>
     <section class="card pad"><h3>Avisos por sector</h3>${hbars(Object.entries(tot.porSector).map(([k, v]) => ({ label: k === '_' ? 'Sin sector' : named(p.cat.sectores, k), value: v, color: (p.cat.sectores.find(x => x.id === k) || {}).color })))}</section>
     <section class="card pad"><h3>Recursos por tipo</h3>${hbars(Object.entries(st.recursos.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : named(p.cat.tiposRecurso, k), value: v, color: (p.cat.tiposRecurso.find(x => x.id === k) || {}).color })))}</section>
     <section class="card pad"><h3>Recursos por sector</h3>${hbars(Object.entries(st.recursos.porSector).map(([k, v]) => ({ label: k === '_' ? 'Pendiente de asignación' : k === 'otros' ? 'Otros (ubicaciones personalizadas)' : named(p.cat.sectores, k), value: v, color: (p.cat.sectores.find(x => x.id === k) || {}).color })))}</section>
@@ -153,13 +167,13 @@ function statsAvisos() {
   const s = S(); const p = P(); const f = filt('stats');
   const st = avisoStats(s, { tipo: f.tipo || '', sector: f.sector || '' });
   return `<div class="toolbar">
-    <select data-c="st.tipo"><option value="">Todos los tipos</option>${p.cat.tiposAviso.map(x => `<option value="${x.id}"${f.tipo === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
+    <select data-c="st.tipo"><option value="">Todos los tipos</option>${opcionesTipoAviso(p.cat.tiposAviso, f.tipo || '')}</select>
     <select data-c="st.sector"><option value="">Todos los sectores</option>${p.cat.sectores.map(x => `<option value="${x.id}"${f.sector === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
   </div>
   <div class="kpis small"><div class="kpi"><b>${st.total}</b><span>Total</span></div>${Object.entries(AVISO_ESTADO).map(([k, l]) => `<div class="kpi"><b>${st.porEstado[k] || 0}</b><span>${l}</span></div>`).join('')}</div>
   <div class="times big">${Object.entries(TIEMPOS_AVISO).map(([k, [l, d]]) => { const a = st.tiempos[k]; return `<div title="${attr(d)}"><span>${esc(l)}</span><b>${a.media != null ? fmtDur(a.media) : '—'}</b><small>mediana ${a.mediana != null ? fmtDur(a.mediana) : '—'} · ${a.n} con datos${st.sinDatos[k] ? ' · ' + st.sinDatos[k] + ' sin datos' : ''}</small><small class="muted">${esc(d)}</small></div>`; }).join('')}</div>
   <div class="scroll"><table class="tbl"><thead><tr><th>Aviso</th><th>Hora</th><th>Tipo</th><th>Sector</th><th>Estado</th><th class="num">Unid.</th>${Object.values(TIEMPOS_AVISO).map(([l]) => `<th class="num">${esc(l.replace('Tiempo de ', ''))}</th>`).join('')}</tr></thead><tbody>
-  ${st.rows.sort((a, b) => (a.a.t ?? a.a.creado) - (b.a.t ?? b.a.creado)).map(r => `<tr data-a="a.open" data-id="${r.a.id}" class="clickable"><td><b>${esc(avisoLabel(r.a))}</b></td><td>${fmtTime(r.a.t ?? r.a.creado)}</td><td>${esc(named(p.cat.tiposAviso, r.a.tipo))}</td><td>${esc(named(p.cat.sectores, r.a.sector))}</td><td>${esc(AVISO_ESTADO[r.a.estado])}</td><td class="num">${r.unidades}</td>${Object.keys(TIEMPOS_AVISO).map(k => `<td class="num">${r[k] != null ? fmtDur(r[k]) : '—'}</td>`).join('')}</tr>`).join('')}
+  ${st.rows.sort((a, b) => (a.a.t ?? a.a.creado) - (b.a.t ?? b.a.creado)).map(r => `<tr data-a="a.open" data-id="${r.a.id}" class="clickable"><td><b>${esc(avisoLabel(r.a))}</b></td><td>${fmtTime(r.a.t ?? r.a.creado)}</td><td>${esc(etiquetaTipoAviso(p.cat.tiposAviso, r.a.tipo))}</td><td>${esc(named(p.cat.sectores, r.a.sector))}</td><td>${esc(AVISO_ESTADO[r.a.estado])}</td><td class="num">${r.unidades}</td>${Object.keys(TIEMPOS_AVISO).map(k => `<td class="num">${r[k] != null ? fmtDur(r[k]) : '—'}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div>`;
 }
 CH['st.tipo'] = el => { filt('stats').tipo = el.value; G.render(); };

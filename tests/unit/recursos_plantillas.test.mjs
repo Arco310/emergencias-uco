@@ -17,10 +17,11 @@ async function nucleo(adapter = new MemoryAdapter()) {
 const parar = c => { c.sync.stopAll(); c.central.stop(); clearInterval(c._bk); };
 async function rechaza(p, re) { await assert.rejects(p, e => { assert.match(e.message, re); return true; }); }
 
-test('unidades plantilla de ejemplo (UPR, SVB, VIRES) como datos configurables, con su tipo de recurso', async () => {
+test('unidades plantilla de ejemplo (UPR, SVB, VIRES y las de SAMUR-PC) como datos configurables, con su tipo de recurso', async () => {
   const { c } = await nucleo();
   const nombres = c.plantillasUnidad().map(p => p.nombre);
-  assert.deepEqual(nombres, ['UPR', 'Soporte Vital Básico (SVB)', 'VIRES']);
+  assert.deepEqual(nombres.slice(0, 3), ['UPR', 'Soporte Vital Básico (SVB)', 'VIRES']);
+  assert.deepEqual(nombres.slice(3).map(n => n.split(' · ')[0]), ['BASE', 'SAMUR', 'VIR', 'ALFA', 'PAPA', 'TANGO', 'MIKE', 'ECO', 'LINCE', 'HALCÓN', 'URO', 'ZULÚ', 'VRALA', 'PM', 'PMA', 'VAIS']);
   const upr = c.plantillasUnidad().find(p => p.nombre === 'UPR');
   assert.equal(upr.prefijo, 'UPR'); assert.equal(upr.vis.forma, 'triangulo'); assert.equal(upr.color, '#1565C0');
   assert.equal(c.tiposRecursoGenerales().find(t => t.id === upr.tipo).nombre, 'Vehículo ligero');

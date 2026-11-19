@@ -165,6 +165,11 @@ export function validateCatalog(cat, lista, s) {
       ids.add(it.id);
       if (!String(it.nombre || '').trim()) fail('Todos los elementos necesitan nombre');
     }
+    if (cat === 'tiposAviso') {
+      const cods = lista.map(t => String(t.codigo || '').trim()).filter(Boolean);
+      const rep = cods.find((c, i) => cods.indexOf(c) !== i);
+      if (rep) fail('Código de incidente repetido: ' + rep);
+    }
     if (s) {
       if (cat === 'sectores') {
         for (const u of Object.values(s.units)) if (!u.eliminada && u.sector && u.sector !== SECTOR_OTROS && !ids.has(u.sector)) fail('El sector está en uso por ' + unitLabel(u));

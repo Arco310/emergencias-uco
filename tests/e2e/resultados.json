@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-18 18:20:06",
+ "fecha": "2026-11-19 03:53:07",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave 6WX0Q…"
+   "detalle": "clave C9N47…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -155,7 +155,7 @@
   {
    "prueba": "Compartido: desconexión, trabajo local y reconexión",
    "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional EH-2), reconexión y convergencia sin pérdidas"
+   "detalle": "trabajo sin red (ref. provisional CE-2), reconexión y convergencia sin pérdidas"
   },
   {
    "prueba": "Compartido: resolución de conflictos",
@@ -280,12 +280,12 @@
   {
    "prueba": "Avisos: crear un aviso haciendo clic en el mapa",
    "resultado": "SUPERADA",
-   "detalle": "clic en el mapa → formulario habitual con la ubicación ya puesta → aviso nº 1 con marcador en el plano"
+   "detalle": "clic en el mapa → tipo de incidente o «Más datos» → formulario con la ubicación ya puesta → aviso nº 1 con marcador en el plano"
   },
   {
    "prueba": "Avisos: crear un aviso por zona",
    "resultado": "SUPERADA",
-   "detalle": "zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general"
+   "detalle": "zona de 4 puntos dibujada → código 3.2 → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general"
   },
   {
    "prueba": "Biblioteca de planos predefinidos",
@@ -344,6 +344,51 @@
   },
   {
    "prueba": "Actualización: sin errores de JavaScript",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Unidades plantilla de SAMUR-PC",
+   "resultado": "SUPERADA",
+   "detalle": "16 plantillas (BASE … VAIS); «31» → ALFA 31 (USVB) y «2» → HALCÓN 2 (moto), en C0"
+  },
+  {
+   "prueba": "Avisos por código de incidente (carpetas)",
+   "resultado": "SUPERADA",
+   "detalle": "Nuevo aviso → carpeta «1. Accidente de Tráfico» → 1.2: aviso Nº 1 creado con ese tipo y abierto para asignar"
+  },
+  {
+   "prueba": "Avisos: buscar el código",
+   "resultado": "SUPERADA",
+   "detalle": "buscar «atropello» → 1.4 → aviso creado"
+  },
+  {
+   "prueba": "Avisos: nuevo aviso con una unidad por código",
+   "resultado": "SUPERADA",
+   "detalle": "ALFA 31 → Nuevo aviso con esta unidad → Enfermedad → 3.1: aviso asignado y la unidad en C1"
+  },
+  {
+   "prueba": "Avisos: formulario completo con el selector de código",
+   "resultado": "SUPERADA",
+   "detalle": "Más datos → campo «Tipo de incidente» → 2.12.1 OVACE con descripción; filtro de avisos agrupado por carpetas"
+  },
+  {
+   "prueba": "Cronología: todas las unidades a la vez",
+   "resultado": "SUPERADA",
+   "detalle": "4 acontecimientos de 2 unidades en un único registro, lo más reciente primero"
+  },
+  {
+   "prueba": "Preventivos anteriores: añadir los códigos",
+   "resultado": "SUPERADA",
+   "detalle": "preventivo creado sin códigos → «Añadir los códigos de incidente» → 123 códigos y aviso 1.1"
+  },
+  {
+   "prueba": "Finalizar el preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "Más → «Finalizar preventivo e informes» → Finalizar preventivo: queda en solo lectura y archivado"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (incidentes)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

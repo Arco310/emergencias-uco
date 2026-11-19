@@ -6,9 +6,10 @@ import { prevStats, avisoTimes, TIEMPOS_AVISO } from './stats.js';
 import { logEntries, AVISO_ESTADO } from './timeline.js';
 import { fmtCoords } from './geo.js';
 import { APP_NAME, APP_VERSION } from './defaults.js';
+import { etiquetaTipoAviso, tipoAvisoDef } from './incidentes.js';
 
 const named = (list, id) => ((list || []).find(x => x.id === id) || {}).nombre || '—';
-const PEST = { preparacion: 'En preparación', activo: 'Activo', cerrado: 'Cerrado' };
+const PEST = { preparacion: 'En preparación', activo: 'Activo', cerrado: 'Finalizado' };
 
 export async function buildReport(engine, { usuario = '', dispositivo = '' } = {}) {
   const s = engine.state; const p = s.prev; const t = now();
@@ -23,7 +24,7 @@ export async function buildReport(engine, { usuario = '', dispositivo = '' } = {
     ['Fecha', p.fecha || '—'], ['Horario previsto', (p.horaInicio || '—') + ' – ' + (p.horaFin || '—')],
     ['Lugar', p.lugar ? [p.lugar.txt, fmtCoords(p.lugar)].filter(Boolean).join(' · ') : '—'], ['Modalidad', p.modalidad === 'compartida' ? 'Compartida (varios dispositivos)' : 'Independiente'],
     ['Estado', PEST[p.estado] + (p.archivado ? ' (archivado)' : '')], ['Creado', fmtDateTime(p.creado) + ' por ' + (p.creadoPor || '—')],
-    ['Activado', p.activadoEn ? fmtDateTime(p.activadoEn) : '—'], ['Cerrado', p.cerradoEn ? fmtDateTime(p.cerradoEn) + ' por ' + (p.cerradoPor || '—') : '—'],
+    ['Activado', p.activadoEn ? fmtDateTime(p.activadoEn) : '—'], ['Finalizado', p.cerradoEn ? fmtDateTime(p.cerradoEn) + ' por ' + (p.cerradoPor || '—') : '—'],
     ['Duración analizada', fmtDur(st.duracion)], ['Origen', p.origen && p.origen.nombre ? p.origen.tipo + ': ' + p.origen.nombre : 'Nuevo'],
     ['Informe generado', fmtDateTime(t) + ' por ' + (usuario || '—')], ['Aplicación', APP_NAME + ' ' + APP_VERSION + (dispositivo ? ' · ' + dispositivo : '')],
   ]);
@@ -31,7 +32,7 @@ export async function buildReport(engine, { usuario = '', dispositivo = '' } = {
   if (p.reaperturas && p.reaperturas.length) doc.para('Reaperturas: ' + p.reaperturas.map(r => fmtDateTime(r.t) + ' (' + r.por + '): ' + r.motivo).join(' | '), { color: '#B71C1C' });
   if (p.cierreAvisos) {
     const w = p.cierreAvisos;
-    doc.para('Cerrado con advertencias: ' + [w.pendientes.length && 'avisos pendientes ' + w.pendientes.join(', '), w.activos.length && 'avisos activos ' + w.activos.join(', '), w.ocupadas.length && 'unidades ocupadas ' + w.ocupadas.join(', '), w.descansos.length && 'descansos activos ' + w.descansos.join(', '), w.conflictos && w.conflictos + ' conflictos sin resolver'].filter(Boolean).join('; '), { color: '#B71C1C' });
+    doc.para('Finalizado con advertencias: ' + [w.pendientes.length && 'avisos pendientes ' + w.pendientes.join(', '), w.activos.length && 'avisos activos ' + w.activos.join(', '), w.ocupadas.length && 'unidades ocupadas ' + w.ocupadas.join(', '), w.descansos.length && 'descansos activos ' + w.descansos.join(', '), w.conflictos && w.conflictos + ' conflictos sin resolver'].filter(Boolean).join('; '), { color: '#B71C1C' });
   }
 
   // 2. Estadísticas
@@ -47,7 +48,7 @@ export async function buildReport(engine, { usuario = '', dispositivo = '' } = {
   doc.para(Object.values(TIEMPOS_AVISO).map(([l, d]) => l + ': ' + d).join(' '), { size: 7.5, color: '#555555' });
   if (st.avisos.total) {
     doc.para('Avisos por tipo', { bold: true });
-    doc.bars(Object.entries(st.avisos.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : named(p.cat.tiposAviso, k), value: v, color: ((p.cat.tiposAviso.find(x => x.id === k)) || {}).color || '#546E7A' })));
+    doc.bars(Object.entries(st.avisos.porTipo).map(([k, v]) => ({ label: k === '_' ? 'Sin tipo' : etiquetaTipoAviso(p.cat.tiposAviso, k), value: v, color: (tipoAvisoDef(p.cat.tiposAviso, k) || {}).color || '#546E7A' })));
     doc.para('Avisos por sector', { bold: true });
     doc.bars(Object.entries(st.avisos.porSector).map(([k, v]) => ({ label: k === '_' ? 'Sin sector' : named(p.cat.sectores, k), value: v, color: ((p.cat.sectores.find(x => x.id === k)) || {}).color || '#546E7A' })));
     doc.para('Distribución temporal de avisos (por hora)', { bold: true });
@@ -75,7 +76,7 @@ export async function buildReport(engine, { usuario = '', dispositivo = '' } = {
   doc.h2('Avisos');
   const avisos = Object.values(s.avisos).sort((a, b) => (a.t ?? a.creado) - (b.t ?? b.creado));
   doc.table([{ label: 'Nº', w: 0.8 }, { label: 'Hora', w: 0.7 }, { label: 'Tipo', w: 1.2 }, { label: 'Descripción / ubicación', w: 2.4 }, { label: 'Sector', w: 0.9 }, { label: 'Unidades', w: 1.2 }, { label: 'Estado', w: 0.9 }, { label: 'Asig.', w: 0.75, align: 'right' }, { label: 'Resp.', w: 0.75, align: 'right' }, { label: 'Interv.', w: 0.75, align: 'right' }, { label: 'Resol.', w: 0.75, align: 'right' }],
-    avisos.map(a => { const tm = avisoTimes(a); return [avisoLabel(a), fmtTime(a.t ?? a.creado), named(p.cat.tiposAviso, a.tipo), [a.desc, a.loc && a.loc.txt].filter(Boolean).join(' · '), named(p.cat.sectores, a.sector), [...new Set(a.part.map(x => unitLabel(s.units[x.u])))].join(', '), AVISO_ESTADO[a.estado], fmtDur(tm.asignacion), fmtDur(tm.respuesta), fmtDur(tm.intervencion), fmtDur(tm.resolucion)]; }), { size: 7 });
+    avisos.map(a => { const tm = avisoTimes(a); return [avisoLabel(a), fmtTime(a.t ?? a.creado), etiquetaTipoAviso(p.cat.tiposAviso, a.tipo), [a.desc, a.loc && a.loc.txt].filter(Boolean).join(' · '), named(p.cat.sectores, a.sector), [...new Set(a.part.map(x => unitLabel(s.units[x.u])))].join(', '), AVISO_ESTADO[a.estado], fmtDur(tm.asignacion), fmtDur(tm.respuesta), fmtDur(tm.intervencion), fmtDur(tm.resolucion)]; }), { size: 7 });
 
   // 6. Descansos
   doc.h2('Descansos');

@@ -17,7 +17,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { crearActualizador } from './actualizador.mjs';
 
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 /** Versión mínima de la aplicación compatible con este servidor (las anteriores deben actualizarse) */
 const MIN_CLIENTE = '1.1.0';
 /** Versión del formato de los datos del servidor (migraciones al arrancar) */

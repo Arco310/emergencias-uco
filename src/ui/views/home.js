@@ -13,7 +13,7 @@ import { effectiveVis } from '../../core/visual.js';
 
 const core = () => G.core;
 const can = p => G.core.can(p);
-const EST = { preparacion: ['En preparación', 'warn'], activo: ['Activo', 'ok'], cerrado: ['Cerrado', 'muted'] };
+const EST = { preparacion: ['En preparación', 'warn'], activo: ['Activo', 'ok'], cerrado: ['Finalizado', 'muted'] };
 
 // ======================= preventivos =======================
 export function renderHome() {

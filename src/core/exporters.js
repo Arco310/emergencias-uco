@@ -6,6 +6,7 @@ import { logEntries, AVISO_ESTADO } from './timeline.js';
 import { fmtCoords } from './geo.js';
 import { APP_NAME, APP_VERSION, SCHEMA_VERSION } from './defaults.js';
 import { zipStore } from './zip.js';
+import { etiquetaTipoAviso } from './incidentes.js';
 
 const named = (list, id) => ((list || []).find(x => x.id === id) || {}).nombre || '';
 const mins = ms => (ms == null ? '' : (Math.round(ms / 600) / 100).toString().replace('.', ','));
@@ -32,7 +33,7 @@ export function csvTables(engine, until = now()) {
   const avisos = Object.values(s.avisos).sort((a, b) => (a.t ?? a.creado) - (b.t ?? b.creado));
   T.avisos = toCSV(
     ['Número', 'Referencia', 'Fecha y hora', 'Tipo', 'Descripción', 'Ubicación', 'Coordenadas', 'Sector', 'Estado', 'Unidades', 'Asignación (min)', 'Respuesta (min)', 'Intervención (min)', 'Resolución (min)', 'Finalizado', 'Nota de cierre', 'Observaciones'],
-    avisos.map(a => { const tm = avisoTimes(a); return [a.num ?? '', a.ref || '', fmtDateTime(a.t ?? a.creado), named(p.cat.tiposAviso, a.tipo), a.desc, a.loc ? a.loc.txt : '', fmtCoords(a.loc), named(p.cat.sectores, a.sector), AVISO_ESTADO[a.estado], [...new Set(a.part.map(x => unitLabel(s.units[x.u])))].join(', '), mins(tm.asignacion), mins(tm.respuesta), mins(tm.intervencion), mins(tm.resolucion), a.finalizadoEn ? fmtDateTime(a.finalizadoEn) : '', a.cierre ? a.cierre.nota : '', a.obs]; }));
+    avisos.map(a => { const tm = avisoTimes(a); return [a.num ?? '', a.ref || '', fmtDateTime(a.t ?? a.creado), etiquetaTipoAviso(p.cat.tiposAviso, a.tipo), a.desc, a.loc ? a.loc.txt : '', fmtCoords(a.loc), named(p.cat.sectores, a.sector), AVISO_ESTADO[a.estado], [...new Set(a.part.map(x => unitLabel(s.units[x.u])))].join(', '), mins(tm.asignacion), mins(tm.respuesta), mins(tm.intervencion), mins(tm.resolucion), a.finalizadoEn ? fmtDateTime(a.finalizadoEn) : '', a.cierre ? a.cierre.nota : '', a.obs]; }));
   const parts = [];
   for (const a of avisos) for (const x of a.part) parts.push([avisoLabel(a), unitLabel(s.units[x.u]), fmtDateTime(x.asig), x.llegada ? fmtDateTime(x.llegada) : '', x.salida ? fmtDateTime(x.salida) : '', x.lib ? fmtDateTime(x.lib) : '', x.motivoLib || '']);
   T.participaciones = toCSV(['Aviso', 'Unidad', 'Asignada', 'Llegada al punto', 'Salida del punto', 'Liberada', 'Motivo'], parts);

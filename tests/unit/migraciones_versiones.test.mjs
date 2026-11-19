@@ -6,7 +6,7 @@ import { MemoryAdapter } from '../../src/data/idb.js';
 import { AppCore } from '../../src/app/core.js';
 import { migrarDatos, esquemaLocal, ESQUEMA_DATOS, MIGRACIONES } from '../../src/data/migraciones.js';
 import { compararVersiones, posterior } from '../../src/core/versiones.js';
-import { APP_VERSION } from '../../src/core/defaults.js';
+import { APP_VERSION, DEFAULT_PLANTILLAS_UNIDAD } from '../../src/core/defaults.js';
 import { PERM_KEYS } from '../../src/core/perms.js';
 
 async function nucleo(adapter = new MemoryAdapter(), opts = { servidor: false }) {
@@ -49,7 +49,7 @@ test('datos de la 1.1.0 (esquema 1): copia previa, migración, auditoría y nada
   assert.equal(copias.length, 1, 'copia de seguridad previa a la migración');
   const copia = await c2.repo.readBackup(copias[0].id);
   assert.ok(!copia.docs.find(d => d.id === 'cfg').data.plantillasUnidad, 'la copia guarda los datos tal como estaban antes');
-  assert.equal((await c2.repo.getDoc('cfg')).plantillasUnidad.length, 3, 'las unidades plantilla quedan guardadas');
+  assert.equal((await c2.repo.getDoc('cfg')).plantillasUnidad.length, DEFAULT_PLANTILLAS_UNIDAD.length, 'las unidades plantilla quedan guardadas');
   assert.ok((await c2.repo.listAudit()).some(a => a.accion === 'Migración de datos'), 'queda en la auditoría');
   assert.ok(c2.summaries.some(s => s.id === pid), 'el preventivo sigue ahí');
   // Repetir no vuelve a migrar ni a copiar

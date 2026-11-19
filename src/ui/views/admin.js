@@ -41,7 +41,7 @@ export function renderPrevMenu() {
     ${tile('mapa', 'Mapa real', 'nav', { v: 'mapa' })}
     ${tile('ajustes', 'Configuración del preventivo', 'nav', { v: 'ajustes' })}
     ${tile('sync', 'Sincronización', 'nav', { v: 'sync' }, core().isShared() ? (n ? n + ' conflicto(s)' : SYNC_ESTADOS[core().sync.status(core().cur).estado] || '') : 'Independiente')}
-    ${tile('archivo', 'Cierre e informes', 'nav', { v: 'cierre' })}
+    ${tile('candado', 'Finalizar preventivo e informes', 'nav', { v: 'cierre' })}
     ${can('plantillas.gestionar') ? tile('plantilla', 'Crear plantilla desde este preventivo', 'tpl.fromPrev') : ''}
     ${can('preventivos.crear') ? tile('copiar', 'Duplicar preventivo', 'prev.dupCurrent') : ''}
     ${tile('ajustes', 'Configuración general', 'nav', { v: 'config' })}
@@ -199,7 +199,7 @@ export function renderClose() {
     <p class="muted small">Generados en el dispositivo, sin Internet. El PDF incluye información general, unidades, claves, avisos, descansos, ubicaciones, estadísticas, resumen cronológico, bitácora y auditoría.</p>
     ${can('exportar') ? `<div class="actions">${btn('Informe PDF', 'rep.do', { cls: 'primary', ic: 'archivo', data: { k: 'pdf' } })}${btn('Datos JSON', 'rep.do', { ic: 'descargar', data: { k: 'json' } })}${btn('Tablas CSV (ZIP)', 'rep.do', { ic: 'descargar', data: { k: 'csv' } })}
       ${shareOk ? btn('Compartir PDF', 'rep.do', { ic: 'compartir', data: { k: 'pdf', share: 1 } }) : ''}</div>` : '<p class="muted">No tienes permiso para exportar.</p>'}</section>
-  ${p.estado !== 'cerrado' ? `<section class="card pad"><h2>Cierre del preventivo</h2>
+  ${p.estado !== 'cerrado' ? `<section class="card pad"><h2>Finalizar el preventivo</h2>
     <ul class="checks-list">
       ${li(chk.pendientes.length, 'avisos pendientes', 'avisos', chk.pendientes.map(avisoLabel).join(', '))}
       ${li(chk.activos.length, 'avisos activos (asignados o en curso)', 'avisos', chk.activos.map(avisoLabel).join(', '))}
@@ -208,9 +208,9 @@ export function renderClose() {
       ${li(chk.conflictos.length, 'conflictos de sincronización sin resolver', 'sync')}
       ${core().isShared() ? li(pend, 'cambios de este dispositivo sin enviar al servidor', 'sync') : ''}
     </ul>
-    ${can('preventivos.cerrar') && !p.archivado ? btn('Cerrar preventivo…', 'prev.close', { cls: chk.total ? 'danger' : 'primary', ic: 'candado' }) : '<p class="muted">No tienes permiso para cerrar el preventivo.</p>'}
-    <p class="muted small">Al cerrar se guardan los datos, se genera el informe y el preventivo queda en solo lectura (consultable). La reapertura requiere autorización y queda registrada.</p></section>`
-    : `<section class="card pad"><h2>Preventivo cerrado</h2><p>Cerrado el ${fmtDateTime(p.cerradoEn)} por ${esc(p.cerradoPor || '')}.</p>
+    ${can('preventivos.cerrar') && !p.archivado ? btn('Finalizar preventivo…', 'prev.close', { cls: chk.total ? 'danger' : 'primary', ic: 'candado' }) : '<p class="muted">No tienes permiso para finalizar el preventivo.</p>'}
+    <p class="muted small">Al finalizar se guardan los datos, se genera el informe y el preventivo queda en solo lectura (consultable) y, si lo eliges, archivado. No se borra nada. La reapertura requiere autorización y queda registrada.</p></section>`
+    : `<section class="card pad"><h2>Preventivo finalizado</h2><p>Finalizado el ${fmtDateTime(p.cerradoEn)} por ${esc(p.cerradoPor || '')}.</p>
       ${p.reaperturas && p.reaperturas.length ? `<p class="muted small">Reaperturas: ${p.reaperturas.map(r => fmtDateTime(r.t) + ' · ' + esc(r.por) + ': ' + esc(r.motivo)).join(' | ')}</p>` : ''}
       <div class="actions">${can('preventivos.reabrir') && !p.archivado ? btn('Reabrir…', 'prev.reopen', { ic: 'subir' }) : ''}
       ${can('preventivos.cerrar') ? btn(p.archivado ? 'Recuperar del archivo' : 'Archivar', 'prev.archive', { ic: 'archivar' }) : ''}</div></section>`}`;
@@ -219,9 +219,9 @@ A['rep.do'] = async el => { const r = await exportReport(el.dataset.k, { share: 
 A['prev.close'] = async () => {
   const s = S(); const chk = C.closeChecks(s, now());
   const r = await confirmDlg({
-    title: 'Cerrar preventivo', ok: chk.total ? 'Cerrar con advertencias' : 'Cerrar preventivo', danger: !!chk.total,
-    html: (chk.total ? `<p class="note warn">${icon('alerta')} Hay ${chk.total} advertencia(s). Quedarán registradas en el cierre y en el informe.</p>` : '<p>No hay advertencias.</p>'),
-    fields: [{ name: 'pdf', label: 'Generar el informe PDF al cerrar', type: 'checkbox', value: can('exportar') }, { name: 'arch', label: 'Archivar tras el cierre', type: 'checkbox', value: true }],
+    title: 'Finalizar preventivo', ok: chk.total ? 'Finalizar con advertencias' : 'Finalizar preventivo', danger: !!chk.total,
+    html: (chk.total ? `<p class="note warn">${icon('alerta')} Hay ${chk.total} advertencia(s). Quedarán registradas en la finalización y en el informe.</p>` : '<p>No hay advertencias.</p>'),
+    fields: [{ name: 'pdf', label: 'Generar el informe PDF al finalizar', type: 'checkbox', value: can('exportar') }, { name: 'arch', label: 'Archivar al finalizar', type: 'checkbox', value: true }],
   });
   if (!r) return;
   await core().repo.createBackup('previa', 'Antes del cierre de ' + P().nombre);
@@ -229,7 +229,7 @@ A['prev.close'] = async () => {
   if (r.pdf && can('exportar')) { try { await exportReport('pdf'); } catch (e) { toast(e.message, 'error'); } }
   if (r.arch) await exec(C.prevArchivar, true);
   await core().autoBackup(true);
-  toast('Preventivo cerrado', 'ok'); G.render();
+  toast('Preventivo finalizado', 'ok'); G.render();
 };
 A['prev.reopen'] = async () => {
   const m = await confirmDlg({ title: 'Reabrir preventivo', text: 'La reapertura queda registrada en la auditoría.', input: { label: 'Motivo de la reapertura' }, ok: 'Continuar' });

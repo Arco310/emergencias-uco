@@ -3,6 +3,7 @@ import { claveDef, unitLabel, avisoLabel, restEnd } from './engine.js';
 import { fmtTime, fmtDateTime, fmtDur } from './util.js';
 import { fmtCoords } from './geo.js';
 import { CATEGORIAS_CLAVE } from './defaults.js';
+import { tipoAvisoDef, etiquetaTipo, etiquetaTipoAviso } from './incidentes.js';
 
 export const CATEGORIAS = {
   preventivo: 'Preventivo', configuracion: 'Configuración', unidad: 'Unidades', clave: 'Claves', aviso: 'Avisos',
@@ -20,7 +21,7 @@ const FIELD = {
 };
 const CATNAME = { claves: 'Claves', motivosEsp: 'Motivos de clave especial', sectores: 'Sectores', tiposAviso: 'Tipos de aviso', tiposRecurso: 'Tipos de recurso' };
 const SIT = { activa: 'Activa', desactivada: 'Desactivada', archivada: 'Archivada' };
-const PEST = { preparacion: 'En preparación', activo: 'Activo', cerrado: 'Cerrado' };
+const PEST = { preparacion: 'En preparación', activo: 'Activo', cerrado: 'Finalizado' };
 export const AVISO_ESTADO = { pendiente: 'Pendiente', asignado: 'Asignado', en_curso: 'En curso', finalizado: 'Finalizado' };
 
 function cname(s, code) { const d = claveDef(s.prev, code); return d ? code + ' ' + d.nombre : code; }
@@ -29,7 +30,7 @@ function named(list, id) { const x = (list || []).find(e => e.id === id); return
 export function fmtValue(s, campo, v) {
   if (v == null || v === '') return '—';
   if (campo === 'sector') return v === 'otros' ? 'Otros (ubicación personalizada)' : named(s.prev && s.prev.cat.sectores, v);
-  if (campo === 'tipo') return named(s.prev && [...(s.prev.cat.tiposRecurso || []), ...(s.prev.cat.tiposAviso || [])], v);
+  if (campo === 'tipo') { const ta = tipoAvisoDef(s.prev && s.prev.cat.tiposAviso, v); return ta ? etiquetaTipo(ta) : named(s.prev && s.prev.cat.tiposRecurso, v); }
   if (campo === 'loc' || campo === 'lugar') return [v.txt, fmtCoords(v)].filter(Boolean).join(' · ') || '—';
   if (campo === 't') return fmtDateTime(v);
   if (typeof v === 'boolean') return v ? 'Sí' : 'No';
@@ -50,7 +51,7 @@ export function describeOp(s, op, status) {
   switch (op.k) {
     case 'prev.create': acc = 'Creación del preventivo'; nue = (x.prev && x.prev.nombre) + ' · modalidad ' + (x.prev && x.prev.modalidad) + (x.prev && x.prev.origen && x.prev.origen.nombre ? ' · desde ' + x.prev.origen.nombre : ''); break;
     case 'prev.update': cat = Object.keys(x.f || {}).some(k => k.startsWith('cfg.')) ? 'configuracion' : 'preventivo'; acc = 'Modificación'; ant = fieldsText(s, x.f, 'o'); nue = fieldsText(s, x.f, 'n'); break;
-    case 'prev.estado': acc = x.o === 'cerrado' ? 'Reapertura' : x.n === 'activo' ? 'Activación' : x.n === 'cerrado' ? 'Cierre' : 'Cambio de estado'; ant = PEST[x.o] || x.o; nue = (PEST[x.n] || x.n) + (x.motivo ? ' · Motivo: ' + x.motivo : '') + (x.advertencias ? ' · Cerrado con advertencias' : ''); break;
+    case 'prev.estado': acc = x.o === 'cerrado' ? 'Reapertura' : x.n === 'activo' ? 'Activación' : x.n === 'cerrado' ? 'Finalización' : 'Cambio de estado'; ant = PEST[x.o] || x.o; nue = (PEST[x.n] || x.n) + (x.motivo ? ' · Motivo: ' + x.motivo : '') + (x.advertencias ? ' · Cerrado con advertencias' : ''); break;
     case 'prev.archivo': acc = x.n ? 'Archivado' : 'Recuperado del archivo'; break;
     case 'prev.cat': cat = 'configuracion'; elem = 'Catálogo: ' + (CATNAME[x.cat] || x.cat); acc = 'Modificación de catálogo'; ant = catSummary(x.cat, x.o); nue = catSummary(x.cat, x.n); break;
     case 'prev.plano': cat = 'plano'; elem = 'Plano'; acc = x.n ? 'Plano importado' : 'Plano retirado'; ant = x.o ? x.o.nombre || 'Imagen' : '—'; nue = x.n ? (x.n.nombre || 'Imagen') + (x.n.tipo === 'mapa' ? ' (cartográfico: ' + x.n.bounds.s.toFixed(4) + ', ' + x.n.bounds.w.toFixed(4) + ' — ' + x.n.bounds.n.toFixed(4) + ', ' + x.n.bounds.e.toFixed(4) + ')' : ' (' + x.n.w + '×' + x.n.h + ')') : '—'; break;
@@ -65,7 +66,7 @@ export function describeOp(s, op, status) {
     case 'unit.rest': cat = 'descanso'; acc = 'Inicio de descanso'; nue = x.dur + ' min · fin previsto ' + fmtTime(op.t + x.dur * 60000); break;
     case 'unit.restEnd': cat = 'descanso'; acc = 'Fin de descanso'; nue = x.motivo || 'Manual'; break;
     case 'unit.nota': cat = 'nota'; acc = x.tipo === 'incidencia' ? 'Incidencia' : 'Observación'; nue = x.txt; break;
-    case 'aviso.create': cat = 'aviso'; acc = 'Nuevo aviso'; nue = [named(s.prev && s.prev.cat.tiposAviso, x.a.tipo), x.a.desc, x.a.loc && x.a.loc.txt, x.a.zona && 'zona de ' + x.a.zona.pts.length + ' puntos'].filter(Boolean).join(' · '); break;
+    case 'aviso.create': cat = 'aviso'; acc = 'Nuevo aviso'; nue = [etiquetaTipoAviso(s.prev && s.prev.cat.tiposAviso, x.a.tipo), x.a.desc, x.a.loc && x.a.loc.txt, x.a.zona && 'zona de ' + x.a.zona.pts.length + ' puntos'].filter(Boolean).join(' · '); break;
     case 'aviso.update': cat = 'aviso'; acc = 'Modificación'; ant = fieldsText(s, x.f, 'o'); nue = fieldsText(s, x.f, 'n'); break;
     case 'aviso.plan': cat = 'plano'; acc = x.n ? 'Posición en plano' : 'Retirada del plano'; ant = x.o ? pct(x.o) : '—'; nue = x.n ? pct(x.n) : '—'; break;
     case 'aviso.asig': cat = 'asignacion'; acc = 'Asignación de unidad'; nue = unitLabel(s.units[x.u]); break;

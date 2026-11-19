@@ -1,9 +1,10 @@
 // Catálogos y configuración por defecto. Todos son editables en la aplicación.
 // Cada preventivo guarda su propia copia independiente al crearse.
 import { clone } from './util.js';
+import { tiposAvisoIncidentes } from './incidentes.js';
 
 export const APP_NAME = 'Gestor de Emergencias UCO';
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.3.0';
 export const SCHEMA_VERSION = 1;
 
 /**
@@ -78,6 +79,33 @@ export const DEFAULT_TIPOS_RECURSO = [
   { id: 'rt_vl', nombre: 'Vehículo ligero', categoria: 'Apoyo', subtipos: [], caracteristicas: [], color: '#1565C0', vis: { icono: 'coche', forma: 'triangulo', tam: 'm' } },
 ];
 
+/** Tipos de unidad de SAMUR-Protección Civil, cada uno con su unidad plantilla (indicativo + número: «ALFA 31») */
+const SAMUR = [
+  // [prefijo, nombre, categoría, color, icono, forma, tamaño, subtipos]
+  ['BASE', 'Base de unidades', 'Base', '#546E7A', 'bandera', 'cuadrado', 'l'],
+  ['SAMUR', 'USVA / Directivo de Guardia', 'Sanitario', '#1B5E20', 'ambulancia', 'hexagono', 'm', ['USVA', 'Directivo de Guardia']],
+  ['VIR', 'Vehículo de intervención rápida', 'Sanitario', '#004D40', 'coche', 'circulo', 'm'],
+  ['ALFA', 'USVB', 'Sanitario', '#2E7D32', 'ambulancia', 'circulo', 'm', ['USVB']],
+  ['PAPA', 'Unidad de psiquiatría', 'Sanitario', '#880E4F', 'ambulancia', 'rombo', 'm'],
+  ['TANGO', 'Vehículo de transporte', 'Logística', '#6D4C41', 'furgoneta', 'cuadrado', 'm'],
+  ['MIKE', 'Coche de mando', 'Mando', '#283593', 'mando', 'rombo', 'm'],
+  ['ECO', 'Equipo sanitario a pie', 'Sanitario', '#43A047', 'pie', 'circulo', 's'],
+  ['LINCE', 'Equipo sanitario en bicicleta', 'Sanitario', '#7CB342', 'bici', 'circulo', 's'],
+  ['HALCÓN', 'Equipo sanitario en moto', 'Sanitario', '#558B2F', 'moto', 'triangulo', 's'],
+  ['URO', 'Personal y vehículo de mantenimiento', 'Logística', '#8D6E63', 'furgoneta', 'cuadrado', 'm'],
+  ['ZULÚ', 'Personal conductor de vehículos pesados de la columna sanitaria', 'Logística', '#4E342E', 'camion', 'cuadrado', 'm'],
+  ['VRALA', 'Vehículo rápido de apoyo logístico y avituallamiento', 'Logística', '#827717', 'furgoneta', 'triangulo', 'm'],
+  ['PM', 'Puesto de Mando', 'Mando', '#1A237E', 'mando', 'escudo', 'l'],
+  ['PMA', 'Puesto Médico Avanzado', 'Sanitario', '#AD1457', 'tienda', 'cuadrado', 'l'],
+  ['VAIS', 'Vehículo de Apoyo Intervención Sanitaria', 'Sanitario', '#00695C', 'camion', 'cuadrado', 'm'],
+];
+const idSamur = pref => pref.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+export const TIPOS_RECURSO_SAMUR = SAMUR.map(([pref, nombre, categoria, color, icono, forma, tam, subtipos = []]) => (
+  { id: 'rt_sp_' + idSamur(pref), nombre: pref + ' · ' + nombre, categoria, subtipos, caracteristicas: [], color, vis: { icono, forma, tam } }));
+export const PLANTILLAS_SAMUR = SAMUR.map(([pref, nombre, , color, icono, forma, tam]) => (
+  { id: 'plt_sp_' + idSamur(pref), nombre: pref + ' · ' + nombre, activo: true, tipo: 'rt_sp_' + idSamur(pref), prefijo: pref, color, vis: { forma, icono, tam }, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] } }));
+DEFAULT_TIPOS_RECURSO.push(...TIPOS_RECURSO_SAMUR);
+
 /** Campos que una unidad plantilla puede pedir al crear la unidad (el número se pide siempre) */
 export const CAMPOS_PLANTILLA = { nombre: 'Nombre', denom: 'Denominación', subtipo: 'Subtipo', sector: 'Sector o ubicación', caract: 'Características', obs: 'Observaciones' };
 
@@ -86,6 +114,7 @@ export const DEFAULT_PLANTILLAS_UNIDAD = [
   { id: 'plt_upr', nombre: 'UPR', activo: true, tipo: 'rt_vl', prefijo: 'UPR', color: '#1565C0', vis: { forma: 'triangulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: [] } },
   { id: 'plt_svb', nombre: 'Soporte Vital Básico (SVB)', activo: true, tipo: 'rt_svb', prefijo: 'SVB', color: '#2E7D32', vis: { forma: 'circulo', icono: 'ambulancia' }, campos: [], obligatorios: [], valores: { subtipo: 'SVB', caract: ['Camilla', 'DEA', 'Oxígeno'] } },
   { id: 'plt_vires', nombre: 'VIRES', activo: true, tipo: 'rt_vir', prefijo: 'VIRES', color: '#00897B', vis: { forma: 'circulo', icono: 'coche' }, campos: [], obligatorios: [], valores: { subtipo: '', caract: ['DEA'] } },
+  ...PLANTILLAS_SAMUR,
 ];
 
 export const DEFAULT_SECTORES = [
@@ -95,7 +124,9 @@ export const DEFAULT_SECTORES = [
   { id: 'sec_base', nombre: 'Base / PMA', color: '#546E7A' },
 ];
 
+/** Tipos de aviso: los códigos de incidente (con número y carpeta) y, en «Otros tipos», los generales */
 export const DEFAULT_TIPOS_AVISO = [
+  ...tiposAvisoIncidentes(),
   { id: 'ta_san', nombre: 'Asistencia sanitaria', color: '#C62828', compatibles: [] },
   { id: 'ta_tras', nombre: 'Traslado', color: '#6A1B9A', compatibles: ['rt_svb', 'rt_sva', 'rt_transp'] },
   { id: 'ta_acc', nombre: 'Accidente', color: '#EF6C00', compatibles: [] },

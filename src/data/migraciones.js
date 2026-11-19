@@ -11,8 +11,16 @@
 // 4. Las migraciones se ejecutan con la sesión abierta (los datos están cifrados con la clave local) y
 //    con autoridad del sistema: no dependen de los permisos del usuario que inicia sesión.
 import { clone, same } from '../core/util.js';
+import { TIPOS_RECURSO_SAMUR, PLANTILLAS_SAMUR } from '../core/defaults.js';
+import { tiposAvisoIncidentes, incidentesQueFaltan } from '../core/incidentes.js';
 
-export const ESQUEMA_DATOS = 2;
+export const ESQUEMA_DATOS = 3;
+
+/** Añade a una lista los elementos que faltan (por identificador), sin tocar los que ya hay */
+function anadirQueFaltan(lista, extra) {
+  const ids = new Set((lista || []).map(x => x.id));
+  return [...(lista || []), ...extra.filter(x => !ids.has(x.id)).map(clone)];
+}
 
 export const MIGRACIONES = [
   {
@@ -26,6 +34,28 @@ export const MIGRACIONES = [
       const efectiva = await repo.getCfg();
       const nueva = migrarCfg ? migrarCfg(clone(efectiva)) : efectiva;
       if (!same(guardada, nueva)) await repo.saveCfg(nueva, 'Migración de datos (esquema 2)');
+    },
+  },
+  {
+    v: 3, version: '1.3.0', nombre: 'Tipos de unidad y unidades plantilla de SAMUR-Protección Civil y códigos de incidente',
+    // Decisión del usuario en la 1.3.0: añadirlos a los valores predeterminados. Solo se añade lo que falta
+    // (por identificador); lo que ya hay no cambia. Los preventivos existentes no se tocan: sus códigos se
+    // añaden desde la propia aplicación (Nuevo aviso → «Añadir los códigos de incidente»).
+    async run({ repo }) {
+      const cfg = await repo.getCfg();
+      const nueva = clone(cfg);
+      nueva.catalogos.tiposRecurso = anadirQueFaltan(nueva.catalogos.tiposRecurso, TIPOS_RECURSO_SAMUR);
+      nueva.plantillasUnidad = anadirQueFaltan(nueva.plantillasUnidad, PLANTILLAS_SAMUR);
+      nueva.catalogos.tiposAviso = anadirQueFaltan(nueva.catalogos.tiposAviso, tiposAvisoIncidentes());
+      if (!same(cfg, nueva)) await repo.saveCfg(nueva, 'Migración de datos (esquema 3): tipos y unidades plantilla SAMUR-PC y códigos de incidente');
+      // Plantillas de preventivo: también llevan los códigos, para los preventivos que se creen con ellas
+      for (const t of await repo.listTemplates()) {
+        const cat = t.contenido && t.contenido.cat;
+        if (!cat || !Array.isArray(cat.tiposAviso)) continue;
+        const falta = incidentesQueFaltan(cat.tiposAviso); if (!falta.length) continue;
+        cat.tiposAviso = [...cat.tiposAviso, ...falta];
+        await repo.saveTemplate(t, 'Migración de datos: códigos de incidente añadidos a la plantilla');
+      }
     },
   },
 ];

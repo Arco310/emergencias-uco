@@ -347,3 +347,19 @@ pre.notas{white-space:pre-wrap;font:inherit;font-size:.85rem;max-height:240px;ov
 .app.auth .act-bar{position:sticky;top:0}
 :root[data-theme=dark] .act-bar{background:var(--soft);color:var(--ink)}
 dl.kv dd .chip{white-space:normal}
+/* Selector del tipo de incidente (carpetas → códigos) */
+.inc-q{margin:.2rem 0 .6rem}
+.inc-dirs{display:flex;flex-direction:column;gap:.4rem}
+.inc-dir,.inc-it,.inc-campo{display:flex;align-items:center;gap:.6rem;width:100%;min-height:52px;padding:.5rem .8rem;border:1px solid var(--line);border-left:6px solid var(--tc,#546E7A);border-radius:var(--r-s);background:var(--card);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.inc-dir{font-weight:600}.inc-dir:active,.inc-it:active{transform:translateY(1px)}
+.inc-dir:hover,.inc-it:hover{border-color:var(--muted);border-left-color:var(--tc,#546E7A)}
+.inc-dot{width:.8rem;height:.8rem;border-radius:50%;background:var(--tc,#546E7A);flex-shrink:0}
+.inc-chev{font-size:1.4rem;line-height:1;color:var(--muted)}
+.inc-list{display:flex;flex-direction:column;gap:.35rem}
+.inc-title{margin:.2rem 0;border-left:6px solid var(--tc,#546E7A);padding-left:.5rem}
+.inc-it{min-height:48px;padding:.45rem .7rem;font-weight:500;white-space:normal}
+.inc-it.niv-1{margin-left:1.4rem;width:calc(100% - 1.4rem)}.inc-it.niv-2{margin-left:2.8rem;width:calc(100% - 2.8rem)}
+.inc-it.sel{background:var(--acc-soft);border-color:var(--acc)}
+.inc-cod{min-width:3.6rem;font-variant-numeric:tabular-nums;font-weight:700}
+.inc-res{display:flex;flex-direction:column;gap:.35rem}
+.inc-campo{min-height:48px;font-weight:600}

@@ -12,6 +12,8 @@ import { avisoTimes, TIEMPOS_AVISO } from '../../core/stats.js';
 import { avisoHistory, AVISO_ESTADO } from '../../core/timeline.js';
 import { hasCoords, fmtCoords, googleMapsUrl, googleEmbedUrl, embedUrl, osmUrl, nominatimUrl, parseCoords, round6, fmtKm } from '../../core/geo.js';
 import { ICONOS, FORMAS, TAMANOS, BORDES, ETIQUETAS, TARJETAS, CAMPOS_TARJETA, KPIS, CAMPOS_PLANTILLA } from '../../core/defaults.js';
+import { tipoAvisoDef, etiquetaTipo, etiquetaTipoAviso } from '../../core/incidentes.js';
+import { abrirSelectorIncidente, campoTipoAviso, opcionesTipoAviso } from './incidente.js';
 
 const core = () => G.core;
 const S = () => G.core.state;
@@ -56,12 +58,12 @@ export function unitCard(u, { compact = false, extra = '' } = {}) {
 
 export function avisoCard(a) {
   const s = S(); const p = P();
-  const ta = (p.cat.tiposAviso || []).find(x => x.id === a.tipo);
+  const ta = tipoAvisoDef(p.cat.tiposAviso, a.tipo);
   const units = [...new Set(activeParts(a).map(x => x.u))].map(id => s.units[id]).filter(Boolean);
   return `<button type="button" class="acard est-${a.estado}" data-a="a.open" data-id="${a.id}" style="--tc:${attr(ta ? ta.color : '#546E7A')}">
     <span class="anum${a.num == null ? ' prov' : ''}">${esc(avisoNum(a))}</span>
     <span class="acard-main">
-      <span class="row gap-s wrap">${ta ? chip(ta.nombre, ta.color) : ''}${estadoChip(a.estado)}<span class="muted small">${fmtTime(a.t ?? a.creado)}${a.estado !== 'finalizado' ? ' · hace <span data-since="' + (a.t ?? a.creado) + '"></span>' : ''}</span></span>
+      <span class="row gap-s wrap">${ta ? chip(etiquetaTipo(ta), ta.color) : ''}${estadoChip(a.estado)}<span class="muted small">${fmtTime(a.t ?? a.creado)}${a.estado !== 'finalizado' ? ' · hace <span data-since="' + (a.t ?? a.creado) + '"></span>' : ''}</span></span>
       ${a.desc ? `<span class="adesc">${esc(a.desc)}</span>` : ''}
       ${a.loc && a.loc.txt ? `<span class="muted small">${icon('pin')}${esc(a.loc.txt)}</span>` : ''}
       ${units.length ? `<span class="row gap-s wrap">${units.map(u => `<span class="uchip" style="--bc:${attr(u.colorC0)}">${esc(u.ind)} ${claveChip(u.clave)}</span>`).join('')}</span>` : ''}
@@ -79,7 +81,7 @@ export function renderPanel() {
   const sectores = (p.cfg.kpis || []).includes('sectores') ? sectorTable(s, c) : '';
   return `
   ${p.estado === 'preparacion' ? `<div class="banner warn">${icon('info')}<div><b>Preventivo en preparación.</b> Revisa unidades, plano y configuración; después actívalo para operar.</div>${can('preventivos.editar') ? btn('Activar', 'prev.activate', { cls: 'primary' }) : ''}</div>` : ''}
-  ${p.estado === 'cerrado' ? `<div class="banner">${icon('candado')}<div><b>Preventivo cerrado.</b> Solo consulta. ${p.cerradoEn ? 'Cerrado el ' + fmtDateTime(p.cerradoEn) + '.' : ''}</div></div>` : ''}
+  ${p.estado === 'cerrado' ? `<div class="banner">${icon('candado')}<div><b>Preventivo finalizado.</b> Solo consulta. ${p.cerradoEn ? 'Finalizado el ' + fmtDateTime(p.cerradoEn) + '.' : ''}</div></div>` : ''}
   <div class="panel-grid">
     <section class="pcol kpis-col">
       <div class="kpis">${kpis.map(k => `<button class="kpi k-${k}" data-a="kpi.go" data-v="${KV[k][1]}"><b>${KV[k][0]}</b><span>${esc(KPIS[k])}</span></button>`).join('')}</div>
@@ -465,7 +467,7 @@ export function renderAvisos() {
   if (f.estado && tab === 'act') list = list.filter(a => a.estado === f.estado);
   if (f.tipo) list = list.filter(a => a.tipo === f.tipo);
   if (f.sector) list = list.filter(a => a.sector === f.sector);
-  if (f.q) { const q = norm(f.q); list = list.filter(a => norm([avisoNum(a), a.ref, a.desc, a.loc && a.loc.txt, a.obs, named(p.cat.tiposAviso, a.tipo)].join(' ')).includes(q)); }
+  if (f.q) { const q = norm(f.q); list = list.filter(a => norm([avisoNum(a), a.ref, a.desc, a.loc && a.loc.txt, a.obs, etiquetaTipoAviso(p.cat.tiposAviso, a.tipo)].join(' ')).includes(q)); }
   list.sort((x, y) => tab === 'act' ? ((x.estado === 'pendiente' ? 0 : 1) - (y.estado === 'pendiente' ? 0 : 1) || (y.t ?? y.creado) - (x.t ?? x.creado)) : (y.finalizadoEn - x.finalizadoEn));
   // En preventivos grandes se muestran por tandas: miles de tarjetas a la vez ralentizan el móvil
   const lim = f.lim || 100; const total = list.length; list = list.slice(0, lim);
@@ -473,7 +475,7 @@ export function renderAvisos() {
   <div class="toolbar">
     <div class="search">${icon('buscar')}<input id="q_av" type="search" placeholder="Buscar aviso" value="${attr(f.q || '')}" data-c="av.q" data-live="1" aria-label="Buscar aviso"></div>
     ${tab === 'act' ? `<select data-c="av.estado" aria-label="Estado"><option value="">Todos los estados</option>${['pendiente', 'asignado', 'en_curso'].map(e => `<option value="${e}"${f.estado === e ? ' selected' : ''}>${AVISO_ESTADO[e]}</option>`).join('')}</select>` : ''}
-    <select data-c="av.tipo" aria-label="Tipo"><option value="">Todos los tipos</option>${(p.cat.tiposAviso || []).map(x => `<option value="${x.id}"${f.tipo === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
+    <select data-c="av.tipo" aria-label="Tipo"><option value="">Todos los tipos</option>${opcionesTipoAviso(p.cat.tiposAviso, f.tipo || '')}</select>
     <select data-c="av.sector" aria-label="Sector"><option value="">Todos los sectores</option>${(p.cat.sectores || []).map(x => `<option value="${x.id}"${f.sector === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>
     ${activo() && can('avisos.crear') ? btn('Nuevo aviso', 'a.new', { cls: 'primary fab-dup', ic: 'mas_add' }) : ''}
   </div>
@@ -489,9 +491,9 @@ CH['av.sector'] = el => { filt('avisos').sector = el.value; filt('avisos').lim =
 A['av.tab'] = el => { filt('avisos').tab = el.dataset.v; filt('avisos').estado = ''; filt('avisos').lim = 0; G.render(); };
 A['av.more'] = () => { const f = filt('avisos'); f.lim = (f.lim || 100) + 200; G.render(); };
 
-function avisoFields(p) {
+function avisoFields(p, tipo = '') {
   return [
-    { name: 'tipo', label: 'Tipo de aviso', type: 'select', options: [['', 'Sin tipo'], ...(p.cat.tiposAviso || []).map(x => [x.id, x.nombre])] },
+    campoTipoAviso(p.cat.tiposAviso, tipo),
     { name: 'desc', label: 'Descripción', type: 'textarea', rows: 2, placeholder: 'Qué ocurre' },
     { name: 't', label: 'Fecha y hora del aviso', type: 'datetime' },
     `<div class="fld"><label>Ubicación</label><div class="row gap"><span class="grow loc-sum" data-locsum>—</span><button type="button" class="btn sm" data-a="a.formLoc">${icon('pin')}<span>Ubicación…</span></button></div></div>`,
@@ -504,26 +506,54 @@ function setFormLoc(form, loc) {
   const el = form.querySelector('[data-locsum]');
   if (el) el.textContent = loc ? [loc.txt, fmtCoords(loc)].filter(Boolean).join(' · ') || '—' : '—';
 }
+// Nuevo aviso: primero el tipo de incidente (carpetas → código) y, al tocar el código, se crea el aviso y se
+// abre para asignar unidades. «Más datos antes de crear…» abre el formulario completo.
+// ctx: { unit } desde una unidad (queda asignada) · { plan, loc, zona } desde el plano
 A['a.new'] = el => {
-  const p = P(); const unit = el.dataset.unit ? S().units[el.dataset.unit] : null;
+  const unit = el.dataset.unit ? S().units[el.dataset.unit] : null;
   if (unit) closeSheet();
-  openSheet({
-    title: 'Nuevo aviso' + (unit ? ' con ' + unitLabel(unit) : ''), size: 'l',
-    render: () => `<form data-f="a.save" data-tdef="${toLocalInput(now())}"${unit ? ` data-unit="${unit.id}"` : ''}>${fieldsHtml(avisoFields(p), { t: now() })}
-      ${unit ? `<p class="note">${icon('unidades')} Se asignará <b>${esc(unitLabel(unit))}</b> al crear el aviso.</p>` : '<p class="muted small">Tras crearlo verás las unidades sugeridas para asignar.</p>'}
-      <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear aviso</button></div></form>`,
-    onMount: el2 => { const f = el2.querySelector('form'); if (unit && unit.loc) setFormLoc(f, { txt: unit.loc.txt, lat: unit.loc.lat, lon: unit.loc.lon }); if (unit && unit.sector) f.sector.value = unit.sector; },
-  });
+  nuevoAviso({ unit });
 };
-/** Nuevo aviso desde el plano: el formulario de siempre con la ubicación (y la zona) ya puestas */
-export function nuevoAvisoEn({ plan = null, loc = null, zona = null } = {}) {
-  const p = P();
+/** Nuevo aviso desde el plano, con la ubicación (y la zona) ya puestas */
+export function nuevoAvisoEn({ plan = null, loc = null, zona = null } = {}) { nuevoAviso({ plan, loc, zona }); }
+function nuevoAviso(ctx) {
+  abrirSelectorIncidente({
+    titulo: ctx.unit ? 'Nuevo aviso con ' + unitLabel(ctx.unit) : ctx.zona ? 'Nuevo aviso en una zona' : ctx.plan ? 'Nuevo aviso en el plano' : 'Nuevo aviso',
+    onPick: tipo => crearAvisoRapido(ctx, tipo),
+    onMasDatos: () => formularioAviso(ctx),
+  });
+}
+/** Ubicación y sector de partida de un aviso nuevo según desde dónde se crea */
+function inicioAviso(ctx) {
+  const p = P(); const u = ctx.unit;
+  const loc = ctx.loc || (ctx.plan ? { txt: 'Punto del plano', lat: null, lon: null } : u && u.loc && (u.loc.txt || u.loc.lat != null) ? { txt: u.loc.txt, lat: u.loc.lat, lon: u.loc.lon } : null);
+  const sector = u && u.sector && (p.cat.sectores || []).some(x => x.id === u.sector) ? u.sector : null;
+  return { loc, sector };
+}
+async function crearAvisoRapido(ctx, tipo) {
+  const { loc, sector } = inicioAviso(ctx);
+  const ops = await crearAviso({ tipo, desc: '', t: null, loc, sector, obs: '', plan: ctx.plan || null, zona: ctx.zona || null }, ctx.unit ? ctx.unit.id : null);
+  toast('Aviso creado · ' + etiquetaTipoAviso(P().cat.tiposAviso, tipo), 'ok'); openAviso(ops[0].e);
+}
+/** Crea el aviso (y asigna la unidad si la hay: si no se puede directamente, se pregunta) */
+async function crearAviso(d, unitId) {
+  if (!unitId) return exec(C.avisoCreate, d);
+  try { return await exec(C.avisoCreate, d, { unidades: [unitId] }); }
+  catch (e) {
+    if (!['descanso', 'no_disponible', 'incompatible', 'ocupada'].includes(e.code)) throw e;
+    const ops = await exec(C.avisoCreate, d); await assignFlow(ops[0].e, unitId); return ops;
+  }
+}
+function formularioAviso(ctx) {
+  const p = P(); const unit = ctx.unit;
+  const nota = unit ? `<p class="note">${icon('unidades')} Se asignará <b>${esc(unitLabel(unit))}</b> al crear el aviso.</p>`
+    : ctx.plan || ctx.zona ? `<p class="note">${icon(ctx.zona ? 'zona' : 'pin')} ${ctx.zona ? 'Zona de ' + ctx.zona.pts.length + ' puntos marcada en el plano; la ubicación del aviso es su centro.' : 'Ubicación tomada del punto marcado en el plano.'}</p>`
+    : '<p class="muted small">Tras crearlo verás las unidades sugeridas para asignar.</p>';
   openSheet({
-    title: zona ? 'Nuevo aviso en una zona' : 'Nuevo aviso en el plano', size: 'l',
-    render: () => `<form data-f="a.save" data-tdef="${toLocalInput(now())}">${fieldsHtml(avisoFields(p), { t: now() })}
-      <p class="note">${icon(zona ? 'zona' : 'pin')} ${zona ? 'Zona de ' + zona.pts.length + ' puntos marcada en el plano; la ubicación del aviso es su centro.' : 'Ubicación tomada del punto marcado en el plano.'}</p>
-      <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear aviso</button></div></form>`,
-    onMount: el2 => { const f = el2.querySelector('form'); f._plan = plan; f._zona = zona; setFormLoc(f, loc || (plan ? { txt: 'Punto del plano', lat: null, lon: null } : null)); },
+    title: unit ? 'Nuevo aviso con ' + unitLabel(unit) : ctx.zona ? 'Nuevo aviso en una zona' : ctx.plan ? 'Nuevo aviso en el plano' : 'Nuevo aviso', size: 'l',
+    render: () => `<form data-f="a.save" data-tdef="${toLocalInput(now())}"${unit ? ` data-unit="${unit.id}"` : ''}>${fieldsHtml(avisoFields(p), { t: now() })}
+      ${nota}<div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear aviso</button></div></form>`,
+    onMount: el2 => { const f = el2.querySelector('form'); const ini = inicioAviso(ctx); f._plan = ctx.plan || null; f._zona = ctx.zona || null; setFormLoc(f, ini.loc); if (ini.sector) f.sector.value = ini.sector; },
   });
 }
 A['a.formLoc'] = el => { const form = el.closest('form'); openLocEditor({ title: 'Ubicación del aviso', value: form._loc, onSave: loc => setFormLoc(form, loc) }); };
@@ -540,14 +570,7 @@ F['a.save'] = async form => {
     await exec(C.avisoUpdate, form.dataset.id, { tipo: d.tipo, desc: d.desc, t: d.t != null && toLocalInput(d.t) !== toLocalInput(tOld) ? d.t : tOld, loc: d.loc, sector: d.sector, obs: d.obs });
     closeSheet(); toast('Aviso actualizado', 'ok'); return;
   }
-  let ops;
-  if (form.dataset.unit) {
-    try { ops = await exec(C.avisoCreate, d, { unidades: [form.dataset.unit] }); }
-    catch (e) {
-      if (!['descanso', 'no_disponible', 'incompatible', 'ocupada'].includes(e.code)) throw e;
-      ops = await exec(C.avisoCreate, d); await assignFlow(ops[0].e, form.dataset.unit);
-    }
-  } else ops = await exec(C.avisoCreate, d);
+  const ops = await crearAviso(d, form.dataset.unit || null);
   closeSheet(); toast('Aviso creado', 'ok'); openAviso(ops[0].e);
 };
 
@@ -558,7 +581,7 @@ export function openAviso(id) {
 function avisoSheet(id) {
   const s = S(); const p = P(); const a = s.avisos[id]; const t = now();
   if (!a) return empty('Aviso no encontrado');
-  const ta = (p.cat.tiposAviso || []).find(x => x.id === a.tipo);
+  const ta = tipoAvisoDef(p.cat.tiposAviso, a.tipo);
   const tm = avisoTimes(a);
   const parts = activeParts(a);
   const past = a.part.filter(x => x.lib != null);
@@ -574,7 +597,7 @@ function avisoSheet(id) {
     </div>`;
   };
   return `
-  <div class="row gap-s wrap">${ta ? chip(ta.nombre, ta.color) : ''}${estadoChip(a.estado)}${a.num == null ? `<span class="chip warn">Número provisional ${esc(a.ref || '')}</span>` : a.ref ? `<span class="chip muted">Ref. ${esc(a.ref)}</span>` : ''}</div>
+  <div class="row gap-s wrap">${ta ? chip(etiquetaTipo(ta), ta.color) : ''}${estadoChip(a.estado)}${a.num == null ? `<span class="chip warn">Número provisional ${esc(a.ref || '')}</span>` : a.ref ? `<span class="chip muted">Ref. ${esc(a.ref)}</span>` : ''}</div>
   ${a.desc ? `<p class="adesc big">${esc(a.desc)}</p>` : ''}
   <dl class="dl">
     <dt>Hora del aviso</dt><dd>${fmtDateTime(a.t ?? a.creado)}${a.estado !== 'finalizado' ? ' · hace <span data-since="' + (a.t ?? a.creado) + '"></span>' : ''}</dd>
@@ -634,7 +657,7 @@ A['a.edit'] = el => {
   const a = S().avisos[el.dataset.id]; const p = P();
   openSheet({
     title: 'Editar aviso ' + avisoNum(a), size: 'l',
-    render: () => `<form data-f="a.save" data-id="${a.id}">${fieldsHtml(avisoFields(p), { tipo: a.tipo || '', desc: a.desc, t: a.t ?? a.creado, sector: a.sector || '', obs: a.obs })}
+    render: () => `<form data-f="a.save" data-id="${a.id}">${fieldsHtml(avisoFields(p, a.tipo || ''), { desc: a.desc, t: a.t ?? a.creado, sector: a.sector || '', obs: a.obs })}
     <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar</button></div></form>`,
     onMount: el2 => setFormLoc(el2.querySelector('form'), a.loc),
   });

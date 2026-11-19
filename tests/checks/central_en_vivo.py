@@ -102,7 +102,7 @@ def main():
             paso('CLAUDE_TEST: preventivo compartido que aparece solo', compartido)
             def simult():
                 for a, d in [(T, 'Aviso desde la tablet'), (M, 'Aviso desde el móvil')]:
-                    a.nav('avisos'); a.a('a.new'); a.fill('desc', d); a.sheet().locator('form[data-f="a.save"] button.primary').click(); a.pg.wait_for_timeout(300); a.close_sheets()
+                    a.nav('avisos'); a.a('a.new'); a.a('inc.mas'); a.fill('desc', d); a.sheet().locator('form[data-f="a.save"] button.primary').click(); a.pg.wait_for_timeout(300); a.close_sheets()
                 q = 'return JSON.stringify(Object.values(s.avisos).map(a => a.num).sort())'
                 ok = esperar(lambda: T.state(q) == M.state(q) == '[1,2]', 60)
                 assert ok, (T.state(q), M.state(q))
@@ -110,7 +110,7 @@ def main():
             paso('CLAUDE_TEST: avisos simultáneos', simult)
             def sin_red():
                 M.ctx.set_offline(True); M.pg.wait_for_timeout(300)
-                M.nav('avisos'); M.a('a.new'); M.fill('desc', 'Creado sin red'); M.sheet().locator('form[data-f="a.save"] button.primary').click(); M.pg.wait_for_timeout(400); M.close_sheets()
+                M.nav('avisos'); M.a('a.new'); M.a('inc.mas'); M.fill('desc', 'Creado sin red'); M.sheet().locator('form[data-f="a.save"] button.primary').click(); M.pg.wait_for_timeout(400); M.close_sheets()
                 M.open_unit('CT-2'); M.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); M.pg.wait_for_timeout(400); M.close_sheets()
                 M.ctx.set_offline(False); M.pg.evaluate('() => window.dispatchEvent(new Event("online"))')
                 q = "return JSON.stringify([Object.values(s.avisos).map(a => a.desc + ':' + a.num).sort(), Object.values(s.units).map(u => u.ind + ':' + u.clave).sort()])"

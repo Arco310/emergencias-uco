@@ -1,7 +1,7 @@
 # Estado de la implementación — Evolución integral (pliego «Prompt maestro» + apartado 18)
 
 Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo desde otra sesión.
-Última actualización: 18/11/2026 (versión 1.2.1, instalada en el PC servidor).
+Última actualización: 19/11/2026 (versión 1.3.0).
 
 ## 1. Auditoría técnica del proyecto existente (versión 1.0.3)
 
@@ -40,6 +40,7 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | D8 | **Ciclo de actualización de la app** (service worker): una caché por versión, sin mezclar archivos; integridad SHA-256 de `index.html` fijada al compilar (si no coincide, la versión no se instala); la versión nueva espera y se aplica sola solo sin sesión abierta o al arrancar; con sesión, aviso y el usuario elige el momento (antes se envían los cambios pendientes; la pantalla y el preventivo se recuperan). Se guarda la versión anterior; **pantalla de recuperación** si una versión no arranca. | Requisitos 8.2, 8.3 y 15.3: nunca interrumpir una operación ni perder cambios. |
 | D9 | **Migraciones de datos locales** (`src/data/migraciones.js`): copia de seguridad cifrada previa (se guardan 5), migraciones idempotentes y compatibles hacia atrás, el esquema solo avanza si terminan bien. | Requisito 8.3 (migraciones) y 15.6 (copias previas). |
 | D10 | **Versión mínima de la app** que admite el servidor (`/api/v1/version`): si la app es anterior, deja de sincronizar con ese servidor (los cambios se guardan y se envían al actualizar) y lo avisa. | Compatibilidad entre versiones sin corromper datos. |
+| D12 | **Códigos de incidente como tipos de aviso** (1.3.0, petición del 19/11): cada código de SAMUR-PC es un elemento del catálogo «Tipos de aviso» con `codigo`, `grupo` (carpeta) y, en los códigos de cierre, `padre`; identificadores estables (`inc_1_2`). Se elige por carpetas y al tocar el código se crea el aviso. Los preventivos ya creados reciben los códigos con un botón explícito («Añadir los códigos de incidente»), no con una migración automática ni código a código al usarlos: cambiar el catálogo de un preventivo compartido desde varios dispositivos a la vez generaría conflictos. Los nombres se muestran con el código en todas partes y, si un catálogo no tuviera un código, se resuelve con el catálogo por defecto. Tipos de unidad y unidades plantilla de SAMUR-PC añadidos a los valores por defecto; la migración de datos 3 los añade (solo lo que falta) a los dispositivos en uso. | Los avisos siguen guardando un identificador de tipo (motor, estadísticas, compatibilidades e informes no cambian) y la versión anterior sigue pudiendo leer los datos. |
 | D11 | Publicación con `tools/publicar-version.mjs`: comprueba que app y servidor tienen la misma versión, compila, verifica el paquete y publica la versión en GitHub (sobre el commit ya subido) y la app en GitHub Pages. Notas en `docs/CAMBIOS.md`. La versión en GitHub Releases la lanza una persona desde GitHub (Actions → «Publicar versión»), que ejecuta las pruebas y la misma herramienta. | Proceso repetible y verificable; esta sesión no puede crear versiones en GitHub (restricción de la plataforma), y es razonable que publicar quede en manos de una persona. |
 
 ## 3. Fases
@@ -51,6 +52,7 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | 3. Cartografía y biblioteca de planos | Terminada (Google sin probar con clave real) | Buscador, selección de zona, plano georreferenciado, biblioteca Bernabéu/Metropolitano/Sol + guardados, clave de Google en Configuración general. |
 | 4. Plano interactivo de coordinación | Terminada | Arrastre (también desde pendientes), doble clic/pulsación larga para la clave, avisos por punto o zona, sincronización y bitácora. |
 | 5. Web, PWA y actualizaciones | Terminada | App (D8–D10) y servidor (D7, D7b, D11); panel Sistema → Actualizaciones. Versión 1.2.1 en GitHub Pages y en el servidor. |
+| 1.3.0. Códigos de incidente, unidades SAMUR-PC, cronología conjunta y finalizar | Terminada (D12) | Nuevo aviso por carpetas → código; 16 tipos y plantillas SAMUR-PC; cronología «Todas las unidades»; «Finalizar preventivo e informes». Pruebas en `tests/unit/incidentes_samur.test.mjs` y escenario 7 de navegador. |
 | 6. Validación integral | Terminada | Los 25 escenarios de aceptación con pruebas automáticas y la prueba en vivo con el servidor real en el entorno CLAUDE_TEST: 10/10 (ver `docs/TESTING_REPORT.md`). |
 
 ## 4. Bloqueos que requieren intervención humana

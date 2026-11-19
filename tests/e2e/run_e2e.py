@@ -191,8 +191,10 @@ def scenario_standalone(browser):
         A.close_sheets(); return 'color principal y borde = #AA00AA en C0'
     check('Color C0: personalizar en C0', color_c0)
     def aviso_flow():
-        A.nav('avisos'); A.a('a.new'); s = A.sheet()
-        A.fill('tipo', 'ta_san'); A.fill('desc', 'Lipotimia en primera fila'); A.fill('sector', 'sec_1')
+        A.nav('avisos'); A.a('a.new'); A.a('inc.mas'); s = A.sheet()
+        s.locator('[data-a="inc.campo"]').click(); A.pg.wait_for_timeout(200)
+        A.sheet().locator('[data-c="inc.q"]').fill('asistencia'); A.pg.wait_for_timeout(150); A.sheet().locator('[data-inc-res] [data-id="ta_san"]').click(); A.pg.wait_for_timeout(200)
+        s = A.sheet(); A.fill('desc', 'Lipotimia en primera fila'); A.fill('sector', 'sec_1')
         s.locator('form[data-f="a.save"] button.primary').click(); A.pg.wait_for_selector('.sug'); A.shot('04-aviso-sugerencias')
         num = A.state("return Object.values(s.avisos)[0].num;")
         assert num == 1, num
@@ -312,7 +314,7 @@ def scenario_standalone(browser):
     def offline():
         A.ctx.set_offline(True)
         A.pg.reload(); A.login('ana', 'secreto1'); A.pg.wait_for_selector('.net-off')
-        A.nav('avisos'); A.a('a.new'); A.fill('desc', 'Aviso sin conexión'); A.sheet().locator('form[data-f="a.save"] button.primary').click(); A.pg.wait_for_timeout(600); A.close_sheets()
+        A.nav('avisos'); A.a('a.new'); A.a('inc.mas'); A.fill('desc', 'Aviso sin conexión'); A.sheet().locator('form[data-f="a.save"] button.primary').click(); A.pg.wait_for_timeout(600); A.close_sheets()
         A.open_unit('AMB-02'); A.a('u.rest'); A.dlg_ok(); A.pg.wait_for_timeout(300); A.close_sheets()
         A.nav('plano'); A.pg.wait_for_selector('.plano-img')
         A.nav('mas'); A.a('nav', v='cierre')
@@ -415,7 +417,7 @@ def scenario_shared(browser):
     check('Compartido: el preventivo aparece solo en el otro dispositivo', join)
     def simult():
         for app, d in [(T, 'Aviso tablet'), (M, 'Aviso móvil')]:
-            app.nav('avisos'); app.a('a.new'); app.fill('desc', d); app.sheet().locator('form[data-f="a.save"] button.primary').click(); app.pg.wait_for_timeout(300); app.close_sheets()
+            app.nav('avisos'); app.a('a.new'); app.a('inc.mas'); app.fill('desc', d); app.sheet().locator('form[data-f="a.save"] button.primary').click(); app.pg.wait_for_timeout(300); app.close_sheets()
         time.sleep(8)
         nums = sorted(T.state('return Object.values(s.avisos).map(a => a.num)'))
         nums2 = sorted(M.state('return Object.values(s.avisos).map(a => a.num)'))
@@ -424,10 +426,10 @@ def scenario_shared(browser):
     check('Compartido: avisos simultáneos sin duplicados', simult)
     def offline():
         M.ctx.set_offline(True); M.pg.wait_for_timeout(300)
-        M.nav('avisos'); M.a('a.new'); M.fill('desc', 'Creado sin red'); M.sheet().locator('form[data-f="a.save"] button.primary').click(); M.pg.wait_for_timeout(400); M.close_sheets()
+        M.nav('avisos'); M.a('a.new'); M.a('inc.mas'); M.fill('desc', 'Creado sin red'); M.sheet().locator('form[data-f="a.save"] button.primary').click(); M.pg.wait_for_timeout(400); M.close_sheets()
         ref = M.state("return Object.values(s.avisos).find(a => a.desc === 'Creado sin red').ref")
         a2 = M.unit_id('A2'); M.open_unit('A2'); M.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); M.pg.wait_for_timeout(400); M.close_sheets()
-        T.nav('avisos'); T.a('a.new'); T.fill('desc', 'Tablet mientras móvil sin red'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(400); T.close_sheets()
+        T.nav('avisos'); T.a('a.new'); T.a('inc.mas'); T.fill('desc', 'Tablet mientras móvil sin red'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(400); T.close_sheets()
         M.shot('02-movil-sin-red'); time.sleep(3)
         M.ctx.set_offline(False); M.pg.evaluate('() => window.dispatchEvent(new Event("online"))'); time.sleep(9)
         sa = T.state("return JSON.stringify([Object.values(s.avisos).map(a => a.desc + ':' + a.num).sort(), Object.values(s.units).map(u => u.ind + ':' + u.clave).sort()])")
@@ -487,7 +489,7 @@ def scenario_shared(browser):
     check('Actualizaciones: estado del servidor y de los dispositivos', dispositivos_panel)
     def caida_servidor():
         SRV['p'].terminate(); SRV['p'].wait(10)
-        T.nav('avisos'); T.a('a.new'); T.fill('desc', 'Con el servidor caído'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(500); T.close_sheets()
+        T.nav('avisos'); T.a('a.new'); T.a('inc.mas'); T.fill('desc', 'Con el servidor caído'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(500); T.close_sheets()
         a1 = T.unit_id('A1'); T.open_unit('A1'); T.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); T.pg.wait_for_timeout(400); T.close_sheets()
         T.pg.evaluate('() => window.__UCO.core.sync.syncNow(window.__UCO.core.cur)'); T.pg.wait_for_timeout(800)
         est = T.pg.evaluate('() => window.__UCO.core.sync.status(window.__UCO.core.cur)')
@@ -735,28 +737,29 @@ def scenario_coordinacion(b):
     check('Plano: devolver una unidad a pendientes de asignación', devolver)
     def aviso_punto():
         mb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(mb['x'] + mb['width'] * 0.25, mb['y'] + mb['height'] * 0.3); A.pg.wait_for_timeout(400)
-        A.pg.locator('[data-pop="aviso"]').click(); A.pg.wait_for_timeout(300)
+        A.pg.locator('[data-pop="aviso"]').click(); A.pg.wait_for_timeout(300); A.a('inc.mas')
         f = A.sheet().locator('form[data-f="a.save"]'); loc = f.locator('[data-locsum]').inner_text(); assert '40.4' in loc and '-3.7' in loc, loc
         f.locator('[name=desc]').fill('Desvanecimiento en la plaza'); f.locator('button.primary').click(); A.pg.wait_for_timeout(700); A.close_sheets()
         a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Desvanecimiento en la plaza')")
         assert a['plan'] and a['loc']['lat'] and a['num'] == 1, a
         assert A.pg.locator(f'.mk[data-mk="a"][data-id="{a["id"]}"]').count() == 1
-        return 'clic en el mapa → formulario habitual con la ubicación ya puesta → aviso nº 1 con marcador en el plano'
+        return 'clic en el mapa → tipo de incidente o «Más datos» → formulario con la ubicación ya puesta → aviso nº 1 con marcador en el plano'
     check('Avisos: crear un aviso haciendo clic en el mapa', aviso_punto)
     def aviso_zona():
         A.a('plan.zona'); mb = A.pg.locator('.coord-map').bounding_box()
         for fx, fy in [(0.55, 0.2), (0.75, 0.22), (0.78, 0.4), (0.57, 0.42)]: A.pg.mouse.click(mb['x'] + mb['width'] * fx, mb['y'] + mb['height'] * fy); A.pg.wait_for_timeout(250)
         A.shot('03-zona-dibujada')
-        A.a('plan.zonaOk'); f = A.sheet().locator('form[data-f="a.save"]'); f.locator('[name=desc]').fill('Aglomeración en zona norte'); f.locator('button.primary').click(); A.pg.wait_for_timeout(700); A.close_sheets()
-        a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Aglomeración en zona norte')")
+                # Directamente con el código: se crea el aviso con la zona sin pasar por el formulario
+        A.a('plan.zonaOk'); s = A.sheet(); s.locator('[data-c="inc.q"]').fill('3.2'); A.pg.wait_for_timeout(200); s.locator('[data-inc-res] [data-id="inc_3_2"]').click(); A.pg.wait_for_timeout(700); A.close_sheets()
+        a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.tipo === 'inc_3_2')")
         assert a['zona'] and len(a['zona']['pts']) == 4 and a['zona']['pts'][0]['lat'] and a['loc']['lat'], a
         assert A.pg.locator('.coord-map path.leaflet-interactive').count() >= 1
         A.shot('04-plano-coordinacion')
         # Ambos avisos aparecen en el apartado general de avisos
         A.nav('avisos'); A.pg.wait_for_timeout(400); lista = A.pg.inner_text('main')
-        assert 'Desvanecimiento en la plaza' in lista and 'Aglomeración en zona norte' in lista, lista[:400]
+        assert 'Desvanecimiento en la plaza' in lista and '3.2 · Inconsciente sin filiar causa' in lista, lista[:400]
         A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(400)
-        return 'zona de 4 puntos dibujada → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general'
+        return 'zona de 4 puntos dibujada → código 3.2 → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general'
     check('Avisos: crear un aviso por zona', aviso_zona)
     def biblioteca():
         A.a('plan.biblio'); s = A.sheet(); t = s.inner_text()
@@ -931,6 +934,96 @@ def scenario_actualizaciones(b):
     finally:
         A.ctx.close(); srv.terminate(); shutil.rmtree(static, ignore_errors=True); shutil.rmtree(data, ignore_errors=True)
 
+def scenario_incidentes(b):
+    print('\n== Escenario 7: códigos de incidente, unidades SAMUR-PC, cronología conjunta y finalizar ==')
+    A = App(b, 'incidentes', PHONE)
+    A.setup('Marta Jefa', 'marta', 'secreto7', 'Móvil CECOR', 'MC'); A.perms(False)
+    A.new_prev('Media maratón', 'independiente', True)
+    st = lambda js: A.pg.evaluate('() => { const s = window.__UCO.core.state; ' + js + ' }')
+    def plantillas_samur():
+        A.nav('unidades'); A.a('u.new'); s = A.sheet(); s.locator('.tpl-grid').wait_for()
+        tiles = ' '.join(s.locator('[data-a="u.fromTpl"]').all_inner_texts())
+        faltan = [p for p in ['BASE', 'SAMUR', 'VIR ·', 'ALFA', 'PAPA', 'TANGO', 'MIKE', 'ECO', 'LINCE', 'HALCÓN', 'URO', 'ZULÚ', 'VRALA', 'PM ·', 'PMA', 'VAIS'] if p not in tiles]
+        assert not faltan, faltan
+        A.shot('01-plantillas-samur')
+        for pid, num in [('plt_sp_alfa', '31'), ('plt_sp_halcon', '2')]:
+            if not A.pg.locator('.tpl-grid').count(): A.a('u.new'); A.sheet().locator('.tpl-grid').wait_for()
+            A.sheet().locator(f'[data-a="u.fromTpl"][data-id="{pid}"]').click(); A.pg.wait_for_timeout(300)
+            f = A.sheet().locator('form[data-f="u.tplSave"]'); f.locator('[name=numero]').fill(num); f.locator('button.primary').click(); A.pg.wait_for_timeout(500)
+        u = st("const u = Object.values(s.units).find(x => x.ind === 'ALFA 31'); const h = Object.values(s.units).find(x => x.ind === 'HALCÓN 2'); return u && h && [u.tipo, u.clave, h.tipo, h.vis.icono]")
+        assert u == ['rt_sp_alfa', 'C0', 'rt_sp_halcon', 'moto'], u
+        A.close_sheets(); return '16 plantillas (BASE … VAIS); «31» → ALFA 31 (USVB) y «2» → HALCÓN 2 (moto), en C0'
+    check('Unidades plantilla de SAMUR-PC', plantillas_samur)
+    def aviso_codigo():
+        A.nav('avisos'); A.a('a.new'); s = A.sheet(); s.locator('[data-a="inc.dir"]').first.wait_for()
+        carpetas = s.locator('[data-a="inc.dir"]').all_inner_texts()
+        assert len(carpetas) == 12 and carpetas[0].startswith('1. Accidente de Tráfico') and carpetas[-2].startswith('15. Psicológicos') and carpetas[-1].startswith('Otros tipos'), carpetas
+        A.shot('02-carpetas')
+        s.locator('[data-a="inc.dir"]', has_text='Accidente de Tráfico').click(); A.pg.wait_for_timeout(200)
+        cods = s.locator('[data-inc-list="0"] [data-a="inc.pick"]').all_inner_texts()
+        assert cods[0].startswith('1.1') and any(c.startswith('1.6.1') for c in cods), cods
+        A.shot('03-codigos')
+        s.locator('[data-a="inc.pick"][data-id="inc_1_2"]').click(); A.pg.wait_for_timeout(600)
+        a = st("const a = Object.values(s.avisos)[0]; return [a.tipo, a.num, a.estado]")
+        assert a == ['inc_1_2', 1, 'pendiente'], a
+        chip = A.sheet().inner_text(); assert '1.2 · Accidente con menos de 3 víctimas' in chip, chip[:300]
+        A.shot('04-aviso-creado'); A.close_sheets()
+        return 'Nuevo aviso → carpeta «1. Accidente de Tráfico» → 1.2: aviso Nº 1 creado con ese tipo y abierto para asignar'
+    check('Avisos por código de incidente (carpetas)', aviso_codigo)
+    def aviso_buscar():
+        A.a('a.new'); s = A.sheet(); s.locator('[data-c="inc.q"]').fill('atropello'); A.pg.wait_for_timeout(200)
+        res = s.locator('[data-inc-res] [data-a="inc.pick"]').all_inner_texts(); assert res and res[0].startswith('1.4'), res
+        s.locator('[data-inc-res] [data-id="inc_1_4"]').click(); A.pg.wait_for_timeout(500); A.close_sheets()
+        assert st("return Object.values(s.avisos).some(a => a.tipo === 'inc_1_4')")
+        return 'buscar «atropello» → 1.4 → aviso creado'
+    check('Avisos: buscar el código', aviso_buscar)
+    def aviso_unidad():
+        A.open_unit('ALFA 31'); A.sheet().locator('[data-a="a.new"]').first.click(); A.pg.wait_for_timeout(300)
+        s = A.sheet(); s.locator('[data-a="inc.dir"]', has_text='Enfermedad').click(); s.locator('[data-a="inc.pick"][data-id="inc_3_1"]').click(); A.pg.wait_for_timeout(700)
+        r = st("const u = Object.values(s.units).find(x => x.ind === 'ALFA 31'); const a = s.avisos[u.aviso]; return a && [a.tipo, a.estado, u.clave]")
+        assert r == ['inc_3_1', 'asignado', 'C1'], r
+        A.close_sheets(); return 'ALFA 31 → Nuevo aviso con esta unidad → Enfermedad → 3.1: aviso asignado y la unidad en C1'
+    check('Avisos: nuevo aviso con una unidad por código', aviso_unidad)
+    def aviso_mas_datos():
+        A.nav('avisos'); A.a('a.new'); A.a('inc.mas'); f = A.sheet().locator('form[data-f="a.save"]')
+        f.locator('[data-a="inc.campo"]').click(); A.pg.wait_for_timeout(200)
+        s = A.sheet(); s.locator('[data-c="inc.q"]').fill('2.12.1'); A.pg.wait_for_timeout(200); s.locator('[data-inc-res] [data-id="inc_2_12_1"]').click(); A.pg.wait_for_timeout(200)
+        f = A.sheet().locator('form[data-f="a.save"]'); lbl = f.locator('[data-tipo-lbl]').inner_text(); assert lbl.startswith('2.12.1'), lbl
+        f.locator('[name=desc]').fill('Bañista rescatado'); f.locator('button.primary').click(); A.pg.wait_for_timeout(600); A.close_sheets()
+        a = st("return (Object.values(s.avisos).find(a => a.desc === 'Bañista rescatado') || {}).tipo"); assert a == 'inc_2_12_1', a
+        opts = A.pg.locator('select[data-c="av.tipo"] optgroup').count(); assert opts == 12, opts
+        return 'Más datos → campo «Tipo de incidente» → 2.12.1 OVACE con descripción; filtro de avisos agrupado por carpetas'
+    check('Avisos: formulario completo con el selector de código', aviso_mas_datos)
+    def cronologia_todas():
+        A.nav('mas'); A.a('nav', v='cronologia'); A.pg.locator('select[data-c="cr.unit"]').select_option('__todas'); A.pg.wait_for_timeout(300)
+        ch = A.pg.locator('[data-crono="todas"] .uchip').all_inner_texts()
+        assert 'ALFA 31' in ch and 'HALCÓN 2' in ch, ch
+        ts = A.pg.evaluate("() => [...document.querySelectorAll('[data-crono=\"todas\"] time')].map(t => t.textContent)")
+        assert len(ts) >= 4, ts
+        A.shot('05-cronologia-todas'); return f'{len(ts)} acontecimientos de {len(set(ch))} unidades en un único registro, lo más reciente primero'
+    check('Cronología: todas las unidades a la vez', cronologia_todas)
+    def preventivo_anterior():
+        A.pg.evaluate("async () => { const c = window.__UCO.core; const seed = c.seedFromConfig(); seed.cat.tiposAviso = seed.cat.tiposAviso.filter(t => !t.codigo); await c.createPrev({ datos: { nombre: 'Preventivo de antes', modalidad: 'independiente', activar: true }, seed }); }")
+        A.pg.wait_for_timeout(400); A.nav('avisos'); A.a('a.new'); s = A.sheet()
+        assert s.locator('[data-a="inc.dir"]').count() == 1, 'solo «Otros tipos»'
+        s.locator('[data-a="inc.anadir"]').click(); A.pg.wait_for_timeout(600)
+        n = s.locator('[data-a="inc.dir"]').count(); assert n == 12, n
+        s.locator('[data-a="inc.dir"]', has_text='Accidente de Tráfico').click(); s.locator('[data-a="inc.pick"][data-id="inc_1_1"]').click(); A.pg.wait_for_timeout(500); A.close_sheets()
+        r = st("return [s.prev.nombre, s.prev.cat.tiposAviso.filter(t => t.codigo).length, Object.values(s.avisos).map(a => a.tipo).join()]")
+        assert r == ['Preventivo de antes', 123, 'inc_1_1'], r
+        return 'preventivo creado sin códigos → «Añadir los códigos de incidente» → 123 códigos y aviso 1.1'
+    check('Preventivos anteriores: añadir los códigos', preventivo_anterior)
+    def finalizar():
+        A.nav('mas'); tile = A.pg.locator('[data-a="nav"][data-v="cierre"]').inner_text(); assert 'Finalizar preventivo' in tile, tile
+        A.a('nav', v='cierre'); assert 'Finalizar el preventivo' in A.pg.inner_text('main')
+        A.a('prev.close'); A.pg.wait_for_timeout(200); assert 'Finalizar preventivo' in A.sheet().inner_text()
+        A.sheet().locator('[name=pdf]').uncheck(); A.dlg_ok(); A.pg.wait_for_timeout(900)
+        r = st("return s.prev.estado + '/' + s.prev.archivado"); assert r == 'cerrado/true', r
+        A.shot('06-finalizado'); return 'Más → «Finalizar preventivo e informes» → Finalizar preventivo: queda en solo lectura y archivado'
+    check('Finalizar el preventivo', finalizar)
+    check('Sin errores de JavaScript (incidentes)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+    A.ctx.close()
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -946,6 +1039,7 @@ def main():
             if only in ('', '4'): scenario_recursos(b)
             if only in ('', '5'): scenario_coordinacion(b)
             if only in ('', '6'): scenario_actualizaciones(b)
+            if only in ('', '7'): scenario_incidentes(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

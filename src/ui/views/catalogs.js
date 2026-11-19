@@ -32,7 +32,7 @@ function renderEditor() {
   }
   const rows = list.map((it, i) => `<li class="cat-row">
       ${itemPreview(cat, it)}
-      <div class="grow"><b>${esc(cat === 'claves' ? it.codigo + ' · ' + it.nombre : it.nombre)}</b><small class="muted">${esc(itemSummary(cat, it))}</small></div>
+      <div class="grow"><b>${esc(cat === 'claves' || (cat === 'tiposAviso' && it.codigo) ? it.codigo + ' · ' + it.nombre : it.nombre)}</b><small class="muted">${esc(itemSummary(cat, it))}</small></div>
       ${readonly ? '' : `<div class="row gap-s">
         <button class="btn icon ghost" data-a="cat.move" data-i="${i}" data-d="-1" aria-label="Subir"${i === 0 ? ' disabled' : ''}>▲</button>
         <button class="btn icon ghost" data-a="cat.move" data-i="${i}" data-d="1" aria-label="Bajar"${i === list.length - 1 ? ' disabled' : ''}>▼</button>
@@ -55,7 +55,7 @@ function itemPreview(cat, it) {
 function itemSummary(cat, it) {
   if (cat === 'claves') return [CATEGORIAS_CLAVE[it.categoria], it.especial && 'especial', it.requiereAviso && 'requiere aviso', it.alAsignar && 'al asignar', it.requiereMotivo && 'pide motivo', it.liberaAviso && 'libera el aviso', '→ ' + (it.transiciones || []).join(', ')].filter(Boolean).join(' · ');
   if (cat === 'tiposRecurso') return [it.activo === false && 'DESACTIVADO', it.categoria, (it.subtipos || []).join('/'), (it.caracteristicas || []).join(', '), ICONOS[(it.vis || {}).icono], FORMAS[(it.vis || {}).forma]].filter(Boolean).join(' · ');
-  if (cat === 'tiposAviso') { const tr = ED.catalogs.tiposRecurso || []; return it.compatibles && it.compatibles.length ? 'Compatibles: ' + it.compatibles.map(id => (tr.find(t => t.id === id) || {}).nombre || id).join(', ') : 'Compatible con todos los recursos'; }
+  if (cat === 'tiposAviso') { const tr = ED.catalogs.tiposRecurso || []; return [it.grupo || 'Otros tipos', it.cierre && 'código de cierre', it.compatibles && it.compatibles.length ? 'Compatibles: ' + it.compatibles.map(id => (tr.find(t => t.id === id) || {}).nombre || id).join(', ') : 'Compatible con todos los recursos'].filter(Boolean).join(' · '); }
   return '';
 }
 
@@ -78,7 +78,10 @@ function itemFields(cat, it) {
     ];
   }
   if (cat === 'sectores') return [{ name: 'nombre', label: 'Nombre', required: true }, { name: 'color', label: 'Color', type: 'color' }];
-  if (cat === 'tiposAviso') return [{ name: 'nombre', label: 'Nombre', required: true }, { name: 'color', label: 'Color', type: 'color' },
+  if (cat === 'tiposAviso') return [{ name: 'codigo', label: 'Código del incidente (opcional)', placeholder: '1.2', help: 'Número con el que se elige al crear un aviso. Un código como 1.6.1 aparece debajo de 1.6.' },
+    { name: 'nombre', label: 'Descripción', required: true },
+    { name: 'grupo', label: 'Carpeta', placeholder: '1. Accidente de Tráfico', help: 'Carpeta en la que aparece al crear un aviso. Vacío: «Otros tipos».' },
+    { name: 'color', label: 'Color', type: 'color' },
     { name: 'compatibles', label: 'Tipos de recurso compatibles (vacío = todos)', type: 'checks', options: (ED.catalogs.tiposRecurso || []).map(t => [t.id, t.nombre]) }];
   if (cat === 'tiposRecurso') return [
     { name: 'nombre', label: 'Nombre', required: true }, { name: 'categoria', label: 'Categoría', placeholder: 'Sanitario, Logística…' },
@@ -136,6 +139,7 @@ F['cat.item'] = form => {
   if (cat === 'tiposRecurso') { const { icono, forma, tam, ...rest } = v; it = { ...base, ...rest, vis: { ...(base.vis || {}), icono, forma, tam } }; if (it.activo !== false) delete it.activo; }
   else it = { ...base, ...v };
   if (cat === 'claves' && base.base) it.codigo = base.codigo;
+  if (cat === 'tiposAviso') for (const k of ['codigo', 'grupo']) { it[k] = String(it[k] || '').trim(); if (!it[k]) delete it[k]; }
   if (cat === 'claves') { it.codigo = String(it.codigo || '').trim().toUpperCase(); for (const k of ['especial', 'requiereAviso', 'alAsignar', 'avisoEnCurso', 'llegada', 'liberaAviso', 'requiereMotivo']) if (!it[k]) delete it[k]; }
   if (!isHexColor(it.color)) it.color = '#607D8B';
   const list = clone(ED.list);

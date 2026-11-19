@@ -1,6 +1,6 @@
-# Informe de pruebas — Evolución integral (versión 1.2.1)
+# Informe de pruebas — Evolución integral (versión 1.3.0)
 
-Fecha: 18/11/2026. Solo se recogen pruebas ejecutadas de verdad, con su resultado real.
+Fecha: 19/11/2026. Solo se recogen pruebas ejecutadas de verdad, con su resultado real.
 
 ## 1. Entorno
 
@@ -19,19 +19,22 @@ Ejecución: `npm test` (unidad, servidor, integración, instalador), `python3 te
 
 | Conjunto | Pruebas | Superadas |
 |---|---|---|
-| Unidad, servidor, integración e instalador (`npm test`, 14 archivos) | 97 | **97** |
-| Navegador (6 escenarios) | 69 | **69** |
+| Unidad, servidor, integración e instalador (`npm test`, 15 archivos) | 103 | **103** |
+| Navegador (7 escenarios) | 78 | **78** |
 | — 1. Móvil, preventivo independiente (funciones anteriores) | 24 | 24 |
 | — 2. Tablet + móvil con el servidor central | 14 | 14 |
 | — 3. Chrome para Android | 5 | 5 |
 | — 4. Tipos de recurso, OTROS y unidades plantilla | 6 | 6 |
 | — 5. Cartografía y plano de coordinación | 12 | 12 |
 | — 6. Actualizaciones de la aplicación | 8 | 8 |
+| — 7. Códigos de incidente, unidades SAMUR-PC, cronología conjunta y finalizar (1.3.0) | 9 | 9 |
 | En vivo con el servidor real, entorno CLAUDE_TEST (§4) | 10 | **10** |
 
-Ejecución final: 18/11/2026, con el código de la 1.2.1: `npm test` 97/97 y navegador 69/69 (terminada a las 18:20); en vivo 10/10 (18:00 y 21:55).
+Ejecución final: 19/11/2026, con el código de la 1.3.0: `npm test` 103/103 y navegador 78/78 (terminada a las 03:53). En vivo (con la 1.2.1 en el servidor): 10/10 el 18/11 a las 18:00 y 21:55.
 
-Pruebas nuevas de esta evolución: `central_cuentas` (13), `central_config` (4), `actualizaciones` (7), `instalador_windows` (4), `archivos_protegidos` (2), `recursos_plantillas` (7), `cartografia` (4), `migraciones_versiones` (8), los escenarios de navegador 2 (parte central), 4, 5 y 6, y la prueba en vivo `tests/checks/central_en_vivo.py` (10).
+Pruebas nuevas de la 1.3.0: `incidentes_samur` (6: catálogo de 123 códigos en 11 grupos, carpetas y orden, aviso con código en estadísticas y CSV, añadir los códigos a un preventivo anterior y rechazo de códigos repetidos, plantillas ALFA y HALCÓN, migración de datos 3 sin tocar lo existente) y el escenario de navegador 7 (plantillas SAMUR-PC, Nuevo aviso por carpetas → 1.2, buscar «atropello», nuevo aviso con una unidad por código, formulario completo con el selector, cronología de todas las unidades, añadir los códigos a un preventivo anterior y finalizar). La prueba encontró que, al tocar un resultado del buscador, el aviso de cambio del propio buscador repintaba la lista y el toque se perdía: corregido.
+
+Pruebas nuevas de la evolución anterior: `central_cuentas` (13), `central_config` (4), `actualizaciones` (7), `instalador_windows` (4), `archivos_protegidos` (2), `recursos_plantillas` (7), `cartografia` (4), `migraciones_versiones` (8), los escenarios de navegador 2 (parte central), 4, 5 y 6, y la prueba en vivo `tests/checks/central_en_vivo.py` (10).
 
 ## 3. Escenarios de aceptación (apartado de validación del pliego)
 
@@ -97,7 +100,7 @@ Ver `docs/IMPLEMENTATION_STATUS.md` §5. Los más relevantes: el mapa tapaba las
 
 **Limitación detectada en vivo, sin corregir:** tras instalar una versión nueva del servidor, el panel muestra el resultado de la última consulta hecha por la versión anterior (aquí, el error 404 que mostraba la 1.2.0) hasta la siguiente consulta automática (cada 6 h) o hasta pulsar «Comprobar versiones publicadas». No afecta al funcionamiento; queda propuesta para la próxima versión (consultar al arrancar una versión nueva).
 
-## 7. Capturas (`docs/evidencias/1.2.0/` y `docs/evidencias/1.2.1/`)
+## 7. Capturas (`docs/evidencias/1.2.0/`, `1.2.1/` y `1.3.0/`)
 
 En el entorno de pruebas no hay acceso a los servidores de mapas: las teselas se sustituyen por una cuadrícula gris; la geometría, las coordenadas y la interacción son las reales.
 
@@ -114,6 +117,12 @@ En el entorno de pruebas no hay acceso a los servidores de mapas: las teselas se
 | `tablet-03-conflicto.png` | Conflicto detectado y pendiente de resolver |
 | `1.2.1/vivo-01-activado.png` | En vivo: espacio de pruebas activado en el servidor real (banda roja CLAUDE_TEST) |
 | `1.2.1/vivo-02-actualizaciones.png` | En vivo: Sistema → Actualizaciones con el servidor real 1.2.1 y «Aún no hay versiones publicadas» |
+| `1.3.0/01-plantillas-samur.png` | Añadir unidad: las 16 unidades plantilla de SAMUR-PC |
+| `1.3.0/02-carpetas.png` | Nuevo aviso: carpetas de códigos de incidente |
+| `1.3.0/03-codigos.png` | Carpeta «1. Accidente de Tráfico» con sus códigos (1.6.1 debajo de 1.6) |
+| `1.3.0/04-aviso-creado.png` | Aviso creado con el código 1.2 y abierto para asignar unidades |
+| `1.3.0/05-cronologia-todas.png` | Cronología de todas las unidades a la vez |
+| `1.3.0/06-finalizado.png` | Preventivo finalizado desde «Finalizar preventivo e informes» |
 
 Las capturas de la 1.0.3 están en `docs/evidencias/1.0.3/`.
 

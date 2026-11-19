@@ -48,7 +48,7 @@ const VIEWS = {
   mapa: { t: 'Mapa real', ic: 'mapa', scope: 'p', r: ops.renderMap, parent: 'mas' },
   ajustes: { t: 'Configuración del preventivo', ic: 'ajustes', scope: 'p', r: admin.renderPrevConfig, parent: 'mas' },
   sync: { t: 'Sincronización', ic: 'sync', scope: 'p', r: admin.renderSync, parent: 'mas' },
-  cierre: { t: 'Cierre e informes', ic: 'archivo', scope: 'p', r: admin.renderClose, parent: 'mas' },
+  cierre: { t: 'Finalizar preventivo e informes', ic: 'archivo', scope: 'p', r: admin.renderClose, parent: 'mas' },
 };
 const NAV_P = ['panel', 'unidades', 'avisos', 'plano', 'mas'];
 const NAV_G = ['inicio', 'plantillas', 'config', 'sistema'];
