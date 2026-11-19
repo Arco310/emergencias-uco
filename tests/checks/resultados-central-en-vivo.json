@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-19 11:44:39",
- "app": "https://arco310.github.io/emergencias-uco/?entorno=pruebas",
+ "fecha": "2026-11-19 11:51:20",
+ "app": "https://desktop-g5s6ch9.tailb6d0d2.ts.net/?entorno=pruebas",
  "resultados": [
   {
    "comprobacion": "Servidor real: versión y estado",
    "resultado": "CORRECTA",
-   "detalle": "servidor 1.2.1 con lanzador, esquema 2, versión mínima de la app 1.1.0, códigos protegidos legibles; sin espacio de pruebas previo"
+   "detalle": "servidor 1.3.0 con lanzador, esquema 2, versión mínima de la app 1.1.0, códigos protegidos legibles; sin espacio de pruebas previo"
   },
   {
    "comprobacion": "CLAUDE_TEST: activación del espacio de pruebas",
@@ -40,7 +40,7 @@
   {
    "comprobacion": "CLAUDE_TEST: panel Sistema → Actualizaciones",
    "resultado": "CORRECTA",
-   "detalle": "panel con el servidor real (1.2.1, despliegue activo), los 2 dispositivos con su nombre en la 1.3.0 y la consulta a GitHub sin error (aún no hay versiones publicadas)"
+   "detalle": "panel con el servidor real (1.3.0, despliegue activo), los 2 dispositivos con su nombre en la 1.3.0 y la consulta a GitHub sin error (aún no hay versiones publicadas)"
   },
   {
    "comprobacion": "CLAUDE_TEST: sin errores de JavaScript",

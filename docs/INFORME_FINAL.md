@@ -55,14 +55,13 @@ Solo **Leaflet 1.9.4** (licencia BSD-2, ~40 KB, incluido en el paquete, sin CDN)
 
 ## 6. Pruebas realizadas y resultados
 
-103/103 (unidad, servidor, integración, instalador) y 78/78 de navegador (móvil, tablet, Chrome para Android, servidor central, recursos, cartografía, actualizaciones, códigos de incidente). En vivo contra el servidor real, con la app 1.3.0 desde GitHub Pages (y antes con la 1.2.1), en su entorno de pruebas aislado: 10/10 (activación, alta de usuario, dispositivo nuevo con usuario y contraseña, preventivo que aparece solo, avisos simultáneos, desconexión y reconexión, panel de actualizaciones y consulta a GitHub real; el espacio de pruebas se borra al terminar). Tabla de los 25 escenarios en `docs/TESTING_REPORT.md` §3.
+103/103 (unidad, servidor, integración, instalador) y 78/78 de navegador (móvil, tablet, Chrome para Android, servidor central, recursos, cartografía, actualizaciones, códigos de incidente). En vivo contra el servidor real en la 1.3.0 (y antes con la app 1.3.0 desde GitHub Pages y con la 1.2.1), en su entorno de pruebas aislado: 10/10 (activación, alta de usuario, dispositivo nuevo con usuario y contraseña, preventivo que aparece solo, avisos simultáneos, desconexión y reconexión, panel de actualizaciones y consulta a GitHub real; el espacio de pruebas se borra al terminar). Tabla de los 25 escenarios en `docs/TESTING_REPORT.md` §3.
 
 ## 7. Problemas detectados y pendientes
 
 Corregidos (detalle en `IMPLEMENTATION_STATUS.md` §5): pérdida de plantillas durante la sincronización central; el mapa tapaba las hojas; los repintados borraban lo escrito; la prueba de versiones del servidor heredaba el entorno; faltaba la copia de datos en el actualizador; versión mostrada tras revertir; capturas antiguas borradas del repositorio (restauradas en `docs/evidencias/1.0.3/`). En el PC real (1.2.1): códigos del servidor ilegibles por los permisos que aplicaba el instalador (reparado y corregido), el servidor se detenía al no poder leerlos, «sin versiones publicadas» como error, dispositivos sin nombre en el panel.
 
 Pendientes:
-- **Servidor en la 1.2.1**: el paquete 1.3.0 está copiado en el PC servidor, pero la pantalla del PC está bloqueada y no se ha podido ejecutar el instalador. La app 1.3.0 funciona con él (prueba en vivo 10/10).
 - Versión sin publicar en GitHub Releases: esta sesión no puede crear versiones (403 de la plataforma). Hasta entonces no se ha probado la descarga desde GitHub real.
 - Tras actualizar el servidor, el panel muestra la última consulta de la versión anterior hasta la siguiente (cada 6 h) o hasta pulsar «Comprobar versiones publicadas» (propuesta para la próxima versión).
 - Sin pruebas con clave real de Google ni en un Android físico.
@@ -70,7 +69,7 @@ Pendientes:
 
 ## 8. Despliegue del servidor central (una sola vez) — hecho
 
-**Instalado el 18/11/2026 a las 17:52: servidor 1.2.1 con el lanzador.** Para pasar a la 1.3.0 basta con repetir el instalador (el paquete ya está en Descargas → servidor-uco-windows). Comprobado en https://desktop-g5s6ch9.tailb6d0d2.ts.net/api/v1/version: 1.2.1, lanzador activo, despliegue activo y `archivos: ok` (el servidor lee sus códigos protegidos).
+**Instalado el 18/11/2026 a las 17:52 (1.2.1, con el lanzador) y actualizado el 19/11/2026 a las 11:49 a la 1.3.0.** Comprobado en https://desktop-g5s6ch9.tailb6d0d2.ts.net/api/v1/version: 1.3.0, lanzador activo, despliegue activo y `archivos: ok` (el servidor lee sus códigos protegidos).
 
 Procedimiento (por si hubiera que repetirlo; no borra datos):
 1. En el PC servidor: **Descargas → servidor-uco-windows → doble clic en `instalar-servidor.bat`** y aceptar el aviso de Windows.
@@ -115,7 +114,7 @@ Alta y clave de recuperación, permisos del dispositivo, preventivos independien
 | 7. Sincronización | Superada: dos dispositivos, avisos simultáneos sin duplicados, conflictos, caída del servidor; también en vivo con el servidor real |
 | 8. Sin conexión | Superada: modo avión, trabajo local y reconexión sin pérdidas; también en vivo |
 | 9. Actualización | Superada con servidor y API de versiones locales; en vivo, el servidor real consulta GitHub sin error. Descarga desde GitHub real pendiente de publicar la versión |
-| 10. Servidor central | En servicio con la 1.2.1 y el lanzador (instalada el 18/11 a las 17:52); lee sus códigos protegidos. Espacio central real activado por el usuario. Paquete 1.3.0 copiado, pendiente de instalar |
+| 10. Servidor central | En servicio con la 1.3.0 y el lanzador (actualizado el 19/11 a las 11:49); lee sus códigos protegidos. Espacio central real activado por el usuario |
 | 11. Perfil CLAUDE_TEST | Usado contra el servidor real en su entorno de pruebas aislado: 10/10; el espacio de pruebas se borra al terminar |
-| 12. No verificado | Descarga e instalación desde GitHub Releases real, Google Maps con clave, Android físico; servidor con la 1.3.0 |
-| 13. Intervención humana | Desbloquear el PC servidor y aceptar el aviso de Windows para instalar la 1.3.0; lanzar «Publicar versión» en GitHub; (opcional) clave de Google |
+| 12. No verificado | Descarga e instalación desde GitHub Releases real, Google Maps con clave, Android físico |
+| 13. Intervención humana | Lanzar «Publicar versión» en GitHub (para las actualizaciones automáticas del servidor); (opcional) clave de Google |
