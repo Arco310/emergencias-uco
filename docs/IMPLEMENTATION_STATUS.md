@@ -63,7 +63,8 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | Confirmar que se mantiene el acceso por Internet (Tailscale Funnel) | **Resuelto**: se mantiene (18/11) |
 | **Publicar la versión 1.2.1 en GitHub Releases** | Esta sesión no tiene permiso para crear versiones en GitHub (respuesta 403 de la plataforma). Se lanza desde GitHub → Actions → «Publicar versión» → Run workflow → `1.2.1`. La aplicación 1.2.1 ya está publicada en GitHub Pages. |
 | Instalar el servidor con el lanzador en el PC servidor (una sola vez) | **Resuelto** (18/11 17:52): 1.2.1 instalada con el instalador; el aviso de permisos de Windows (UAC) se aprobó en el PC. Las siguientes versiones se instalan desde la app. |
-| Activar el espacio central real (una vez, con el código de administración) | Lo hace el usuario: exige elegir su propia contraseña de administrador; las pruebas usan solo el espacio CLAUDE_TEST |
+| Activar el espacio central real (una vez, con el código de administración) | **Resuelto**: activado por el usuario (comprobado el 19/11 en `/api/v1/central`). |
+| **Instalar la 1.3.0 en el PC servidor** | El paquete está copiado en Descargas → servidor-uco-windows; falta ejecutar `instalar-servidor.bat` y aprobar el aviso de Windows. El 19/11 la pantalla del PC estaba bloqueada y no se pudo hacer a distancia. La app 1.3.0 (GitHub Pages) funciona con el servidor 1.2.1. |
 
 ## 5. Errores detectados y corregidos (esta evolución)
 

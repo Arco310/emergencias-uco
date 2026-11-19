@@ -30,7 +30,7 @@ Ejecución: `npm test` (unidad, servidor, integración, instalador), `python3 te
 | — 7. Códigos de incidente, unidades SAMUR-PC, cronología conjunta y finalizar (1.3.0) | 9 | 9 |
 | En vivo con el servidor real, entorno CLAUDE_TEST (§4) | 10 | **10** |
 
-Ejecución final: 19/11/2026, con el código de la 1.3.0: `npm test` 103/103 y navegador 78/78 (terminada a las 03:53). En vivo (con la 1.2.1 en el servidor): 10/10 el 18/11 a las 18:00 y 21:55.
+Ejecución final: 19/11/2026, con el código de la 1.3.0: `npm test` 103/103 y navegador 78/78 (terminada a las 03:53). En vivo: 10/10 con la app 1.3.0 desde GitHub Pages contra el servidor real 1.2.1 (19/11, 11:44); antes, 10/10 con la 1.2.1 (18/11, 18:00 y 21:55).
 
 Pruebas nuevas de la 1.3.0: `incidentes_samur` (6: catálogo de 123 códigos en 11 grupos, carpetas y orden, aviso con código en estadísticas y CSV, añadir los códigos a un preventivo anterior y rechazo de códigos repetidos, plantillas ALFA y HALCÓN, migración de datos 3 sin tocar lo existente) y el escenario de navegador 7 (plantillas SAMUR-PC, Nuevo aviso por carpetas → 1.2, buscar «atropello», nuevo aviso con una unidad por código, formulario completo con el selector, cronología de todas las unidades, añadir los códigos a un preventivo anterior y finalizar). La prueba encontró que, al tocar un resultado del buscador, el aviso de cambio del propio buscador repintaba la lista y el toque se perdía: corregido.
 
@@ -69,6 +69,8 @@ Pruebas nuevas de la evolución anterior: `central_cuentas` (13), `central_confi
 ## 4. Prueba en vivo con el servidor real (perfil CLAUDE_TEST)
 
 18/11/2026 a las 18:00, con la 1.2.1 instalada en el PC servidor, y repetida a las 21:55 tras 4 horas en servicio. Tablet y móvil emulados entran por Internet en `https://desktop-g5s6ch9.tailb6d0d2.ts.net/?entorno=pruebas`. Resultado: **10/10** las dos veces.
+
+**Con la 1.3.0 (19/11/2026, 11:44):** la aplicación nueva desde el enlace principal (`https://arco310.github.io/emergencias-uco/?entorno=pruebas`) contra el servidor real, que sigue en la 1.2.1: **10/10** (`UCO_SERVIDOR_VERSION=1.2.1 python3 tests/checks/central_en_vivo.py https://arco310.github.io/emergencias-uco/`). Comprueba también que la app servida desde GitHub Pages trabaja con el servidor central por Internet.
 
 | Comprobación | Resultado |
 |---|---|
@@ -126,7 +128,14 @@ En el entorno de pruebas no hay acceso a los servidores de mapas: las teselas se
 
 Las capturas de la 1.0.3 están en `docs/evidencias/1.0.3/`.
 
-## 8. Publicación y despliegue de la 1.2.1
+## 8. Publicación y despliegue
+
+**1.3.0 (19/11/2026)**
+- **Aplicación 1.3.0 en GitHub Pages** (compilación `7e3db4563007`), comprobado en `version.json`. Es el enlace principal: los dispositivos se actualizan solos al abrirla.
+- **Servidor: sigue en la 1.2.1.** El paquete 1.3.0 está copiado en el PC servidor (Descargas → servidor-uco-windows), pero el PC tiene la pantalla bloqueada y desde aquí no se puede ejecutar el instalador ni aprobar el aviso de Windows. Las novedades de la 1.3.0 no necesitan cambios en el servidor (los datos viajan cifrados y el servidor no los interpreta): la app 1.3.0 funciona con el servidor 1.2.1 (prueba en vivo 10/10). Hasta instalarlo, quien abra la app desde la dirección del servidor sigue con la 1.2.1.
+- El espacio central real está activado (lo ha activado el usuario).
+
+**1.2.1 (18/11/2026)**
 
 - **Aplicación 1.2.1 en GitHub Pages y en el servidor** (compilación `e8469f3a85a8`): comprobado que ambos sirven el mismo `version.json`.
 - **Servidor 1.2.1 instalado en el PC servidor** el 18/11 a las 17:52 con el instalador (aviso de permisos de Windows aprobado en el PC). `/api/v1/version`: 1.2.1, lanzador activo, despliegue activo, `archivos: ok`.

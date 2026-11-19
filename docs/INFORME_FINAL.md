@@ -1,6 +1,6 @@
-# Informe final — Evolución integral del Gestor de Emergencias UCO (1.0.3 → 1.2.1)
+# Informe final — Evolución integral del Gestor de Emergencias UCO (1.0.3 → 1.3.0)
 
-Fecha: 18/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas en `docs/TESTING_REPORT.md`.
+Fecha: 19/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas en `docs/TESTING_REPORT.md`.
 
 ## 1. Resumen de las modificaciones
 
@@ -11,7 +11,8 @@ Fecha: 18/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas 
 | 3. Cartografía | Plano georreferenciado real (OpenStreetMap por defecto, Google Maps Platform con clave); buscador; encuadre de la zona; biblioteca con Bernabéu, Metropolitano y Sol más los planos guardados. |
 | 4. Plano de coordinación | Arrastrar unidades (también desde «pendientes de asignación»), doble clic o pulsación larga para cambiar la clave, avisos en un punto o en una zona dibujada; todo sincronizado y en la bitácora. |
 | 5. Actualizaciones | App: se actualiza sola con verificación de integridad, sin interrumpir a quien trabaja, con recuperación si una versión no arranca y migración de datos con copia previa. Servidor: actualizador desde GitHub con verificación, prueba con copia de datos, ventana segura, periodo de prueba y vuelta atrás automática; panel Sistema → Actualizaciones. |
-| 6. Validación | Los 25 escenarios de aceptación con pruebas automáticas: 97/97 pruebas de código y 69/69 de navegador; prueba en vivo con el servidor real (entorno CLAUDE_TEST): 10/10. |
+| 6. Validación | Los 25 escenarios de aceptación con pruebas automáticas: 103/103 pruebas de código y 78/78 de navegador; prueba en vivo con el servidor real (entorno CLAUDE_TEST): 10/10. |
+| 1.3.0 | Avisos por código de incidente (SAMUR-PC, 11 carpetas, 123 códigos: carpeta → código → aviso creado), 16 tipos de unidad y unidades plantilla de SAMUR-PC, cronología de todas las unidades a la vez y «Finalizar preventivo». |
 | 1.2.1 | Correcciones halladas al instalar en el PC real: permisos de los códigos del servidor, el servidor ya no se detiene si no puede leerlos, «sin versiones publicadas» no es un error, nombres de los dispositivos en el panel. |
 
 ## 2. Archivos creados y modificados
@@ -44,7 +45,7 @@ El servidor nunca puede leer los datos (cifrado de extremo a extremo). Las regla
 | Configuración | Dónde | Estado |
 |---|---|---|
 | Servidor central | `src/config/servidor.js` (`https://desktop-g5s6ch9.tailb6d0d2.ts.net`) | Hecha |
-| Activar el espacio central real | Primer dispositivo, con el código de `MOSTRAR-CODIGO-ADMIN.bat` y una contraseña propia | La hace el usuario |
+| Activar el espacio central real | Primer dispositivo, con el código de `MOSTRAR-CODIGO-ADMIN.bat` y una contraseña propia | Hecha por el usuario (comprobado el 19/11) |
 | Clave de Google Maps Platform (opcional) | Configuración general → Cartografía (restringirla por dominio en Google Cloud; Map Tiles API y Places API (New)) | Sin clave: OpenStreetMap |
 | Permiso «Gestionar las actualizaciones» | Roles (el administrador lo tiene) | Hecha |
 
@@ -54,21 +55,22 @@ Solo **Leaflet 1.9.4** (licencia BSD-2, ~40 KB, incluido en el paquete, sin CDN)
 
 ## 6. Pruebas realizadas y resultados
 
-97/97 (unidad, servidor, integración, instalador) y 69/69 de navegador (móvil, tablet, Chrome para Android, servidor central, recursos, cartografía, actualizaciones). En vivo contra el servidor real 1.2.1, en su entorno de pruebas aislado: 10/10 (activación, alta de usuario, dispositivo nuevo con usuario y contraseña, preventivo que aparece solo, avisos simultáneos, desconexión y reconexión, panel de actualizaciones y consulta a GitHub real; el espacio de pruebas se borra al terminar). Tabla de los 25 escenarios en `docs/TESTING_REPORT.md` §3.
+103/103 (unidad, servidor, integración, instalador) y 78/78 de navegador (móvil, tablet, Chrome para Android, servidor central, recursos, cartografía, actualizaciones, códigos de incidente). En vivo contra el servidor real, con la app 1.3.0 desde GitHub Pages (y antes con la 1.2.1), en su entorno de pruebas aislado: 10/10 (activación, alta de usuario, dispositivo nuevo con usuario y contraseña, preventivo que aparece solo, avisos simultáneos, desconexión y reconexión, panel de actualizaciones y consulta a GitHub real; el espacio de pruebas se borra al terminar). Tabla de los 25 escenarios en `docs/TESTING_REPORT.md` §3.
 
 ## 7. Problemas detectados y pendientes
 
 Corregidos (detalle en `IMPLEMENTATION_STATUS.md` §5): pérdida de plantillas durante la sincronización central; el mapa tapaba las hojas; los repintados borraban lo escrito; la prueba de versiones del servidor heredaba el entorno; faltaba la copia de datos en el actualizador; versión mostrada tras revertir; capturas antiguas borradas del repositorio (restauradas en `docs/evidencias/1.0.3/`). En el PC real (1.2.1): códigos del servidor ilegibles por los permisos que aplicaba el instalador (reparado y corregido), el servidor se detenía al no poder leerlos, «sin versiones publicadas» como error, dispositivos sin nombre en el panel.
 
 Pendientes:
-- Versión 1.2.1 sin publicar en GitHub Releases: esta sesión no puede crear versiones (403 de la plataforma). Hasta entonces no se ha probado la descarga desde GitHub real.
+- **Servidor en la 1.2.1**: el paquete 1.3.0 está copiado en el PC servidor, pero la pantalla del PC está bloqueada y no se ha podido ejecutar el instalador. La app 1.3.0 funciona con él (prueba en vivo 10/10).
+- Versión sin publicar en GitHub Releases: esta sesión no puede crear versiones (403 de la plataforma). Hasta entonces no se ha probado la descarga desde GitHub real.
 - Tras actualizar el servidor, el panel muestra la última consulta de la versión anterior hasta la siguiente (cada 6 h) o hasta pulsar «Comprobar versiones publicadas» (propuesta para la próxima versión).
 - Sin pruebas con clave real de Google ni en un Android físico.
 - Decisión pendiente: validación en el servidor de operaciones cifradas (`IMPLEMENTATION_STATUS.md` §6).
 
 ## 8. Despliegue del servidor central (una sola vez) — hecho
 
-**Instalado el 18/11/2026 a las 17:52: servidor 1.2.1 con el lanzador.** Comprobado en https://desktop-g5s6ch9.tailb6d0d2.ts.net/api/v1/version: 1.2.1, lanzador activo, despliegue activo y `archivos: ok` (el servidor lee sus códigos protegidos).
+**Instalado el 18/11/2026 a las 17:52: servidor 1.2.1 con el lanzador.** Para pasar a la 1.3.0 basta con repetir el instalador (el paquete ya está en Descargas → servidor-uco-windows). Comprobado en https://desktop-g5s6ch9.tailb6d0d2.ts.net/api/v1/version: 1.2.1, lanzador activo, despliegue activo y `archivos: ok` (el servidor lee sus códigos protegidos).
 
 Procedimiento (por si hubiera que repetirlo; no borra datos):
 1. En el PC servidor: **Descargas → servidor-uco-windows → doble clic en `instalar-servidor.bat`** y aceptar el aviso de Windows.
@@ -106,14 +108,14 @@ Alta y clave de recuperación, permisos del dispositivo, preventivos independien
 
 | Punto | Resultado |
 |---|---|
-| 1–2. Funcionalidades probadas y pruebas | Las de los puntos 6 y 12: 97 + 69 pruebas automáticas y 10 comprobaciones en vivo ejecutadas |
+| 1–2. Funcionalidades probadas y pruebas | Las de los puntos 6 y 12: 103 + 78 pruebas automáticas y 10 comprobaciones en vivo ejecutadas |
 | 3–4. Errores encontrados y corregidos | Punto 7: todos corregidos; los de código quedan cubiertos por las pruebas |
 | 5. Errores pendientes | Ninguno conocido en el código; pendientes de entorno en el punto 7 |
-| 6. Capturas | `docs/evidencias/1.2.0/` (teselas sustituidas por cuadrícula en el entorno de pruebas) y `docs/evidencias/1.2.1/` (en vivo) |
+| 6. Capturas | `docs/evidencias/1.2.0/` (teselas sustituidas por cuadrícula en el entorno de pruebas) `docs/evidencias/1.2.1/` (en vivo) y `docs/evidencias/1.3.0/` (códigos de incidente) |
 | 7. Sincronización | Superada: dos dispositivos, avisos simultáneos sin duplicados, conflictos, caída del servidor; también en vivo con el servidor real |
 | 8. Sin conexión | Superada: modo avión, trabajo local y reconexión sin pérdidas; también en vivo |
 | 9. Actualización | Superada con servidor y API de versiones locales; en vivo, el servidor real consulta GitHub sin error. Descarga desde GitHub real pendiente de publicar la versión |
-| 10. Servidor central | En servicio con la 1.2.1 y el lanzador (instalada el 18/11 a las 17:52); lee sus códigos protegidos |
+| 10. Servidor central | En servicio con la 1.2.1 y el lanzador (instalada el 18/11 a las 17:52); lee sus códigos protegidos. Espacio central real activado por el usuario. Paquete 1.3.0 copiado, pendiente de instalar |
 | 11. Perfil CLAUDE_TEST | Usado contra el servidor real en su entorno de pruebas aislado: 10/10; el espacio de pruebas se borra al terminar |
-| 12. No verificado | Descarga e instalación desde GitHub Releases real, Google Maps con clave, Android físico, espacio central real |
-| 13. Intervención humana | Lanzar «Publicar versión» (`1.2.1`) en GitHub; activar el espacio central real; (opcional) clave de Google |
+| 12. No verificado | Descarga e instalación desde GitHub Releases real, Google Maps con clave, Android físico; servidor con la 1.3.0 |
+| 13. Intervención humana | Desbloquear el PC servidor y aceptar el aviso de Windows para instalar la 1.3.0; lanzar «Publicar versión» en GitHub; (opcional) clave de Google |

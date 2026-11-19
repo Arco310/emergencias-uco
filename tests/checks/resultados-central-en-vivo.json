@@ -1,6 +1,6 @@
 {
- "fecha": "2026-11-18 21:55:05",
- "app": "https://desktop-g5s6ch9.tailb6d0d2.ts.net/?entorno=pruebas",
+ "fecha": "2026-11-19 11:44:39",
+ "app": "https://arco310.github.io/emergencias-uco/?entorno=pruebas",
  "resultados": [
   {
    "comprobacion": "Servidor real: versión y estado",
@@ -40,7 +40,7 @@
   {
    "comprobacion": "CLAUDE_TEST: panel Sistema → Actualizaciones",
    "resultado": "CORRECTA",
-   "detalle": "panel con el servidor real (1.2.1, despliegue activo), los 2 dispositivos con su nombre en la 1.2.1 y la consulta a GitHub sin error (aún no hay versiones publicadas)"
+   "detalle": "panel con el servidor real (1.2.1, despliegue activo), los 2 dispositivos con su nombre en la 1.3.0 y la consulta a GitHub sin error (aún no hay versiones publicadas)"
   },
   {
    "comprobacion": "CLAUDE_TEST: sin errores de JavaScript",

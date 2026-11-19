@@ -12,12 +12,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'e2e'))
 RAIZ = os.path.join(os.path.dirname(__file__), '..', '..')
 def _version(ruta, patron): return re.search(patron, open(os.path.join(RAIZ, ruta), encoding='utf-8').read()).group(1)
 VERSION = _version('server/server.mjs', r"const VERSION = '([^']+)'")
+# Si el servidor aún no tiene la versión del repositorio (p. ej. la app nueva desde GitHub Pages contra el servidor
+# anterior), se indica la versión que debe tener: UCO_SERVIDOR_VERSION=1.2.1
+VERSION = os.environ.get('UCO_SERVIDOR_VERSION') or VERSION
 APP_VERSION = _version('src/core/defaults.js', r"export const APP_VERSION = '([^']+)'")
 import run_e2e as E
 from playwright.sync_api import sync_playwright
 
 APP = (sys.argv[1] if len(sys.argv) > 1 else 'https://desktop-g5s6ch9.tailb6d0d2.ts.net/').rstrip('/') + '/'
 BASE = APP + '?entorno=pruebas'
+# El servidor central real (la app, venga de donde venga, lo trae preconfigurado)
+SERVIDOR = 'https://desktop-g5s6ch9.tailb6d0d2.ts.net'
 # Credenciales de pruebas fuera del repositorio (nunca se suben)
 CRED = next(f for f in [os.environ.get('UCO_CLAUDE_TEST', ''), os.path.expanduser('~/.uco-claude-test/credenciales.json'), '/home/claude/.uco-claude-test/credenciales.json'] if f and os.path.exists(f))
 CODIGO = json.load(open(CRED))['codigoPruebas']
@@ -45,7 +50,7 @@ def esperar(fn, seg=45):
     return v
 
 def api(metodo, ruta, body=None):
-    req = urllib.request.Request(APP.rstrip('/') + '/api/v1' + ruta, method=metodo, data=json.dumps(body).encode() if body is not None else None, headers={'Content-Type': 'application/json'})
+    req = urllib.request.Request(SERVIDOR + '/api/v1' + ruta, method=metodo, data=json.dumps(body).encode() if body is not None else None, headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=30) as r: return json.loads(r.read() or b'null')
 
 def main():
