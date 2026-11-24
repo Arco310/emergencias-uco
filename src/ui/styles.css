@@ -369,3 +369,15 @@ dl.kv dd .chip{white-space:normal}
 .opt{border:1px solid var(--line,#ddd);border-radius:var(--r-s);padding:.6rem .7rem;margin:.5rem 0}.opt label{display:block;font-weight:600;margin-bottom:.3rem}.opt select{min-height:44px;flex:1 1 12rem}
 .opt .btn{min-height:44px}
 details.retirados{margin-top:1rem}details.retirados summary{cursor:pointer;padding:.5rem 0;color:var(--muted);min-height:44px;display:flex;align-items:center}
+/* 1.4.0 · selector del tipo de mapa */
+.vista-btn{min-height:44px}
+.vistas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+.vista{display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;text-align:left;padding:.5rem;border:2px solid var(--line);border-radius:var(--r-s);background:var(--card);color:var(--ink);min-height:44px;cursor:pointer}
+.vista.on{border-color:var(--acc,#C62828);box-shadow:0 0 0 2px var(--acc-soft,#FDECEA)}
+.vista small{font-size:.78rem;line-height:1.2}
+.vista-img{display:block;width:100%;height:64px;border-radius:6px;margin-bottom:.25rem;border:1px solid var(--line)}
+.v-estandar{background:linear-gradient(90deg,transparent 46%,#fff 46%,#fff 54%,transparent 54%),linear-gradient(0deg,transparent 40%,#FFE08A 40%,#FFE08A 48%,transparent 48%),#EAE6DF}
+.v-satelite{background:radial-gradient(circle at 30% 40%,#5B6B3A 0 18%,transparent 19%),radial-gradient(circle at 70% 65%,#7A6A55 0 22%,transparent 23%),linear-gradient(135deg,#3E4F2E,#6B6552)}
+.v-hibrido{background:linear-gradient(90deg,transparent 46%,rgba(255,255,255,.85) 46%,rgba(255,255,255,.85) 52%,transparent 52%),linear-gradient(0deg,transparent 40%,rgba(255,224,138,.9) 40%,rgba(255,224,138,.9) 46%,transparent 46%),linear-gradient(135deg,#3E4F2E,#6B6552)}
+.v-relieve{background:repeating-radial-gradient(circle at 60% 55%,#F3EEDC 0 7px,#C9A36B 7px 8px),#F3EEDC}
+@media (max-width:360px){.vistas{grid-template-columns:1fr}}

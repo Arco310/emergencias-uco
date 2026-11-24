@@ -4,9 +4,10 @@
 import * as L from 'leaflet';
 import { G } from './state.js';
 import { nominatimUrl, round6 } from '../core/geo.js';
+import { capasVista, sesionGoogleVista, maxZoomEn, VISTA_DEFECTO } from '../core/mapas.js';
 
 export { L };
-const ATRIB_OSM = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a>';
+const PREFIJO = '<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>';
 
 export function claveGoogle() { const c = G.core && G.core.cfg && G.core.cfg.cartografia; return (c && c.googleKey) || ''; }
 /** Proveedor activo: Google Maps si hay clave configurada; si no, OpenStreetMap */
@@ -19,50 +20,62 @@ export const deLatLngBounds = lb => ({ n: round6(lb.getNorth()), s: round6(lb.ge
 /** Crea un mapa Leaflet en un elemento. El doble clic se reserva para acciones propias (no hace zoom) */
 export function crearMapa(el, { bounds, centro, zoom, minZoom, maxZoom = 21, maxBounds } = {}) {
   const map = L.map(el, { zoomControl: true, doubleClickZoom: false, minZoom, maxZoom, zoomSnap: 0.25, wheelPxPerZoomLevel: 90, tapHold: true, maxBounds, maxBoundsViscosity: maxBounds ? 0.8 : 0 });
-  map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+  map.attributionControl.setPrefix(PREFIJO);
   if (bounds) map.fitBounds(aLatLngBounds(bounds), { animate: false });
   else map.setView([centro ? centro.lat : 40.4168, centro ? centro.lon : -3.7038], zoom || 15, { animate: false });
   return map;
 }
 
-// ---- Google Maps Platform: Map Tiles API (sesión de teselas) ----
-let sesionG = null;
-async function sesionGoogle(key) {
-  if (sesionG && sesionG.key === key && sesionG.exp > Date.now() + 3600e3) return sesionG;
-  const r = await fetch('https://tile.googleapis.com/v1/createSession?key=' + encodeURIComponent(key), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mapType: 'roadmap', language: 'es-ES', region: 'ES' }) });
+// ---- Google Maps Platform: Map Tiles API (sesión de teselas, una por tipo de mapa) ----
+const sesionesG = new Map();
+async function sesionGoogle(key, vista = 'estandar') {
+  const k = key + '|' + vista; const c = sesionesG.get(k);
+  if (c && c.exp > Date.now() + 3600e3) return c;
+  const r = await fetch('https://tile.googleapis.com/v1/createSession?key=' + encodeURIComponent(key), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sesionGoogleVista(vista), language: 'es-ES', region: 'ES' }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.session) throw new Error((j.error && j.error.message) || 'Google Maps no está disponible');
-  sesionG = { key, session: j.session, exp: Number(j.expiry) * 1000 || Date.now() + 86400e3 };
-  return sesionG;
+  const s = { key, session: j.session, exp: Number(j.expiry) * 1000 || Date.now() + 86400e3 };
+  sesionesG.set(k, s); return s;
 }
-/** Atribución obligatoria de Google: logotipo y derechos de los datos de la zona visible */
-function atribucionGoogle(map, s) {
-  let t = null;
+/** Atribución obligatoria de Google (logotipo y derechos de la zona visible) y zoom máximo con imagen
+ *  en la zona (maxZoomRects), para no pedir teselas que no existen. Devuelve cómo desactivarla. */
+function atribucionGoogle(map, s, capa) {
+  let t = null; let activa = true;
   const upd = async () => {
     const b = map.getBounds(); const z = Math.round(map.getZoom());
     try {
       const r = await fetch(`https://tile.googleapis.com/tile/v1/viewport?session=${s.session}&key=${encodeURIComponent(s.key)}&zoom=${z}&north=${b.getNorth()}&south=${b.getSouth()}&east=${b.getEast()}&west=${b.getWest()}`);
-      const j = await r.json();
+      const j = await r.json(); if (!activa) return;
       map.attributionControl.setPrefix('<b class="glogo">Google</b> ' + (j.copyright ? String(j.copyright).replace(/[<>&]/g, '') : ''));
+      const c = map.getCenter(); const mz = maxZoomEn(j.maxZoomRects, c.lat, c.lng);
+      if (mz && mz !== capa.options.maxNativeZoom) { capa.options.maxNativeZoom = mz; capa.redraw(); }
     } catch { /* sin conexión: se mantiene la última */ }
   };
-  map.on('moveend', () => { clearTimeout(t); t = setTimeout(upd, 400); }); upd();
+  const fn = () => { clearTimeout(t); t = setTimeout(upd, 400); };
+  map.on('moveend', fn); upd();
+  return () => { activa = false; clearTimeout(t); map.off('moveend', fn); map.attributionControl.setPrefix(PREFIJO); };
 }
-
-/** Capa base de teselas del proveedor activo. Si Google falla, se usa OpenStreetMap */
-export async function capaBase(map, { maxNativeZoom } = {}) {
+/** Capas de teselas (sin Google) de una vista: OpenStreetMap o Instituto Geográfico Nacional.
+ *  crossOrigin: el service worker puede leer la fecha de cada tesela y guardarla para usarla sin conexión. */
+function capasTeselas(vista, maxNativeZoom) {
+  return capasVista('osm', vista).map(c => L.tileLayer(c.url, { maxZoom: 21, maxNativeZoom: Math.min(c.maxNativeZoom, maxNativeZoom || c.maxNativeZoom), attribution: c.atribucion, crossOrigin: true }));
+}
+/** Capa base del proveedor activo en la vista indicada (estándar si no se indica). Si Google falla, se usan
+ *  OpenStreetMap o el IGN. Devuelve { capas, prov, vista, quitar() } para cambiar de vista sin rehacer el mapa. */
+export async function capaBase(map, { maxNativeZoom, vista = VISTA_DEFECTO } = {}) {
   if (proveedor() === 'google') {
     try {
-      const s = await sesionGoogle(claveGoogle());
+      const s = await sesionGoogle(claveGoogle(), vista);
       const capa = L.tileLayer('https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=' + s.session + '&key=' + encodeURIComponent(s.key), { maxZoom: 21, maxNativeZoom: Math.min(22, maxNativeZoom || 22), attribution: '' });
-      capa.addTo(map); atribucionGoogle(map, s);
-      return { capa, prov: 'google' };
-    } catch (e) { console.warn('Google Maps no disponible; se usa OpenStreetMap', e); }
+      capa.addTo(map); capa.bringToBack();
+      const fin = atribucionGoogle(map, s, capa);
+      return { capas: [capa], prov: 'google', vista, quitar: () => { fin(); capa.remove(); } };
+    } catch (e) { console.warn('Google Maps no disponible; se usan OpenStreetMap o el IGN', e); }
   }
-  // crossOrigin: el service worker puede leer la fecha de cada tesela y guardarlas para usarlas sin conexión
-  const capa = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: Math.min(19, maxNativeZoom || 19), attribution: ATRIB_OSM, crossOrigin: true });
-  capa.addTo(map);
-  return { capa, prov: 'osm' };
+  const capas = capasTeselas(vista, maxNativeZoom);
+  for (const c of capas) c.addTo(map);
+  for (const c of [...capas].reverse()) c.bringToBack();
+  return { capas, prov: 'osm', vista, quitar: () => { for (const c of capas) c.remove(); } };
 }
 
 // ---- Búsqueda de lugares ----

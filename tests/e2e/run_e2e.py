@@ -1126,6 +1126,80 @@ def scenario_recursos_140(b):
     check('Sin errores de JavaScript (escenario 8)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
     A.ctx.close()
 
+# ---------------- Escenario 9 (1.4.0): tipo de mapa por preventivo ----------------
+def tesela_color(rgb, alpha=255):
+    from PIL import Image, ImageDraw
+    im = Image.new('RGBA', (256, 256), rgb + (alpha,)); d = ImageDraw.Draw(im); d.line([(0, 128), (255, 128)], fill=(255, 255, 255, 255), width=6)
+    b = io.BytesIO(); im.save(b, 'PNG'); return b.getvalue()
+def rutas_ign(ctx):
+    fecha = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
+    teselas = {'pnoa-ma': tesela_color((62, 96, 52)), 'ign-base': tesela_color((0, 0, 0), 0), 'mapa-raster': tesela_color((243, 232, 200))}
+    def servir(r):
+        svc = r.request.url.split('/wmts/')[1].split('?')[0]
+        r.fulfill(status=200, body=teselas.get(svc, teselas['mapa-raster']), headers={'Content-Type': 'image/png', 'Access-Control-Allow-Origin': '*', 'Date': fecha})
+    ctx.route('https://www.ign.es/wmts/**', servir)
+
+def scenario_vista_mapa(b):
+    print('\n== Escenario 9: tipo de mapa en cada preventivo (1.4.0) ==')
+    A = App(b, 'vista', PHONE); rutas_cartografia(A.ctx); rutas_ign(A.ctx)
+    A.setup('Pablo Jefe', 'pablo', 'secreto9', 'Tablet PMA', 'P'); A.perms(False)
+    ev = lambda js: A.pg.evaluate('() => { const c = window.__UCO.core; ' + js + ' }')
+    teselas = lambda: A.pg.locator('.coord-map img.leaflet-tile').evaluate_all('ts => [...new Set(ts.map(t => (t.src.match(/wmts\/([a-z-]+)/) || [null, new URL(t.src).hostname])[1]))].sort()')
+    def importar_zona():
+        A.nav('plano'); A.a('plan.google'); s = A.sheet(); s.locator('#carto-map .leaflet-tile').first.wait_for(timeout=15000)
+        s.locator('form[data-f="carto.buscar"] [name=q]').fill('Puerta del Sol Madrid'); s.locator('form[data-f="carto.buscar"] button').click(); A.pg.wait_for_timeout(1800)
+        s.locator('form[data-f="carto.ok"] button.primary').click(); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(600)
+    def elegir(nombre):
+        A.pg.locator('[data-a="plan.vista"]').first.click(); A.pg.wait_for_selector('.sheet-wrap .vistas')
+        if nombre == 'Satélite': A.pg.wait_for_timeout(400); A.shot('00-selector-vistas')
+        A.sheet().locator('[data-a="plan.vistaSel"]', has_text=nombre).first.click(); A.pg.wait_for_timeout(1200)
+    def cambiar():
+        A.new_prev('Nochevieja en Sol', 'independiente', True)
+        A.new_unit('SVA-1', 'Avanzada', 'rt_sva', 'sec_1')
+        importar_zona()
+        A.a('plan.pick', id=A.unit_id('SVA-1')); box = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(box['x'] + box['width'] * 0.5, box['y'] + box['height'] * 0.5); A.pg.wait_for_timeout(600)
+        antes = ev("const u = Object.values(c.state.units)[0]; return JSON.stringify([u.plan, c.state.prev.plano])")
+        assert teselas() == ['tile.openstreetmap.org'], teselas()
+        assert A.pg.locator('[data-a="plan.vista"]').first.inner_text().strip() == 'Mapa'
+        elegir('Satélite'); A.shot('01-satelite')
+        assert teselas() == ['pnoa-ma'], teselas()
+        assert A.pg.locator('.coord-map .leaflet-control-attribution').inner_text().find('Instituto Geográfico Nacional') >= 0
+        elegir('Híbrido'); assert teselas() == ['ign-base', 'pnoa-ma'], teselas()
+        A.shot('02-hibrido')
+        assert A.pg.locator('.coord-map .mk[data-mk="u"]').count() == 1, 'el marcador de la unidad sigue en el plano'
+        despues = ev("const u = Object.values(c.state.units)[0]; return JSON.stringify([u.plan, c.state.prev.plano])")
+        assert antes == despues, 'posiciones y plano intactos'
+        elegir('Relieve'); assert teselas() == ['mapa-raster'], teselas()
+        elegir('Híbrido')
+        return 'Mapa → Satélite (PNOA) → Híbrido (PNOA + callejero) → Relieve (MTN) → Híbrido; marcador y posiciones intactos'
+    check('Tipo de mapa: cambiar la vista desde el plano del preventivo', cambiar)
+    def persiste():
+        A.goto(); A.login('pablo', 'secreto9')
+        # La aplicación vuelve a abrir el último preventivo; si no, se abre desde la lista
+        if 'Nochevieja en Sol' not in A.pg.locator('.top').inner_text():
+            A.pg.locator('[data-a="home.open"]', has_text='Nochevieja en Sol').first.click(); A.pg.wait_for_selector('.kpis')
+        A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-tile', timeout=15000); A.pg.wait_for_timeout(800)
+        assert A.pg.locator('[data-a="plan.vista"]').first.inner_text().strip() == 'Híbrido'
+        assert teselas() == ['ign-base', 'pnoa-ma'], teselas()
+        return 'tras salir y volver a entrar sigue en «Híbrido»'
+    check('Tipo de mapa: la elección se conserva', persiste)
+    def otro():
+        A.new_prev('Cabalgata', 'independiente', True); importar_zona()
+        assert A.pg.locator('[data-a="plan.vista"]').first.inner_text().strip() == 'Mapa'
+        assert teselas() == ['tile.openstreetmap.org'], teselas()
+        return 'otro preventivo conserva el mapa estándar'
+    check('Tipo de mapa: no afecta a otros preventivos', otro)
+    def imagen():
+        A.new_prev('Feria en recinto', 'independiente', True); A.nav('plano')
+        with A.pg.expect_file_chooser() as fc: A.a('plan.import')
+        fc.value.set_files(PLANO); A.pg.wait_for_selector('.coord-map .plano-img', timeout=15000); A.pg.wait_for_timeout(500)
+        assert not A.pg.locator('[data-a="plan.vista"]').count(), 'sin selector en un plano de imagen'
+        assert 'Plano de imagen' in A.pg.locator('.coord-ayuda').inner_text()
+        return 'plano de imagen: funciona igual y no ofrece vistas de mapa'
+    check('Tipo de mapa: los planos de imagen siguen funcionando', imagen)
+    check('Sin errores de JavaScript (escenario 9)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+    A.ctx.close()
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1143,6 +1217,7 @@ def main():
             if only in ('', '6'): scenario_actualizaciones(b)
             if only in ('', '7'): scenario_incidentes(b)
             if only in ('', '8'): scenario_recursos_140(b)
+            if only in ('', '9'): scenario_vista_mapa(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

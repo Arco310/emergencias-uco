@@ -90,8 +90,8 @@ self.addEventListener('notificationclick', e => {
     return self.clients.openWindow((e.notification.data && e.notification.data.url) || self.registration.scope);
   })());
 });
-// Teselas de OpenStreetMap ya vistas: se guardan para poder usar el plano sin conexión. Solo las que el
-// usuario ha visto (sin descargas masivas, según la política de uso de OSM) y con un máximo.
+// Teselas de OpenStreetMap y del IGN ya vistas: se guardan para poder usar el plano sin conexión. Solo las que
+// el usuario ha visto (sin descargas masivas, según las políticas de uso de OSM y del IGN) y con un máximo.
 const TESELAS = 'uco-teselas-1'; const MAX_TESELAS = 3000;
 const SEMANA = 7 * 24 * 3600 * 1000;
 async function tesela(req) {
@@ -114,7 +114,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.hostname === 'tile.openstreetmap.org') { e.respondWith(tesela(req)); return; }
+  // Teselas de OpenStreetMap y del Instituto Geográfico Nacional (satélite, híbrido y relieve)
+  if (url.hostname === 'tile.openstreetmap.org' || (url.hostname === 'www.ign.es' && url.pathname.startsWith('/wmts/'))) { e.respondWith(tesela(req)); return; }
   if (url.origin !== location.origin || url.pathname.includes('/api/')) return; // mapas, búsquedas y sincronización: siempre red
   const rel = url.pathname.slice(new URL(self.registration.scope).pathname.length);
   if (rel === 'sw.js' || rel === 'version.json') return; // siempre del servidor

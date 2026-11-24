@@ -13,7 +13,8 @@ import { unitVisual, effectiveVis } from '../../core/visual.js';
 import * as C from '../../core/commands.js';
 import { geoANorm, normAGeo, hasCoords, fmtCoords, round6 } from '../../core/geo.js';
 import { openUnit, openAviso, avisoNumber, nuevoAvisoEn } from './ops.js';
-import { L, crearMapa, capaBase, aLatLngBounds, NOMBRE_PROVEEDOR } from '../mapa.js';
+import { L, crearMapa, capaBase, aLatLngBounds, NOMBRE_PROVEEDOR, proveedor } from '../mapa.js';
+import { VISTAS_MAPA, VISTA_DEFECTO, nombreVista } from '../../core/mapas.js';
 import { abrirSelectorMapa, abrirBiblioteca, incorporarAlPreventivo } from './cartografia.js';
 
 const urls = new Map(); const loading = new Set();
@@ -37,6 +38,9 @@ function blobUrl(id) {
   return undefined;
 }
 const esMapa = pl => !!pl && pl.tipo === 'mapa';
+/** Tipo de mapa elegido para este preventivo (solo planos cartográficos) */
+const vistaActual = () => (P().cfg && P().cfg.vistaMapa) || VISTA_DEFECTO;
+const puedeVista = () => editable() && (can('planos.vista') || can('planos.editar'));
 
 // ---------- coordenadas ----------
 /** Posición guardada → punto del mapa */
@@ -78,6 +82,7 @@ export function renderPlano() {
     ${canEdit ? btn('Importar desde Google Maps', 'plan.google', { ic: 'mapa', cls: pl ? '' : 'primary' }) : ''}
     ${canEdit ? btn('Biblioteca de planos', 'plan.biblio', { ic: 'capas' }) : ''}
     ${pl && operativo() && can('avisos.crear') ? btn(f.dibujo ? 'Cancelar zona' : 'Aviso por zona', 'plan.zona', { ic: 'zona', cls: f.dibujo ? 'primary' : '' }) : ''}
+    ${esMapa(pl) ? btn(nombreVista(vistaActual()), 'plan.vista', { ic: 'capas', title: 'Tipo de mapa: estándar, satélite, híbrido o relieve', disabled: !puedeVista(), cls: 'vista-btn' }) : ''}
     ${pl ? `${btn('', 'plan.fit', { ic: 'ajustar', title: 'Ver todo el plano' })}
     <label class="switch sm"><input type="checkbox" data-c="plan.layer" data-v="avisos"${f.hideAvisos ? '' : ' checked'}><span>Avisos</span></label>
     <label class="switch sm"><input type="checkbox" data-c="plan.layer" data-v="labels"${f.hideLabels ? '' : ' checked'}><span>Etiquetas</span></label>` : ''}
@@ -104,7 +109,7 @@ export function renderPlano() {
     </aside>
     <div class="coord-host" id="coord-host"></div>
   </div>
-  <p class="muted small coord-ayuda">${canEdit ? 'Arrastra una unidad para moverla (se guarda al soltar). ' : ''}Doble clic o pulsación larga sobre una unidad: cambiar su clave. ${operativo() && can('avisos.crear') ? 'Toca un punto libre del plano para crear un aviso en él.' : ''}${esMapa(pl) ? ' Plano cartográfico «' + esc(pl.nombre || '') + '» (' + esc(NOMBRE_PROVEEDOR[pl.proveedor] || '') + '), con coordenadas reales.' : ''}</p>
+  <p class="muted small coord-ayuda">${canEdit ? 'Arrastra una unidad para moverla (se guarda al soltar). ' : ''}Doble clic o pulsación larga sobre una unidad: cambiar su clave. ${operativo() && can('avisos.crear') ? 'Toca un punto libre del plano para crear un aviso en él.' : ''}${esMapa(pl) ? ' Plano cartográfico «' + esc(pl.nombre || '') + '» (' + esc(NOMBRE_PROVEEDOR[pl.proveedor] || '') + '), con coordenadas reales. Vista: ' + esc(nombreVista(vistaActual())) + '.' : ' Plano de imagen: no tiene vistas de mapa (satélite, relieve…); para usarlas, importa una zona de mapa.'}</p>
   <div class="legend">${p.cat.claves.map(c => `<span><i style="background:${attr(c.color)}"></i>${esc(c.codigo)} ${esc(c.nombre)}</span>`).join('')}<span><i style="background:#9E9E9E"></i>Descanso</span></div>`;
 }
 
@@ -113,10 +118,11 @@ export function afterRender() {
   const pl = P().plano; const key = G.core.cur + '|' + JSON.stringify(esMapa(pl) ? pl.bounds : [pl.blob, pl.w, pl.h]);
   if (!M || M.key !== key) { destruir(); crear(host, key); }
   else if (M.el.parentNode !== host) { host.appendChild(M.el); M.map.invalidateSize(); }
+  if (esMapa(pl) && M.vista !== vistaActual()) cambiarVista();
   sincronizar();
   activarArrastrePendientes();
 }
-export function destruir() { if (M) { try { M.map.remove(); } catch { } M = null; } }
+export function destruir() { if (M) { try { if (M.base) M.base.quitar(); M.map.remove(); } catch { } M = null; } }
 
 function crear(host, key) {
   const pl = P().plano;
@@ -125,8 +131,8 @@ function crear(host, key) {
   if (esMapa(pl)) {
     const b = aLatLngBounds(pl.bounds);
     map = crearMapa(el, { bounds: pl.bounds, minZoom: Math.max(3, (pl.zoom || 16) - 4), maxBounds: b.pad(2) });
-    // Las teselas vistas se guardan para trabajar sin conexión; más allá de su detalle se amplían las guardadas
-    capaBase(map, { maxNativeZoom: Math.max(17, (pl.zoom || 16) + 2) });
+    // Las teselas vistas se guardan para trabajar sin conexión; más allá de su detalle se amplían las guardadas.
+    // El fondo depende del tipo de mapa del preventivo (se cambia sin rehacer el mapa ni tocar los marcadores).
     L.rectangle(b, { color: '#C62828', weight: 2, fill: false, dashArray: '6 5', interactive: false }).addTo(map);
   } else {
     map = L.map(el, { crs: L.CRS.Simple, minZoom: -6, maxZoom: 4, zoomSnap: 0.25, doubleClickZoom: false, attributionControl: false });
@@ -134,7 +140,8 @@ function crear(host, key) {
     L.imageOverlay(urls.get(pl.blob), b, { className: 'plano-img' }).addTo(map);
     map.fitBounds(b, { animate: false }); map.setMaxBounds(L.latLngBounds(b).pad(0.6));
   }
-  M = { key, pid: G.core.cur, el, map, u: new Map(), a: new Map(), z: new Map(), dibujo: null, movido: false };
+  M = { key, pid: G.core.cur, el, map, u: new Map(), a: new Map(), z: new Map(), dibujo: null, movido: false, vista: null, base: null };
+  if (esMapa(pl)) cambiarVista();
   map.on('click', clicMapa);
   map.on('dragstart zoomstart', ev => { if (ev && ev.hard !== true) M && (M.movido = true); });
   // El tamaño definitivo del contenedor se conoce tras maquetar: se vuelve a encuadrar el plano completo
@@ -142,6 +149,33 @@ function crear(host, key) {
   const f = filt('plano');
   if (f.focus) { const u = S().units[f.focus]; if (u && u.plan) map.setView(aLatLng(u.plan), Math.max(map.getZoom(), esMapa(pl) ? 18 : 0)); }
 }
+
+/** Pone el fondo del tipo de mapa elegido (quita el anterior). Las capas de unidades, avisos y zonas no cambian. */
+function cambiarVista() {
+  if (!M) return;
+  const m = M; const vista = vistaActual(); const pl = P().plano;
+  m.vista = vista;
+  const anterior = m.base; m.base = null;
+  capaBase(m.map, { maxNativeZoom: Math.max(17, (pl.zoom || 16) + 2), vista }).then(b => {
+    if (M !== m || m.vista !== vista) { b.quitar(); return; } // el mapa o la vista cambiaron mientras se cargaba
+    if (anterior) anterior.quitar();
+    m.base = b;
+  }).catch(e => console.warn('Tipo de mapa', e));
+}
+A['plan.vista'] = () => {
+  const actual = vistaActual(); const prov = proveedor();
+  openSheet({
+    title: 'Tipo de mapa', size: 's',
+    render: () => `<div class="vistas">${VISTAS_MAPA.map(v => `<button type="button" class="vista${v.id === actual ? ' on' : ''}" data-a="plan.vistaSel" data-v="${v.id}" aria-pressed="${v.id === actual}">
+        <span class="vista-img v-${v.id}" aria-hidden="true"></span><b>${esc(v.nombre)}</b><small class="muted">${esc(v.desc)}</small></button>`).join('')}</div>
+      <p class="muted small">${prov === 'google' ? 'Fondos de Google Maps (clave configurada en Configuración general).' : 'Mapa de OpenStreetMap; satélite, híbrido y relieve del Instituto Geográfico Nacional (gratuitos, solo España).'} Solo cambia el fondo de este preventivo, en todos sus dispositivos: las posiciones, los avisos y los sectores no cambian.</p>`,
+  });
+};
+A['plan.vistaSel'] = async el => {
+  const v = el.dataset.v; closeSheet();
+  const ops = await G.core.exec(C.prevVistaMapa, v);
+  if (ops.length) toast('Tipo de mapa: ' + nombreVista(v), 'ok');
+};
 
 // ---------- marcadores ----------
 function iconoUnidad(u) {

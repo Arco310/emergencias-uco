@@ -4,6 +4,7 @@ import { uid, now, clone, same, AppError, isHexColor, getPath } from './util.js'
 import { require as needPerm, can } from './perms.js';
 import { boundsValidos } from './geo.js';
 import { motivoTipoNoDisponible, referenciasTipoPrev } from './recursos.js';
+import { esVista, VISTA_DEFECTO } from './mapas.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
@@ -192,6 +193,20 @@ export function planoSet(ctx, meta) {
   const cur = s.prev.plano || null;
   if (same(cur, meta)) return [];
   return [mkOp(ctx, 'prev.plano', ctx.pid, { o: cur, n: meta }, uid('b_'))];
+}
+
+/** Tipo de mapa (vista) del plano cartográfico de este preventivo: solo cambia el fondo que se ve, nunca
+ *  posiciones, avisos ni sectores. «Editar planos» incluye este permiso. */
+export function prevVistaMapa(ctx, vista) {
+  if (!can(ctx.user, 'planos.editar')) needPerm(ctx.user, 'planos.vista');
+  const s = editable(ctx);
+  if (!esVista(vista)) fail('Tipo de mapa no válido');
+  const pl = s.prev.plano;
+  if (!pl) fail('El preventivo no tiene plano: importa una zona de mapa para elegir el tipo de mapa');
+  if (pl.tipo !== 'mapa') fail('El plano de este preventivo es una imagen: el tipo de mapa (satélite, híbrido, relieve) solo existe en planos cartográficos');
+  const cur = (s.prev.cfg && s.prev.cfg.vistaMapa) || VISTA_DEFECTO;
+  if (cur === vista) return [];
+  return [mkOp(ctx, 'prev.update', ctx.pid, { f: { 'cfg.vistaMapa': { o: (s.prev.cfg && s.prev.cfg.vistaMapa) ?? null, n: vista } } }, uid('b_'))];
 }
 
 // ---------------- Unidades ----------------

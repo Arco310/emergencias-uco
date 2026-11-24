@@ -25,6 +25,7 @@ export const PERMISOS = [
   ['descansos.gestionar', 'Gestionar descansos', 'Descansos'],
   ['descansos.duracion', 'Cambiar duración del descanso', 'Descansos'],
   ['planos.editar', 'Editar planos y posiciones', 'Planos'],
+  ['planos.vista', 'Cambiar la visualización del mapa (satélite, híbrido, relieve)', 'Planos'],
   ['notas.crear', 'Añadir observaciones e incidencias', 'Bitácora'],
   ['estadisticas.ver', 'Consultar estadísticas', 'Informes'],
   ['exportar', 'Exportar datos e informes', 'Informes'],
