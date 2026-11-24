@@ -65,7 +65,7 @@ export function prevCreate(ctx, { datos, cat, cfg, unidades = [], plano = null, 
     inds.add(ind.toLowerCase());
     ops.push(mkOp(ctx, 'unit.create', uid('u_'), { u: { ...clone(u), ind } }, b));
   }
-  if (datos.activar) ops.push(mkOp(ctx, 'prev.estado', ctx.pid, { o: 'preparacion', n: 'activo' }, b));
+  if (datos.activar) { needPerm(ctx.user, 'preventivos.iniciar'); ops.push(mkOp(ctx, 'prev.estado', ctx.pid, { o: 'preparacion', n: 'activo' }, b)); }
   return ops;
 }
 
@@ -80,7 +80,7 @@ export function prevUpdate(ctx, cambios) {
 }
 
 export function prevActivar(ctx) {
-  needPerm(ctx.user, 'preventivos.editar');
+  needPerm(ctx.user, 'preventivos.iniciar');
   const s = editable(ctx);
   if (s.prev.estado !== 'preparacion') fail('El preventivo ya está activo');
   return [mkOp(ctx, 'prev.estado', ctx.pid, { o: 'preparacion', n: 'activo' }, uid('b_'))];
@@ -123,7 +123,7 @@ export function prevReabrir(ctx, motivo) {
 }
 
 export function prevArchivar(ctx, archivar) {
-  needPerm(ctx.user, 'preventivos.cerrar');
+  needPerm(ctx.user, 'preventivos.archivar');
   const s = S(ctx);
   if (archivar && s.prev.estado === 'activo') fail('Cierra el preventivo antes de archivarlo');
   if (!!s.prev.archivado === !!archivar) return [];
@@ -131,7 +131,7 @@ export function prevArchivar(ctx, archivar) {
 }
 
 export function catUpdate(ctx, cat, lista) {
-  needPerm(ctx.user, 'config.editar');
+  needPerm(ctx.user, cat === 'sectores' ? 'sectores.gestionar' : 'config.editar');
   const s = editable(ctx);
   if (!CATALOGOS.includes(cat)) fail('Catálogo desconocido');
   const cur = s.prev.cat[cat];
@@ -409,7 +409,7 @@ export function unitPlan(ctx, id, pos) {
 }
 
 export function unitRest(ctx, id, durMin) {
-  needPerm(ctx.user, 'descansos.gestionar');
+  needPerm(ctx.user, 'descansos.iniciar');
   const s = operativo(ctx); const u = unit(s, id);
   const def = s.prev.cfg.descansoMin || 30;
   const dur = durMin == null ? def : Number(durMin);
@@ -424,7 +424,7 @@ export function unitRest(ctx, id, durMin) {
 }
 
 export function unitRestEnd(ctx, id, motivo = 'Manual') {
-  needPerm(ctx.user, 'descansos.gestionar');
+  needPerm(ctx.user, 'descansos.finalizar');
   const s = operativo(ctx); const u = unit(s, id);
   if (!isResting(u, now())) fail(unitLabel(u) + ' no está en descanso');
   return [mkOp(ctx, 'unit.restEnd', id, { rid: u.descanso.id, motivo }, uid('b_'))];
@@ -493,7 +493,7 @@ function assignOps(ctx, s, a, unitId, { forzarIncompatible = false, terminarDesc
   }
   if (isResting(u, now())) {
     if (!terminarDescanso) fail(unitLabel(u) + ' está en descanso', 'descanso', { unit: u.id });
-    needPerm(ctx.user, 'descansos.gestionar');
+    needPerm(ctx.user, 'descansos.finalizar');
     ops.push(mkOp(ctx, 'unit.restEnd', u.id, { rid: u.descanso.id, motivo: 'Asignación a aviso' }, b));
   }
   const def = claveDef(s.prev, u.clave);
