@@ -52,7 +52,7 @@ test('UPR: solo se pide el número y se genera la unidad completa en C0, pendien
   parar(c);
 });
 
-test('cambiar una plantilla no modifica las unidades creadas; usada no se elimina, se desactiva', async () => {
+test('cambiar una plantilla no modifica las unidades creadas; usada se puede desactivar o eliminar sin tocar sus unidades', async () => {
   const { c } = await nucleo();
   await c.createPrev({ datos: { nombre: 'Concierto', modalidad: 'independiente', activar: true }, seed: c.seedFromConfig() });
   const p = await c.guardarPlantillaUnidad({ nombre: 'Moto sanitaria', tipo: 'rt_eqsan', prefijo: 'msa', color: '#AA0000', vis: { forma: 'rombo', icono: 'cruz' }, campos: ['nombre', 'sector'], obligatorios: ['nombre'] });
@@ -64,7 +64,6 @@ test('cambiar una plantilla no modifica las unidades creadas; usada no se elimin
   await c.guardarPlantillaUnidad({ ...c.plantillasUnidad().find(x => x.id === p.id), color: '#00AA00', prefijo: 'MOTO' });
   assert.equal(c.state.units[u.id].colorC0, '#AA0000', 'la unidad conserva sus valores');
   assert.equal(c.state.units[u.id].ind, 'MSA 1');
-  await rechaza(c.borrarPlantillaUnidad(p.id), /desactívala/);
   await c.activarPlantillaUnidad(p.id, false);
   assert.ok(!c.plantillasUnidad({ activas: true }).some(x => x.id === p.id));
   await rechaza(c.crearUnidadDesdePlantilla(p.id, { numero: '2', nombre: 'x' }), /no está disponible/);
@@ -72,6 +71,10 @@ test('cambiar una plantilla no modifica las unidades creadas; usada no se elimin
   assert.equal(d.nombre, 'Moto sanitaria (copia)'); assert.equal(d.usada, false);
   await c.borrarPlantillaUnidad(d.id);
   assert.ok(!c.plantillasUnidad().some(x => x.id === d.id), 'una plantilla sin usar sí se elimina');
+  // 1.4.0: también la usada (antes solo se podía desactivar); la unidad creada con ella no cambia
+  await c.borrarPlantillaUnidad(p.id);
+  assert.ok(!c.plantillasUnidad().some(x => x.id === p.id));
+  assert.equal(c.state.units[u.id].colorC0, '#AA0000'); assert.equal(c.state.units[u.id].nombre, 'Moto 1');
   await rechaza(c.guardarPlantillaUnidad({ nombre: 'UPR', prefijo: 'X' }), /Ya existe/);
   parar(c);
 });

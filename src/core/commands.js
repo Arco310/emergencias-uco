@@ -3,6 +3,7 @@
 import { uid, now, clone, same, AppError, isHexColor, getPath } from './util.js';
 import { require as needPerm, can } from './perms.js';
 import { boundsValidos } from './geo.js';
+import { motivoTipoNoDisponible, referenciasTipoPrev } from './recursos.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
@@ -205,6 +206,14 @@ function incorporarTipo(ctx, s, tipoId, tipoDef) {
   const n = [...s.prev.cat.tiposRecurso, def];
   return { ops: [mkOp(ctx, 'prev.cat', ctx.pid, { cat: 'tiposRecurso', o: s.prev.cat.tiposRecurso, n }, uid('b_'))], tipo: def };
 }
+/** Un tipo desactivado o retirado (en el preventivo o en la configuración general: ctx.noDisponibles)
+ *  no se puede usar en unidades nuevas ni elegir al cambiar el tipo de una unidad. */
+function checkTipoNuevo(ctx, s, tipoId, tipoDef) {
+  if (!tipoId) return;
+  const t = s.prev.cat.tiposRecurso.find(x => x.id === tipoId) || (tipoDef && tipoDef.id === tipoId ? tipoDef : null);
+  const motivo = motivoTipoNoDisponible(t, ctx.noDisponibles);
+  if (motivo) fail('El tipo de recurso «' + t.nombre + '» está ' + motivo + ': no se puede usar en unidades nuevas ni elegir para una unidad. Elige otro tipo o pide a un administrador que lo active.', 'tipo_inactivo', { tipo: tipoId });
+}
 function checkSector(s, sector, sectorOtro) {
   if (!sector) return;
   if (sector === SECTOR_OTROS) { if (!String(sectorOtro || '').trim()) fail('Indica la ubicación o sector personalizado'); return; }
@@ -215,6 +224,7 @@ export function unitCreate(ctx, d) {
   needPerm(ctx.user, 'unidades.crear');
   const s = editable(ctx);
   const ind = checkInd(s, d.ind);
+  checkTipoNuevo(ctx, s, d.tipo, d.tipoDef);
   const inc = incorporarTipo(ctx, s, d.tipo, d.tipoDef);
   const tipo = inc.tipo;
   checkSector(s, d.sector, d.sectorOtro);
@@ -251,6 +261,30 @@ export function unitFromTemplate(ctx, p, v = {}) {
   });
 }
 
+/** Retira un tipo de recurso del catálogo del preventivo: deja de ofrecerse, pero se conserva para las
+ *  unidades, los informes y el historial. Con «destino», antes reasigna a ese tipo las unidades en uso
+ *  (no las archivadas) y la compatibilidad de los tipos de aviso. Nunca elimina unidades ni avisos. */
+export function tipoRecursoRetirar(ctx, id, { destino = null } = {}) {
+  needPerm(ctx.user, 'config.editar');
+  const s = editable(ctx);
+  const lista = s.prev.cat.tiposRecurso; const t = lista.find(x => x.id === id);
+  if (!t) fail('El tipo de recurso no existe en este preventivo');
+  const ops = [];
+  if (destino) {
+    if (destino === id) fail('Elige otro tipo para reasignar las unidades');
+    if (!lista.some(x => x.id === destino)) fail('El tipo de destino no existe en este preventivo');
+    checkTipoNuevo(ctx, s, destino, null);
+    for (const u of referenciasTipoPrev(s, id).unidades) ops.push(...unitUpdate(ctx, u.id, { tipo: destino }));
+    const ta = s.prev.cat.tiposAviso;
+    if (ta.some(a => (a.compatibles || []).includes(id))) {
+      const n = ta.map(a => ((a.compatibles || []).includes(id) ? { ...a, compatibles: [...new Set(a.compatibles.map(x => (x === id ? destino : x)))] } : a));
+      ops.push(mkOp(ctx, 'prev.cat', ctx.pid, { cat: 'tiposAviso', o: ta, n }, uid('b_')));
+    }
+  }
+  if (!t.retirado) ops.push(mkOp(ctx, 'prev.cat', ctx.pid, { cat: 'tiposRecurso', o: lista, n: lista.map(x => (x.id === id ? { ...x, retirado: true } : x)) }, uid('b_')));
+  return ops;
+}
+
 export function unitUpdate(ctx, id, cambios) {
   needPerm(ctx.user, 'unidades.editar');
   const s = editable(ctx); const u = unit(s, id);
@@ -258,7 +292,7 @@ export function unitUpdate(ctx, id, cambios) {
   for (const k of Object.keys(cambios)) if (!UNIT_EDIT.includes(k.split('.')[0])) fail('Campo no editable: ' + k);
   if ('ind' in cambios) cambios.ind = checkInd(s, cambios.ind, id);
   let pre = [];
-  if ('tipo' in cambios && (cambios.tipo || null) !== (u.tipo || null)) { needPerm(ctx.user, 'unidades.tipos'); pre = incorporarTipo(ctx, s, cambios.tipo, tipoDef).ops; }
+  if ('tipo' in cambios && (cambios.tipo || null) !== (u.tipo || null)) { needPerm(ctx.user, 'unidades.tipos'); checkTipoNuevo(ctx, s, cambios.tipo, tipoDef); pre = incorporarTipo(ctx, s, cambios.tipo, tipoDef).ops; }
   if ('sector' in cambios || 'sectorOtro' in cambios) {
     const sec = 'sector' in cambios ? cambios.sector : u.sector;
     if (sec !== SECTOR_OTROS) { if (u.sectorOtro) cambios.sectorOtro = ''; else delete cambios.sectorOtro; }

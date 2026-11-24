@@ -171,6 +171,9 @@ export function defaultGlobalConfig() {
     copiasAutoMax: 20,
     catalogos: defaultCatalogs(),
     plantillasUnidad: clone(DEFAULT_PLANTILLAS_UNIDAD),
+    // Configuraciones eliminadas a propósito: la inicialización, las migraciones y la sincronización no las
+    // vuelven a añadir (solo se recuperan con «Restaurar configuraciones iniciales»)
+    eliminados: { tiposRecurso: [], plantillasUnidad: [] },
     prev: clone(DEFAULT_PREV_CFG),
   };
 }

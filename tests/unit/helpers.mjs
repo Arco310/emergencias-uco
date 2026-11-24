@@ -23,7 +23,7 @@ export class Device {
     this.hlc = new HLC(id, clock ? clock.now : undefined);
     this.engine = new Engine(); this.localNum = 0; this.ref = 0; this.store = [];
   }
-  get ctx() { return { engine: this.engine, user: this.user, device: this.device, hlc: this.hlc, pid: this.pid, mode: this.mode }; }
+  get ctx() { return { engine: this.engine, user: this.user, device: this.device, hlc: this.hlc, pid: this.pid, mode: this.mode, ...(this.ctxExtra || {}) }; }
   get s() { return this.engine.state; }
   /** Ejecuta un comando: valida (dry-run), "persiste" asignando números y aplica */
   run(fn, ...args) {

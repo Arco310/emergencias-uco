@@ -13,6 +13,7 @@ import { contentFromPrev, seedFromTemplate, newTemplate, contentFromConfig } fro
 import { counts } from '../core/engine.js';
 import { migrarDatos } from '../data/migraciones.js';
 import { posterior } from '../core/versiones.js';
+import { tiposNoDisponibles, tiposParaNuevaUnidad, plantillasDisponibles, tipoActivo, referenciasTipoEnConfig, explicacionBloqueo } from '../core/recursos.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -76,6 +77,8 @@ export class AppCore {
     clearInterval(this._bk);
     this._bk = setInterval(() => this.autoBackup(), Math.max(1, Number(this.cfg.copiaAutoMin) || 10) * 60000);
     this.centralMeta = await this.central.meta();
+    // Bajas del espacio central que una migración local hubiera vuelto a añadir: se aplican de nuevo
+    if (this.centralMeta) await this._centralConfig([]).catch(e => console.warn('Configuración central', e));
     this.repo.minPassword = this.centralMeta || this.centralRemoto ? 8 : 6;
     if (this.centralMeta) { this.central.start(); this.centralDisponibles().then(x => { this.centralDisp = x; this.emit('central', {}); }).catch(() => { }); }
     this.emit('session', {});
@@ -96,7 +99,10 @@ export class AppCore {
   _migrarCfg(cfg) {
     if (!Array.isArray(cfg.plantillasUnidad)) cfg.plantillasUnidad = clone(DEFAULT_PLANTILLAS_UNIDAD);
     const tipos = cfg.catalogos.tiposRecurso;
-    for (const p of cfg.plantillasUnidad) if (p.tipo && !tipos.some(t => t.id === p.tipo)) { const d = DEFAULT_TIPOS_RECURSO.find(t => t.id === p.tipo); if (d) tipos.push(clone(d)); }
+    if (!cfg.eliminados || typeof cfg.eliminados !== 'object') cfg.eliminados = {};
+    for (const k of ['tiposRecurso', 'plantillasUnidad']) if (!Array.isArray(cfg.eliminados[k])) cfg.eliminados[k] = [];
+    // Tipo inicial que usa una plantilla y falta en la lista: se completa, salvo que se eliminara a propósito
+    for (const p of cfg.plantillasUnidad) if (p.tipo && !tipos.some(t => t.id === p.tipo) && !cfg.eliminados.tiposRecurso.includes(p.tipo)) { const d = DEFAULT_TIPOS_RECURSO.find(t => t.id === p.tipo); if (d) tipos.push(clone(d)); }
     return cfg;
   }
 
@@ -104,6 +110,131 @@ export class AppCore {
   _needRecursos() { if (!this.can('recursos.gestionar')) throw new AppError('No tienes permiso para gestionar tipos de recurso y unidades plantilla', 'permiso'); }
   tiposRecursoGenerales({ activos = false } = {}) { return (this.cfg.catalogos.tiposRecurso || []).filter(t => !activos || t.activo !== false); }
   plantillasUnidad({ activas = false } = {}) { return (this.cfg.plantillasUnidad || []).filter(p => !activas || p.activo !== false); }
+  /** Tipos que se ofrecen al crear una unidad en el preventivo abierto (sin desactivados ni retirados) */
+  tiposParaNuevaUnidad(pid = this.cur) { const e = pid && this.engine(pid); return tiposParaNuevaUnidad(e && e.state.prev ? e.state.prev.cat.tiposRecurso : [], this.cfg); }
+  /** Unidades plantilla que se pueden usar en el preventivo abierto (activas y con un tipo disponible) */
+  plantillasDisponibles(pid = this.cur) { const e = pid && this.engine(pid); return plantillasDisponibles(this.cfg.plantillasUnidad, this.cfg, e && e.state.prev ? e.state.prev.cat.tiposRecurso : null); }
+
+  // ------------- eliminar, retirar y restaurar configuraciones de recursos (1.4.0) -------------
+  _eliminados() { const e = (this.cfg && this.cfg.eliminados) || {}; return { tiposRecurso: [...(e.tiposRecurso || [])], plantillasUnidad: [...(e.plantillasUnidad || [])] }; }
+  async _marcarEliminados(clase, ids, { quitar = false } = {}) {
+    const el = this._eliminados(); const set = new Set(el[clase]);
+    for (const id of ids) { if (quitar) set.delete(id); else set.add(id); }
+    if (set.size === el[clase].length && el[clase].every(x => set.has(x))) return;
+    const cfg = clone(this.cfg); cfg.eliminados = { ...el, [clase]: [...set] };
+    await this.repo.saveCfg(cfg, quitar ? 'Configuraciones recuperadas' : 'Configuraciones eliminadas'); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
+  }
+  /** Recorre los preventivos de este dispositivo sin dejar cargados los que no lo estaban */
+  async _recorrerPreventivos(fn) {
+    for (const s of await this.refreshSummaries()) {
+      let e = this.engines.get(s.id);
+      if (!e) { try { e = new Engine(await this.repo.loadOps(s.id)); } catch { continue; } }
+      if (e.state.prev) fn(e, s);
+    }
+  }
+  /** Dónde se usa un tipo de recurso general (vista previa antes de eliminarlo o retirarlo) */
+  async referenciasTipoRecurso(id) {
+    const tipo = this.tiposRecursoGenerales().find(t => t.id === id); if (!tipo) throw new AppError('Tipo de recurso no encontrado');
+    const preventivos = [];
+    await this._recorrerPreventivos((e, s) => {
+      const st = e.state; const n = Object.values(st.units).filter(u => !u.eliminada && u.tipo === id).length;
+      if (n || st.prev.cat.tiposRecurso.some(t => t.id === id)) preventivos.push({ id: s.id, nombre: st.prev.nombre, unidades: n });
+    });
+    const plantillasPrev = (await this.repo.listTemplates()).filter(t => { const c = t.contenido || {}; return ((c.cat && c.cat.tiposRecurso) || []).some(x => x.id === id) || (c.unidades || []).some(u => u.tipo === id); }).map(t => ({ id: t.id, nombre: t.nombre }));
+    return { tipo, ...referenciasTipoEnConfig(this.cfg, id), preventivos, plantillasPrev };
+  }
+  /** Quita (o cambia por «destino») un tipo de recurso de la compatibilidad de los tipos de aviso por defecto */
+  async _compatTiposAviso(id, destino) {
+    const ta = this.cfg.catalogos.tiposAviso || [];
+    if (!ta.some(a => (a.compatibles || []).includes(id))) return [];
+    const afect = ta.filter(a => (a.compatibles || []).includes(id));
+    const cfg = clone(this.cfg);
+    cfg.catalogos.tiposAviso = ta.map(a => ((a.compatibles || []).includes(id) ? { ...a, compatibles: [...new Set(a.compatibles.flatMap(x => (x === id ? (destino ? [destino] : []) : [x])))] } : a));
+    await this.repo.saveCfg(cfg, 'Tipos de aviso por defecto: compatibilidad actualizada'); this.cfg = this._migrarCfg(await this.repo.getCfg());
+    return afect;
+  }
+  /** Elimina un tipo de recurso general (también los iniciales). modo:
+   *  · 'eliminar': nada de la configuración lo necesita;
+   *  · 'reasignar': sus unidades plantilla y la compatibilidad de los tipos de aviso pasan a «destino»;
+   *  · 'conPlantillas': elimina también las unidades plantilla que lo usan (autorización expresa);
+   *  · 'retirar': no se elimina; deja de ofrecerse y se conserva.
+   *  Los preventivos guardan su propia copia del tipo: sus unidades, avisos, informes e historial no cambian. */
+  async eliminarTipoRecurso(id, { modo = 'eliminar', destino = null } = {}) {
+    this._needRecursos();
+    const ref = await this.referenciasTipoRecurso(id); const t = ref.tipo;
+    const conserva = ref.preventivos.length ? ref.preventivos.length + ' preventivo(s) conservan su copia y sus unidades' : '';
+    if (modo === 'retirar') {
+      await this.guardarTiposRecurso(this.tiposRecursoGenerales().map(x => (x.id === id ? { ...x, retirado: true } : x)));
+      await this.repo.audit('Tipo de recurso retirado del uso', t.nombre, 'Disponible', ['Retirado', ref.plantillas.length ? 'plantillas sin ofrecer: ' + ref.plantillas.map(p => p.nombre).join(', ') : '', conserva].filter(Boolean).join(' · '));
+      return { modo };
+    }
+    let detalle = '';
+    if (modo === 'reasignar') {
+      const d = this.tiposRecursoGenerales().find(x => x.id === destino);
+      if (!destino || destino === id || !d) throw new AppError('Elige otro tipo de recurso para reasignar');
+      if (!tipoActivo(d)) throw new AppError('El tipo «' + d.nombre + '» no está disponible: elige uno activo');
+      const lista = clone(this.plantillasUnidad()); const cambiadas = lista.filter(p => p.tipo === id);
+      for (const p of cambiadas) p.tipo = destino;
+      if (cambiadas.length) await this._guardarPlantillas(lista, 'Unidades plantilla reasignadas de «' + t.nombre + '» a «' + d.nombre + '»', cambiadas);
+      const ta = await this._compatTiposAviso(id, destino);
+      detalle = 'reasignado a «' + d.nombre + '»' + (cambiadas.length ? ' · plantillas: ' + cambiadas.map(p => p.nombre).join(', ') : '') + (ta.length ? ' · tipos de aviso: ' + ta.map(a => a.nombre).join(', ') : '');
+    } else if (modo === 'conPlantillas') {
+      const excl = ref.tiposAviso.filter(a => a.exclusivo);
+      if (excl.length) throw new AppError(explicacionBloqueo(t, excl), 'en_uso', { referencias: excl });
+      const ids = ref.plantillas.map(p => p.id);
+      if (ids.length) {
+        await this._guardarPlantillas(this.plantillasUnidad().filter(p => !ids.includes(p.id)), 'Unidades plantilla eliminadas con el tipo «' + t.nombre + '»', [], ids);
+        await this._marcarEliminados('plantillasUnidad', ids);
+        for (const p of ref.plantillas) await this.repo.audit('Unidad plantilla eliminada', p.nombre, '', 'Con su tipo de recurso «' + t.nombre + '»');
+      }
+      const ta = await this._compatTiposAviso(id, null);
+      detalle = [ids.length ? 'con sus unidades plantilla: ' + ref.plantillas.map(p => p.nombre).join(', ') : '', ta.length ? 'quitado de la compatibilidad de: ' + ta.map(a => a.nombre).join(', ') : ''].filter(Boolean).join(' · ');
+    } else {
+      if (ref.bloquean.length) throw new AppError(explicacionBloqueo(t, ref.bloquean), 'en_uso', { referencias: ref.bloquean });
+      const ta = await this._compatTiposAviso(id, null);
+      if (ta.length) detalle = 'quitado de la compatibilidad de: ' + ta.map(a => a.nombre).join(', ');
+    }
+    await this.guardarTiposRecurso(this.tiposRecursoGenerales().filter(x => x.id !== id));
+    await this._marcarEliminados('tiposRecurso', [id]);
+    await this.repo.audit('Tipo de recurso eliminado', t.nombre, '', [detalle, conserva].filter(Boolean).join(' · ') || 'Sin referencias');
+    return { modo };
+  }
+  /** Vuelve a ofrecer un tipo de recurso retirado */
+  async restaurarTipoRecurso(id) {
+    this._needRecursos();
+    const t = this.tiposRecursoGenerales().find(x => x.id === id); if (!t) throw new AppError('Tipo de recurso no encontrado');
+    if (!t.retirado) return t;
+    const n = { ...t }; delete n.retirado;
+    await this.guardarTiposRecurso(this.tiposRecursoGenerales().map(x => (x.id === id ? n : x)));
+    await this.repo.audit('Tipo de recurso restaurado', t.nombre, 'Retirado', 'Disponible');
+    return n;
+  }
+  /** Configuraciones iniciales que se eliminaron a propósito (se pueden restaurar a petición) */
+  inicialesEliminadas() {
+    const el = this._eliminados();
+    return {
+      tiposRecurso: DEFAULT_TIPOS_RECURSO.filter(t => el.tiposRecurso.includes(t.id) && !this.tiposRecursoGenerales().some(x => x.id === t.id)).map(t => clone(t)),
+      plantillasUnidad: DEFAULT_PLANTILLAS_UNIDAD.filter(p => el.plantillasUnidad.includes(p.id) && !this.plantillasUnidad().some(x => x.id === p.id)).map(p => clone(p)),
+    };
+  }
+  /** Restaura configuraciones iniciales eliminadas (acción explícita del administrador; nunca automática) */
+  async restaurarIniciales({ tiposRecurso = [], plantillasUnidad = [] } = {}) {
+    this._needRecursos();
+    const ini = this.inicialesEliminadas();
+    const tipos = ini.tiposRecurso.filter(t => tiposRecurso.includes(t.id));
+    const plts = ini.plantillasUnidad.filter(p => plantillasUnidad.includes(p.id));
+    for (const p of plts) if (p.tipo && !this.tiposRecursoGenerales().some(t => t.id === p.tipo) && !tipos.some(t => t.id === p.tipo)) {
+      const d = DEFAULT_TIPOS_RECURSO.find(t => t.id === p.tipo);
+      throw new AppError('Para restaurar la plantilla «' + p.nombre + '» restaura también su tipo de recurso' + (d ? ' «' + d.nombre + '»' : ''));
+    }
+    if (!tipos.length && !plts.length) return 0;
+    if (tipos.length) await this.guardarTiposRecurso([...this.tiposRecursoGenerales(), ...tipos]);
+    if (plts.length) await this._guardarPlantillas([...clone(this.plantillasUnidad()), ...plts], 'Unidades plantilla iniciales restauradas', plts);
+    await this._marcarEliminados('tiposRecurso', tipos.map(t => t.id), { quitar: true });
+    await this._marcarEliminados('plantillasUnidad', plts.map(p => p.id), { quitar: true });
+    await this.repo.audit('Configuraciones iniciales restauradas', [...tipos, ...plts].map(x => x.nombre).join(', '), 'Eliminadas', 'Restauradas');
+    return tipos.length + plts.length;
+  }
   /** Guarda la lista completa de tipos de recurso generales. Nunca se elimina un tipo que use una
    *  unidad plantilla (se puede desactivar); los preventivos guardan su propia copia del catálogo. */
   async guardarTiposRecurso(lista) {
@@ -159,12 +290,21 @@ export class AppCore {
     return this.guardarPlantillaUnidad({ ...clone(p), id: null, nombre, usada: false });
   }
   async activarPlantillaUnidad(id, activo) { const p = this.plantillasUnidad().find(x => x.id === id); if (!p) throw new AppError('Plantilla no encontrada'); return this.guardarPlantillaUnidad({ ...p, activo: !!activo }); }
-  /** Solo se eliminan las plantillas que no se han usado nunca (si no, se desactivan) */
+  /** Qué unidades se crearon con una plantilla (vista previa antes de eliminarla) */
+  async referenciasPlantillaUnidad(id) {
+    const plantilla = this.plantillasUnidad().find(x => x.id === id); if (!plantilla) throw new AppError('Plantilla no encontrada');
+    const preventivos = [];
+    await this._recorrerPreventivos((e, s) => { const n = Object.values(e.state.units).filter(u => !u.eliminada && u.plantilla && u.plantilla.id === id).length; if (n) preventivos.push({ id: s.id, nombre: e.state.prev.nombre, unidades: n }); });
+    return { plantilla, preventivos };
+  }
+  /** Elimina una unidad plantilla, también si ya se usó: las unidades creadas con ella copiaron sus valores
+   *  y no cambian. Queda anotada como eliminada para que no vuelva a añadirse sola. */
   async borrarPlantillaUnidad(id) {
     this._needRecursos();
     const p = this.plantillasUnidad().find(x => x.id === id); if (!p) throw new AppError('Plantilla no encontrada');
-    if (p.usada) throw new AppError('La plantilla «' + p.nombre + '» ya se ha usado para crear unidades: desactívala en lugar de eliminarla');
     await this._guardarPlantillas(this.plantillasUnidad().filter(x => x.id !== id), 'Unidad plantilla eliminada: ' + p.nombre, [], [id]);
+    await this._marcarEliminados('plantillasUnidad', [id]);
+    await this.repo.audit('Unidad plantilla eliminada', p.nombre, '', p.usada ? 'Las unidades creadas con ella conservan sus datos' : 'No se había usado');
   }
   /** Crea una unidad en el preventivo abierto a partir de una unidad plantilla */
   async crearUnidadDesdePlantilla(id, valores) {
@@ -222,7 +362,7 @@ export class AppCore {
   meta(pid = this.cur) { return this.metas.get(pid) || {}; }
   isShared(pid = this.cur) { return this.meta(pid).modalidad === 'compartida'; }
   ctxFor(pid, engine) {
-    return { engine: engine || this.engine(pid), user: this.user, device: this.device, hlc: this.hlc, pid, mode: this.isShared(pid) ? 'compartida' : 'independiente' };
+    return { engine: engine || this.engine(pid), user: this.user, device: this.device, hlc: this.hlc, pid, mode: this.isShared(pid) ? 'compartida' : 'independiente', noDisponibles: tiposNoDisponibles(this.cfg) };
   }
   async loadEngine(pid) {
     const ops = await this.repo.loadOps(pid);
@@ -516,22 +656,34 @@ export class AppCore {
   async _centralConfig(ids) {
     const d = await this.central.datos(); let usuarios = false;
     if (!this.cfg && this.repo.dek) this.cfg = this._migrarCfg(await this.repo.getCfg());
-    const lista = (actual, pref) => {
-      // Aplica los elementos recibidos (tipo:… / plt:…) sobre la lista local, respetando el orden común
+    const el = this.cfg ? this._eliminados() : null; let elCambio = false;
+    const lista = (actual, pref, clase) => {
+      // Aplica los elementos recibidos (tipo:… / plt:…) sobre la lista local, respetando el orden común.
+      // Las bajas del espacio se aplican siempre (también si una migración local hubiera vuelto a añadir
+      // el elemento) y quedan anotadas como eliminadas para que nada las reintroduzca.
       const m = new Map(actual.map((x, i) => [x.id, { ...x, orden: x.orden ?? i }]));
       let cambio = false;
-      for (const id of ids) if (id.startsWith(pref)) {
+      const claves = new Set(ids.filter(id => id.startsWith(pref)));
+      if (clase) for (const [id, it] of Object.entries(d.items)) if (id.startsWith(pref) && it && it.borrado && (m.has(id.slice(pref.length)) || !el[clase].includes(id.slice(pref.length)))) claves.add(id);
+      for (const id of claves) {
         const it = d.items[id]; const k = id.slice(pref.length); if (!it) continue;
-        if (it.borrado || !it.data) { cambio = m.delete(k) || cambio; } else { m.set(k, clone(it.data)); cambio = true; }
+        if (it.borrado || !it.data) {
+          cambio = m.delete(k) || cambio;
+          if (clase && !el[clase].includes(k)) { el[clase].push(k); elCambio = true; }
+        } else {
+          m.set(k, clone(it.data)); cambio = true;
+          if (clase && el[clase].includes(k)) { el[clase] = el[clase].filter(x => x !== k); elCambio = true; }
+        }
       }
       return cambio ? [...m.values()].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)).map(x => { const y = { ...x }; delete y.orden; return y; }) : null;
     };
-    const tipos = this.cfg ? lista(this.cfg.catalogos.tiposRecurso || [], 'tipo:') : null;
-    const plts = this.cfg ? lista(this.cfg.plantillasUnidad || [], 'plt:') : null;
+    const tipos = this.cfg ? lista(this.cfg.catalogos.tiposRecurso || [], 'tipo:', 'tiposRecurso') : null;
+    const plts = this.cfg ? lista(this.cfg.plantillasUnidad || [], 'plt:', 'plantillasUnidad') : null;
     const mapas = this.cfg ? lista(this.cfg.bibliotecaPlanos || [], 'mapa:') : null;
     const carto = ids.includes('cartografia') && d.items.cartografia && !d.items.cartografia.borrado ? d.items.cartografia.data : null;
-    if ((tipos || plts || mapas || carto) && this.repo.dek) {
+    if ((tipos || plts || mapas || carto || elCambio) && this.repo.dek) {
       const cfg = clone(this.cfg); if (tipos) cfg.catalogos.tiposRecurso = tipos; if (plts) cfg.plantillasUnidad = plts; if (mapas) cfg.bibliotecaPlanos = mapas; if (carto) cfg.cartografia = carto;
+      if (elCambio) cfg.eliminados = el;
       await this.repo.saveCfg(cfg, 'Configuración recibida del servidor central'); this.cfg = this._migrarCfg(await this.repo.getCfg()); this.emit('cfg', {});
     }
     for (const id of ids) {

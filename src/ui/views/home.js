@@ -270,7 +270,7 @@ F['tp.gen'] = async form => {
   await saveTP();
 };
 F['tp.pref'] = async form => { const v = readForm(form); TP.t.contenido.cfg = { ...TP.t.contenido.cfg, ...v, descansoMin: Number(v.descansoMin) || 30 }; await saveTP(); };
-A['tp.cat'] = el => openCatalog({ cat: el.dataset.cat, catalogs: TP.t.contenido.cat, scopeLabel: 'plantilla', readonly: !can('plantillas.gestionar'), onSave: async list => { TP.t.contenido.cat[el.dataset.cat] = list; await saveTP('Catálogo de plantilla: ' + CAT_TITLE[el.dataset.cat]); } });
+A['tp.cat'] = el => openCatalog({ cat: el.dataset.cat, catalogs: TP.t.contenido.cat, scopeLabel: 'plantilla', scope: 'plantilla', readonly: !can('plantillas.gestionar'), onSave: async list => { TP.t.contenido.cat[el.dataset.cat] = list; await saveTP('Catálogo de plantilla: ' + CAT_TITLE[el.dataset.cat]); } });
 A['tp.unit'] = el => {
   const i = el.dataset.i == null ? null : Number(el.dataset.i); const c = TP.t.contenido;
   const u = i == null ? { vis: {} } : c.unidades[i];

@@ -337,10 +337,12 @@ A['u.inplan'] = el => { closeSheet(); filt('plano').focus = el.dataset.id; G.go(
 
 // ---------- formulario de unidad ----------
 export function unitFields(cat, u = {}, { create = false, tipoEditable = true, colorField = create } = {}) {
-  // Tipos del preventivo y, además, los tipos generales activos (comunes a todos los dispositivos)
-  const generales = core().tiposRecursoGenerales({ activos: true }).filter(g => !(cat.tiposRecurso || []).some(x => x.id === g.id));
-  const tipos = [...(cat.tiposRecurso || []), ...generales];
+  // Tipos del preventivo y, además, los tipos generales (comunes a todos los dispositivos): solo los
+  // disponibles (ni desactivados ni retirados). El tipo actual de una unidad existente se mantiene visible.
+  const { propios, generales } = core().tiposParaNuevaUnidad();
+  const tipos = [...(cat.tiposRecurso || []), ...core().tiposRecursoGenerales().filter(g => !(cat.tiposRecurso || []).some(x => x.id === g.id))];
   const t = tipos.find(x => x.id === u.tipo);
+  const actualNoDisponible = !create && t && !propios.some(x => x.id === t.id) && !generales.some(x => x.id === t.id);
   const usados = [...new Set(liveUnits(S()).filter(x => x.sector === SECTOR_OTROS && x.sectorOtro).map(x => x.sectorOtro))].sort();
   const inh = (k, map) => `(heredar del tipo${t && t.vis && t.vis[k] ? ': ' + (map[t.vis[k]] || t.vis[k]) : ''})`;
   return [
@@ -348,7 +350,7 @@ export function unitFields(cat, u = {}, { create = false, tipoEditable = true, c
     { name: 'ind', label: 'Identificador (indicativo)', required: true, placeholder: 'AMB-01' },
     { name: 'nombre', label: 'Nombre' }, { name: 'denom', label: 'Denominación' },
     '<h3>Clasificación</h3>',
-    { name: 'tipo', label: 'Tipo de recurso', type: 'select', options: [['', 'Sin tipo'], ...(cat.tiposRecurso || []).map(x => [x.id, x.nombre]), ...generales.map(x => [x.id, x.nombre + ' (configuración general)'])], disabled: !tipoEditable, help: tipoEditable ? '' : 'Cambiar el tipo requiere permiso específico' },
+    { name: 'tipo', label: 'Tipo de recurso', type: 'select', options: [['', 'Sin tipo'], ...(actualNoDisponible ? [[t.id, t.nombre + (t.retirado ? ' (retirado)' : ' (desactivado)')]] : []), ...propios.map(x => [x.id, x.nombre]), ...generales.map(x => [x.id, x.nombre + ' (configuración general)'])], disabled: !tipoEditable, help: !tipoEditable ? 'Cambiar el tipo requiere permiso específico' : actualNoDisponible ? 'El tipo actual ya no está disponible: la unidad lo conserva, pero no se puede elegir para otras unidades.' : '' },
     ...(tipoEditable && can('recursos.gestionar') ? [`<div class="row end"><button type="button" class="btn sm ghost" data-a="u.nuevoTipo">${icon('mas_add')}<span>Nuevo tipo de recurso</span></button></div>`] : []),
     { name: 'subtipo', label: 'Subtipo', placeholder: t && t.subtipos && t.subtipos.length ? t.subtipos.join(', ') : '' },
     { name: 'categoria', label: 'Categoría', placeholder: t ? t.categoria : '' },
@@ -401,7 +403,8 @@ A['u.nuevoTipo'] = el => {
 };
 /** Añadir unidad: primero las unidades plantilla (solo piden el número); después, una unidad personalizada */
 A['u.new'] = () => {
-  const plts = core().plantillasUnidad({ activas: true });
+  // Solo plantillas activas cuyo tipo de recurso está disponible
+  const plts = core().plantillasDisponibles();
   if (!plts.length) return abrirFormUnidad();
   const tipos = core().tiposRecursoGenerales();
   openSheet({

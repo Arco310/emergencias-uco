@@ -1024,6 +1024,108 @@ def scenario_incidentes(b):
     check('Sin errores de JavaScript (incidentes)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
     A.ctx.close()
 
+# ---------------- Escenario 8 (1.4.0): activo/inactivo y eliminación segura de configuraciones ----------------
+def scenario_recursos_140(b):
+    print('\n== Escenario 8: recursos activos/inactivos y eliminación segura (1.4.0) ==')
+    A = App(b, 'rec140', PHONE)
+    A.setup('Marta Jefa', 'marta', 'secreto8', 'Móvil PC', 'M'); A.perms(False)
+    A.new_prev('Carrera popular', 'independiente', True)
+    A.new_unit('SVB-1', 'Ambulancia 1', 'rt_svb', 'sec_1')
+    ev = lambda js: A.pg.evaluate('() => { const c = window.__UCO.core; ' + js + ' }')
+    def tipos_global():
+        if A.pg.locator('[data-a="prev.exit"]').count(): A.a('prev.exit')
+        A.nav('config'); A.pg.locator('[data-a="gcat.open"][data-cat="tiposRecurso"]').first.click(); A.pg.wait_for_selector('.sheet-wrap .cat-list')
+    def fila(nombre):
+        return A.sheet().locator('.cat-row', has=A.pg.locator('b', has_text=re.compile('^' + re.escape(nombre) + '$'))).first
+    def volver_prev():
+        A.nav('inicio'); A.pg.locator('[data-a="home.open"]', has_text='Carrera popular').first.click(); A.pg.wait_for_selector('.kpis'); A.pg.wait_for_timeout(300)
+    def inactivo():
+        A.close_sheets()
+        tipos_global()
+        fila('Ambulancia SVB').locator('[data-a="cat.edit"]').click(); A.pg.wait_for_selector('form[data-f="cat.item"]')
+        A.sheet().locator('[name=activo]').uncheck(); A.sheet().locator('form[data-f="cat.item"] button.primary').click(); A.pg.wait_for_timeout(300)
+        A.a('cat.save'); A.pg.wait_for_timeout(600)
+        assert ev("return c.tiposRecursoGenerales().find(t => t.id === 'rt_svb').activo") is False
+        volver_prev(); A.nav('unidades'); A.a('u.new'); s = A.sheet(); s.locator('.tpl-grid').wait_for()
+        tiles = s.locator('[data-a="u.fromTpl"]').all_inner_texts()
+        assert not any('Soporte Vital Básico' in t for t in tiles), tiles
+        A.a('u.newBlank'); opts = A.sheet().locator('form[data-f="u.save"] [name=tipo] option').evaluate_all('os => os.map(o => o.value)')
+        assert 'rt_svb' not in opts and 'rt_sva' in opts, opts
+        A.pg.wait_for_timeout(500); A.shot('01-selector-sin-inactivos'); A.close_sheets()
+        # La unidad existente conserva su tipo; al editarla se ve como «desactivado» y sigue seleccionado
+        u = ev("return Object.values(c.state.units).find(x => x.ind === 'SVB-1').tipo"); assert u == 'rt_svb', u
+        A.open_unit('SVB-1'); A.a('u.edit'); sel = A.sheet().locator('[name=tipo] option:checked').inner_text()
+        assert 'Ambulancia SVB (desactivado)' in sel, sel
+        A.close_sheets()
+        return 'SVB desactivado: no aparece ni su plantilla ni el tipo al crear; SVB-1 lo conserva («desactivado» al editar)'
+    check('Activo/inactivo: los tipos desactivados no se ofrecen al crear unidades', inactivo)
+    def reasignar():
+        A.close_sheets()
+        tipos_global()
+        fila('Vehículo de intervención rápida').locator('[data-a="cat.del"]').click(); A.pg.wait_for_selector('.sheet-wrap [data-a="ctr.retirar"]')
+        txt = A.sheet().inner_text(); assert 'VIRES' in txt and 'No se puede eliminar' in txt, txt[:400]
+        A.pg.wait_for_timeout(500); A.shot('02-vista-previa-eliminar')
+        A.sheet().locator('#ctr_dest').select_option('rt_sva'); A.a('ctr.reasignar', A.sheet()); A.pg.wait_for_timeout(600)
+        r = ev("return [c.tiposRecursoGenerales().some(t => t.id === 'rt_vir'), c.plantillasUnidad().find(p => p.id === 'plt_vires').tipo, c.cfg.eliminados.tiposRecurso.includes('rt_vir')]")
+        assert r == [False, 'rt_sva', True], r
+        assert not fila('Vehículo de intervención rápida').count(), 'desaparece de la lista del editor'
+        A.close_sheets()
+        return 'vista previa con la plantilla VIRES → reasignada a SVA y tipo eliminado'
+    check('Eliminar con referencias: vista previa y reasignación', reasignar)
+    def sin_refs():
+        A.close_sheets()
+        tipos_global()
+        fila('Unidad de comunicaciones').locator('[data-a="cat.del"]').click(); A.pg.wait_for_selector('.sheet-wrap [data-a="ctr.eliminar"]')
+        txt = A.sheet().inner_text(); assert 'Conservan su propia copia' in txt and 'Unidades plantilla' not in txt, txt[:300]
+        A.a('ctr.eliminar', A.sheet()); A.pg.wait_for_timeout(600); A.close_sheets()
+        A.goto(); A.login('marta', 'secreto8')
+        assert not ev("return c.tiposRecursoGenerales().some(t => t.id === 'rt_com')"), 'no reaparece tras recargar'
+        A.nav('config'); A.a('ini.abrir'); s = A.sheet(); s.locator('[data-group="tipos"][value="rt_com"]').check(); A.pg.wait_for_timeout(500); A.shot('03-restaurar-iniciales')
+        s.locator('form[data-f="ini.restaurar"] button.primary').click(); A.pg.wait_for_timeout(600)
+        assert ev("return c.tiposRecursoGenerales().some(t => t.id === 'rt_com') && !c.cfg.eliminados.tiposRecurso.includes('rt_com')")
+        return 'configuración inicial sin referencias eliminada; no vuelve al recargar; se restaura a petición'
+    check('Eliminar una configuración inicial sin referencias y restaurarla', sin_refs)
+    def retirar():
+        A.close_sheets()
+        tipos_global()
+        fila('Vehículo de coordinación').locator('[data-a="cat.del"]').click(); A.pg.wait_for_selector('.sheet-wrap [data-a="ctr.retirar"]')
+        A.a('ctr.retirar', A.sheet()); A.pg.wait_for_timeout(600)
+        assert ev("return c.tiposRecursoGenerales().find(t => t.id === 'rt_coord').retirado") is True
+        det = A.sheet().locator('details.retirados'); det.locator('summary').click(); assert 'Vehículo de coordinación' in det.inner_text()
+        A.pg.wait_for_timeout(500); A.shot('04-retirados')
+        det.locator('[data-a="cat.restaurar"]').click(); A.pg.wait_for_timeout(600)
+        assert ev("return c.tiposRecursoGenerales().find(t => t.id === 'rt_coord').retirado") is None
+        A.close_sheets()
+        return 'retirado del uso (lista aparte) y restaurado'
+    check('Retirar del uso y restaurar', retirar)
+    def preventivo():
+        A.close_sheets()
+        volver_prev(); A.pg.evaluate("() => window.__UCO.go('ajustes')"); A.pg.wait_for_timeout(400)
+        A.pg.locator('[data-a="pcat.open"][data-cat="tiposRecurso"]').first.click(); A.pg.wait_for_selector('.sheet-wrap .cat-list')
+        fila('Ambulancia SVB').locator('[data-a="cat.del"]').click(); A.pg.wait_for_selector('.sheet-wrap [data-a="ctp.retirar"]')
+        txt = A.sheet().inner_text(); assert 'SVB-1' in txt and 'historial' in txt, txt[:300]
+        A.a('ctp.retirar', A.sheet()); A.pg.wait_for_timeout(600)
+        r = ev("return [c.state.prev.cat.tiposRecurso.find(t => t.id === 'rt_svb').retirado, Object.values(c.state.units).find(x => x.ind === 'SVB-1').tipo]")
+        assert r == [True, 'rt_svb'], r
+        A.a('cat.save'); A.pg.wait_for_timeout(500)
+        assert ev("return c.state.prev.cat.tiposRecurso.find(t => t.id === 'rt_svb').retirado") is True, 'guardar el editor no deshace la retirada'
+        return 'en el preventivo: el tipo usado se retira (no se borra del historial) y la unidad lo conserva'
+    check('Preventivo: un tipo usado se retira conservando el historial', preventivo)
+    def plantilla_usada():
+        A.close_sheets()
+        A.nav('unidades'); A.a('u.new'); s = A.sheet(); s.locator('[data-a="u.fromTpl"]', has_text='UPR').first.click(); A.pg.wait_for_timeout(300)
+        f = A.sheet().locator('form[data-f="u.tplSave"]'); f.locator('[name=numero]').fill('77'); f.locator('button.primary').click(); A.pg.wait_for_timeout(600)
+        A.a('prev.exit'); A.nav('config'); A.pg.locator('[data-a="nav"][data-v="uplantillas"]').first.click(); A.pg.wait_for_selector('[data-plantilla]')
+        A.pg.locator('[data-plantilla="plt_upr"] [data-a="upl.del"]').click(); A.pg.wait_for_timeout(400)
+        assert 'Se creó 1 unidad' in A.sheet().inner_text(), A.sheet().inner_text()[:300]
+        A.dlg_ok(); A.pg.wait_for_timeout(400)
+        assert not A.pg.locator('[data-plantilla="plt_upr"]').count()
+        assert ev("return Object.values(c.engine(c.summaries.find(s => s.nombre === 'Carrera popular').id).state.units).some(u => u.ind === 'UPR 77')")
+        return 'plantilla usada eliminada tras ver sus unidades; UPR 77 sigue en el preventivo'
+    check('Eliminar una unidad plantilla ya usada', plantilla_usada)
+    check('Sin errores de JavaScript (escenario 8)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+    A.ctx.close()
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1040,6 +1142,7 @@ def main():
             if only in ('', '5'): scenario_coordinacion(b)
             if only in ('', '6'): scenario_actualizaciones(b)
             if only in ('', '7'): scenario_incidentes(b)
+            if only in ('', '8'): scenario_recursos_140(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

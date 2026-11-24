@@ -80,3 +80,28 @@ test('los cambios hechos mientras se sincroniza no se pierden (regresión)', asy
   await B.central.syncNow();
   for (const n of nombres) assert.ok(B.plantillasUnidad().some(p => p.nombre === n), 'llega ' + n);
 });
+
+test('1.4.0: una configuración inicial eliminada desaparece en todos los dispositivos y no vuelve', async () => {
+  await A.eliminarTipoRecurso('rt_sp_papa', { modo: 'conPlantillas' });
+  await A.central.syncNow(); await B.central.syncNow();
+  assert.ok(!B.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'el tipo desaparece en B');
+  assert.ok(!B.plantillasUnidad().some(p => p.id === 'plt_sp_papa'), 'y su plantilla');
+  assert.ok(B.cfg.eliminados.tiposRecurso.includes('rt_sp_papa') && B.cfg.eliminados.plantillasUnidad.includes('plt_sp_papa'), 'B lo anota como eliminado');
+  // Un dispositivo nuevo (con los valores iniciales) no lo recupera ni lo vuelve a publicar
+  const N = await dispositivo();
+  await N.accederCentral('coord', 'clave-coord-1');
+  assert.ok(!N.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'tampoco en un dispositivo nuevo');
+  assert.ok(N.cfg.eliminados.tiposRecurso.includes('rt_sp_papa'));
+  // Si algo local lo reintroduce (p. ej. una migración de una versión antigua), al iniciar sesión se vuelve a quitar
+  const cfg = structuredClone(B.cfg); cfg.catalogos.tiposRecurso.push({ id: 'rt_sp_papa', nombre: 'PAPA · Unidad de psiquiatría' }); cfg.eliminados.tiposRecurso = [];
+  await B.repo.saveCfg(cfg, 'prueba'); B.cfg = await B.repo.getCfg();
+  await B._afterLogin();
+  assert.ok(!B.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'la baja del espacio se aplica de nuevo');
+  await B.central.syncNow(); await A.central.syncNow();
+  assert.ok(!A.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'nadie lo republica');
+  // Restaurarlo es una decisión explícita que también llega a todos
+  await A.restaurarIniciales({ tiposRecurso: ['rt_sp_papa'], plantillasUnidad: ['plt_sp_papa'] });
+  await A.central.syncNow(); await B.central.syncNow();
+  assert.ok(B.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa') && B.plantillasUnidad().some(p => p.id === 'plt_sp_papa'));
+  assert.ok(!B.cfg.eliminados.tiposRecurso.includes('rt_sp_papa'));
+});

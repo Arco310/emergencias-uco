@@ -363,3 +363,9 @@ dl.kv dd .chip{white-space:normal}
 .inc-cod{min-width:3.6rem;font-variant-numeric:tabular-nums;font-weight:700}
 .inc-res{display:flex;flex-direction:column;gap:.35rem}
 .inc-campo{min-height:48px;font-weight:600}
+/* 1.4.0 · vista previa antes de eliminar configuraciones de recursos */
+.ref-block{margin:.4rem 0 .8rem}.ref-block h4{margin:.2rem 0;font-size:.95rem}
+.ref-list{margin:.2rem 0 .3rem;padding-left:1.2rem;max-height:12rem;overflow:auto}.ref-list li{margin:.1rem 0}
+.opt{border:1px solid var(--line,#ddd);border-radius:var(--r-s);padding:.6rem .7rem;margin:.5rem 0}.opt label{display:block;font-weight:600;margin-bottom:.3rem}.opt select{min-height:44px;flex:1 1 12rem}
+.opt .btn{min-height:44px}
+details.retirados{margin-top:1rem}details.retirados summary{cursor:pointer;padding:.5rem 0;color:var(--muted);min-height:44px;display:flex;align-items:center}

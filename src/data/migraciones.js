@@ -16,11 +16,13 @@ import { tiposAvisoIncidentes, incidentesQueFaltan } from '../core/incidentes.js
 
 export const ESQUEMA_DATOS = 3;
 
-/** Añade a una lista los elementos que faltan (por identificador), sin tocar los que ya hay */
-function anadirQueFaltan(lista, extra) {
-  const ids = new Set((lista || []).map(x => x.id));
+/** Añade a una lista los elementos que faltan (por identificador), sin tocar los que ya hay ni volver a
+ *  añadir los que se eliminaron a propósito (configuración «eliminados») */
+function anadirQueFaltan(lista, extra, eliminados = []) {
+  const ids = new Set([...(lista || []).map(x => x.id), ...(eliminados || [])]);
   return [...(lista || []), ...extra.filter(x => !ids.has(x.id)).map(clone)];
 }
+const eliminadosDe = (cfg, clase) => (cfg.eliminados && cfg.eliminados[clase]) || [];
 
 export const MIGRACIONES = [
   {
@@ -44,8 +46,8 @@ export const MIGRACIONES = [
     async run({ repo }) {
       const cfg = await repo.getCfg();
       const nueva = clone(cfg);
-      nueva.catalogos.tiposRecurso = anadirQueFaltan(nueva.catalogos.tiposRecurso, TIPOS_RECURSO_SAMUR);
-      nueva.plantillasUnidad = anadirQueFaltan(nueva.plantillasUnidad, PLANTILLAS_SAMUR);
+      nueva.catalogos.tiposRecurso = anadirQueFaltan(nueva.catalogos.tiposRecurso, TIPOS_RECURSO_SAMUR, eliminadosDe(nueva, 'tiposRecurso'));
+      nueva.plantillasUnidad = anadirQueFaltan(nueva.plantillasUnidad, PLANTILLAS_SAMUR, eliminadosDe(nueva, 'plantillasUnidad'));
       nueva.catalogos.tiposAviso = anadirQueFaltan(nueva.catalogos.tiposAviso, tiposAvisoIncidentes());
       if (!same(cfg, nueva)) await repo.saveCfg(nueva, 'Migración de datos (esquema 3): tipos y unidades plantilla SAMUR-PC y códigos de incidente');
       // Plantillas de preventivo: también llevan los códigos, para los preventivos que se creen con ellas
