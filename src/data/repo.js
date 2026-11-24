@@ -3,7 +3,7 @@
 import { uid, now, b64, unb64, stableStringify, AppError, clone, base32, randomBytes } from '../core/util.js';
 import * as K from '../core/crypto.js';
 import { defaultGlobalConfig, SCHEMA_VERSION, APP_VERSION } from '../core/defaults.js';
-import { defaultRoles, permsOf, PERM_KEYS } from '../core/perms.js';
+import { defaultRoles, permsOf, PERM_KEYS, permisosEfectivos } from '../core/perms.js';
 import { ESQUEMA_DATOS } from './migraciones.js';
 
 const LOCK_AFTER = 5;
@@ -56,7 +56,7 @@ export class Repo {
     await this.audit('Configuración inicial', 'Sistema', '', 'Administrador ' + user.usuario + ' creado');
     return { recovery, user };
   }
-  async listUsersPublic() { return (await this.db.getAll('users')).map(u => ({ id: u.id, usuario: u.usuario, nombre: u.nombre, activo: u.activo })); }
+  async listUsersPublic() { return (await this.db.getAll('users')).map(u => ({ id: u.id, usuario: u.usuario, nombre: u.nombre, activo: u.activo, pin: !!u.pinWrap })); }
   /** Errores con código: «no_existe» y «sin_clave_local» permiten intentarlo con la cuenta del servidor central */
   async login(usuario, password) {
     const users = await this.db.getAll('users');
@@ -80,10 +80,58 @@ export class Repo {
   }
   async _startSession(u) {
     const roles = await this.getRoles();
-    const rol = roles.find(r => r.id === u.rol) || roles.find(r => r.id === 'rol_consulta');
-    this.session = { user: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, rolNombre: rol ? rol.nombre : '', perms: permsOf(roles, u.rol) }, inicio: now() };
+    const perfilId = u.perfil !== undefined ? u.perfil : u.rol;
+    const rol = roles.find(r => r.id === perfilId);
+    // Permisos efectivos: perfil + ajustes individuales (1.4.0); los usuarios anteriores solo tienen rol
+    const datos = { rol: u.rol, perfil: perfilId, ajustes: u.ajustes || null, alcance: u.alcance || null, estado: u.estado || (u.activo === false ? 'desactivado' : 'activo') };
+    this.session = { user: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: perfilId, rolNombre: rol ? rol.nombre : (perfilId ? '' : 'Sin perfil'), metodo: u.metodo || 'password', datos, perms: permisosEfectivos({ ...datos, id: u.id }, roles) }, inicio: now() };
     return this.session;
   }
+  /** Permisos del usuario de la sesión dentro de un preventivo (alcance por preventivo) */
+  async permisosEn(pid) {
+    if (!this.session) return new Set();
+    const roles = await this.getRoles();
+    return permisosEfectivos({ ...this.session.user.datos, id: this.session.user.id }, roles, pid);
+  }
+
+  // ---------------- acceso con PIN (cuentas sin contraseña, 1.4.0) ----------------
+  /** Guarda el acceso con PIN en este dispositivo: la clave de datos envuelta con el PIN y la credencial del dispositivo */
+  async establecerPin(userId, pin, cred) {
+    if (!/^\d{6,12}$/.test(String(pin || ''))) throw new AppError('El PIN debe tener entre 6 y 12 cifras');
+    const u = await this.db.get('users', userId);
+    if (!u || !this.dek) throw new AppError('Sesión cerrada');
+    u.pinWrap = await K.wrapDek(this.dek, 'pin:' + pin); u.pinCred = await this.enc({ cred }); u.pinFallos = 0; u.metodo = 'pin';
+    await this.db.put('users', u);
+    await this.audit('Acceso con PIN configurado', 'Usuario ' + u.usuario, '', 'PIN válido solo en este dispositivo');
+  }
+  /** Entra con PIN. Tras 5 PIN erróneos seguidos se borra el acceso con PIN en este dispositivo (los datos se conservan). */
+  async loginPin(usuario, pin) {
+    const u = (await this.db.getAll('users')).find(x => x.usuario === normUser(usuario));
+    if (!u || !u.activo) throw new AppError('Usuario o PIN incorrectos');
+    if (!u.pinWrap) throw new AppError('Este usuario no tiene PIN en este dispositivo: actívalo con el código que te dio el administrador', 'sin_pin');
+    try { this.dek = await K.unwrapDek(u.pinWrap, 'pin:' + pin); }
+    catch {
+      u.pinFallos = (u.pinFallos || 0) + 1;
+      if (u.pinFallos >= LOCK_AFTER) {
+        delete u.pinWrap; delete u.pinCred; u.pinFallos = 0; await this.db.put('users', u);
+        throw new AppError('Demasiados PIN incorrectos: se ha retirado el acceso con PIN en este dispositivo. Pide un código nuevo al administrador.', 'pin_bloqueado');
+      }
+      await this.db.put('users', u);
+      throw new AppError('PIN incorrecto (' + (LOCK_AFTER - u.pinFallos) + ' intento' + (LOCK_AFTER - u.pinFallos === 1 ? '' : 's') + ' más antes de bloquearlo)', 'credenciales');
+    }
+    u.pinFallos = 0; u.ultimoAcceso = now(); await this.db.put('users', u);
+    await this._startSession(u);
+    await this.audit('Inicio de sesión', 'Usuario ' + u.usuario, '', 'Con PIN');
+    return { cred: u.pinCred ? (await this.dec(u.pinCred)).cred : null };
+  }
+
+  // ---------------- sesiones del servidor central (modo servidor) ----------------
+  async sesionesCentral() { return this.dek ? (await this.getDoc('central:sesiones', {})) : {}; }
+  async guardarSesionCentral(userId, token) { const s = await this.sesionesCentral(); if (token) s[userId] = { token, t: now() }; else delete s[userId]; await this.putDoc('central:sesiones', s); return s; }
+  /** Operaciones rechazadas por el servidor: se quitan del dispositivo y quedan anotadas para consultarlas */
+  async descartarOps(ids) { for (const id of ids) await this.db.del('ops', id); }
+  async anotarRechazos(lista) { const r = (await this.getDoc('rechazos', [])).concat(lista).slice(-200); await this.putDoc('rechazos', r); return r; }
+  async rechazos() { return this.getDoc('rechazos', []); }
   async refreshSession() { if (!this.session) return null; const u = await this.db.get('users', this.session.user.id); return u ? this._startSession(u) : null; }
   async verifyPassword(password) {
     const u = await this.db.get('users', this.session.user.id);
@@ -136,6 +184,9 @@ export class Repo {
     for (const x of users) if (x.usuario === normUser(p.usuario) && x.id !== p.id) { await this.db.del('users', x.id); sustituido = x; }
     const cur = users.find(x => x.id === p.id);
     const u = { fallos: 0, bloqueoHasta: 0, ...(cur || {}), id: p.id, usuario: normUser(p.usuario), nombre: p.nombre, rol: p.rol, activo: !borrado && p.activo !== false, creado: p.creado || now(), cred: { v: (p.cred && p.cred.v) || 'v0', central: !!(p.cred && p.cred.central) } };
+    // Datos del directorio del servidor (1.4.0): estado, método de acceso, perfil, ajustes y alcance
+    for (const k of ['estado', 'metodo', 'perfil', 'ajustes', 'alcance']) if (k in p) u[k] = p[k];
+    if (borrado) u.estado = 'desactivado';
     if (u.wrap && (u.wrapV || 'v0') !== credV(u)) { delete u.wrap; delete u.wrapV; } // contraseña cambiada en otro dispositivo
     await this.db.put('users', u);
     return sustituido;

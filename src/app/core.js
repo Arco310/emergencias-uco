@@ -14,6 +14,7 @@ import { counts } from '../core/engine.js';
 import { migrarDatos } from '../data/migraciones.js';
 import { posterior } from '../core/versiones.js';
 import { tiposNoDisponibles, tiposParaNuevaUnidad, plantillasDisponibles, tipoActivo, referenciasTipoEnConfig, explicacionBloqueo } from '../core/recursos.js';
+import { permisosEfectivos } from '../core/perms.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -24,6 +25,8 @@ export class AppCore {
     this.repo = new Repo(storage);
     this.engines = new Map(); this.metas = new Map(); this.cur = null; this.listeners = new Set(); this.dirty = false;
     this.bloqueoSync = null; this.versionRemota = null; this.migracion = null; this._actualizada = null;
+    // Modo servidor (1.4.0): sesiones del servidor central por usuario de este dispositivo y perfiles en memoria
+    this._sesiones = {}; this._sesionPendiente = null; this.rolesCache = null; this._permsVer = 0; this._pc = null;
     this.sync = new SyncManager({
       repo: this.repo,
       bloqueo: server => this._bloqueo(server),
@@ -32,6 +35,10 @@ export class AppCore {
       getPlano: pid => { const e = this.engines.get(pid); return e && e.state.prev ? e.state.prev.plano : null; },
       onStatus: (pid, s) => this.emit('sync', { pid, s }),
       onBlob: pid => this.emit('change', { pid }),
+      modoServidor: (pid, meta) => this._modoServidorPrev(pid, meta),
+      onRechazos: (pid, lista) => this._rechazos(pid, lista),
+      onSesion: msg => this._sinSesion(msg),
+      onCuenta: msg => this._cuentaNoActiva(msg),
     });
     this.central = new CentralSync({
       repo: this.repo, version: APP_VERSION, pruebas,
@@ -40,6 +47,10 @@ export class AppCore {
       onPrevs: entries => this._centralPrevs(entries),
       onConfig: ids => this._centralConfig(ids),
       onStatus: st => this.emit('central', { st }),
+      sesion: () => this._sesionToken(),
+      onSesion: msg => this._sinSesion(msg),
+      onCuenta: msg => this._cuentaNoActiva(msg),
+      onRechazoConfig: (id, msg) => this.emit('mensaje', { tipo: 'error', texto: 'El servidor ha rechazado un cambio de la configuración general: ' + msg }),
     });
   }
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
@@ -62,7 +73,138 @@ export class AppCore {
   /** Dispositivo actual (siempre el del repositorio: nombre y código al día) */
   get device() { return this.repo.device; }
   get user() { return this.repo.session ? this.repo.session.user : null; }
-  can(p) { return !!(this.user && this.user.perms.has(p)); }
+  /** Permisos efectivos del usuario: en general o, con un preventivo abierto, los de ese preventivo (alcance) */
+  permisos(pid = this.cur) {
+    const u = this.user; if (!u) return new Set();
+    if (!pid || !this.rolesCache || !u.datos) return u.perms;
+    const k = pid + '|' + this._permsVer + '|' + u.id;
+    if (!this._pc || this._pc.k !== k) this._pc = { k, set: permisosEfectivos({ ...u.datos, id: u.id }, this.rolesCache, pid) };
+    return this._pc.set;
+  }
+  can(p) { return this.permisos().has(p); }
+  async _refrescarPermisos() { this.rolesCache = await this.repo.getRoles(); this._permsVer++; this._pc = null; }
+
+  // ------------- modo servidor (1.4.0): sesiones, rechazos y cuentas -------------
+  modoServidor() { return !!(this.centralMeta && this.centralMeta.modo === 'servidor'); }
+  _sesionToken(userId = this.user && this.user.id) { const s = userId && this._sesiones[userId]; return (s && s.token) || this._sesionPendiente || null; }
+  async _guardarSesion(userId, token) { this._sesiones = await this.repo.guardarSesionCentral(userId, token); this._avisoSesion = false; }
+  _modoServidorPrev(pid, meta) {
+    if (!this.modoServidor() || !meta || meta.central !== this.centralMeta.org) return null;
+    return { org: this.centralMeta.org, sesion: autor => this._sesionToken(autor || (this.user && this.user.id)) };
+  }
+  /** Operaciones rechazadas por el servidor: el estado local vuelve a ser el del servidor y se avisa */
+  async _rechazos(pid, lista) {
+    await this.repo.anotarRechazos(lista.map(r => ({ pid, id: r.id, error: r.error, codigo: r.codigo || '', k: r.op ? r.op.k : '', autor: r.op && r.op.u ? r.op.u.n : '', t: now() })));
+    const e = this.engines.get(pid);
+    if (e) { e.load(await this.repo.loadOps(pid)); await this._summary(pid); this.emit('change', { pid }); }
+    for (const r of lista) await this.repo.audit('Operación rechazada por el servidor', (r.op ? r.op.k + ' · ' : '') + pid, '', r.error);
+    this.emit('mensaje', { tipo: 'error', texto: (lista.length === 1 ? 'El servidor ha rechazado un cambio: ' : 'El servidor ha rechazado ' + lista.length + ' cambios: ') + lista[0].error, duracion: 12000 });
+  }
+  _sinSesion(msg) { if (this._avisoSesion) return; this._avisoSesion = true; this.emit('mensaje', { tipo: 'warn', texto: (msg || 'Tu sesión del servidor central ha caducado') + '. Tus cambios se guardan en este dispositivo y se enviarán al volver a entrar.', duracion: 10000 }); this.emit('central', {}); }
+  async _cuentaNoActiva(msg) {
+    if (!this.user) return;
+    const u = await this.repo.db.get('users', this.user.id);
+    if (u) { u.activo = false; u.estado = /suspend/i.test(msg) ? 'suspendido' : 'desactivado'; await this.repo.db.put('users', u); }
+    this.emit('mensaje', { tipo: 'error', texto: msg, duracion: 12000 });
+    await this.logout();
+  }
+  /** Nueva sesión del servidor con la contraseña (al entrar con conexión o cuando la sesión caducó) */
+  async renovarSesion(password) {
+    if (!this.modoServidor() || !this.user) return;
+    const acc = await this._acceder(this.centralMeta.server, this.centralMeta.org, this.user.usuario, password);
+    if (acc.sesion) await this._guardarSesion(this.user.id, acc.sesion);
+    this.central.kick(); if (this.cur) this.sync.kick(this.cur);
+  }
+  /** Nueva sesión con la credencial del dispositivo (cuentas con PIN) */
+  async _renovarSesionPin(cred) {
+    if (!this.modoServidor() || !this.user || !cred) return;
+    const acc = await this.central.accederDispositivo({ server: this.centralMeta.server, org: this.centralMeta.org, usuario: this.user.usuario, dev: this.device.id, cred });
+    await this._guardarSesion(this.user.id, acc.sesion);
+    this.central.kick(); if (this.cur) this.sync.kick(this.cur);
+  }
+  /** Entrada con PIN (cuentas sin contraseña). Funciona sin conexión; con conexión renueva la sesión si hace falta. */
+  async loginPin(usuario, pin) {
+    const { cred } = await this.repo.loginPin(usuario, pin);
+    await this._afterLogin();
+    if (this.modoServidor() && !this._sesionToken()) this._renovarSesionPin(cred).catch(e => { if (e.status === 403) this._cuentaNoActiva(e.message); });
+  }
+  /** Datos del servidor central para el inicio de sesión de un dispositivo (ya vinculado o nuevo) */
+  async _destinoCentral() {
+    const ptr = await this.repo.centralPointer();
+    if (ptr) return { server: ptr.server, org: ptr.org, vinculado: true };
+    const c = this.centralRemoto && this.centralRemoto.org ? this.centralRemoto : await this.consultarCentral();
+    if (!c || !c.org) throw new AppError('Sin conexión con el servidor central. Comprueba la conexión a Internet e inténtalo de nuevo.');
+    return { server: c.server, org: c.org, vinculado: false };
+  }
+  /** Solicitud de cuenta desde la pantalla de inicio de sesión: queda pendiente de aprobación */
+  async registrarse({ usuario, nombre, password }) {
+    if (String(password || '').length < 8) throw new AppError('La contraseña debe tener al menos 8 caracteres');
+    const d = await this._destinoCentral();
+    try { return await this.central.registrar({ server: d.server, org: d.org, usuario, nombre, password }); }
+    catch (e) { if (e.code === 'red') throw new AppError('Sin conexión con el servidor central: el registro necesita conexión'); throw e; }
+  }
+  /** ¿Qué pide un código de activación? (PIN o contraseña nueva). No lo consume. */
+  async consultarCodigo(usuario, codigo) {
+    const d = await this._destinoCentral();
+    return this.central._req(d.server, '/org/' + encodeURIComponent(d.org) + '/activacion/consultar', { method: 'POST', body: { usuario, codigo } });
+  }
+  /** Primer acceso con el código de un solo uso del administrador: fija el PIN (o la contraseña) en este dispositivo */
+  async activarCuenta({ usuario, codigo, pin = null, password = null, dispositivo = '' }) {
+    const d = await this._destinoCentral();
+    if (pin != null && !/^\d{6,12}$/.test(String(pin))) throw new AppError('El PIN debe tener entre 6 y 12 cifras');
+    if (password != null && String(password).length < 8) throw new AppError('La contraseña debe tener al menos 8 caracteres');
+    const cred = pin != null ? Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('') : null;
+    if (dispositivo) await this.repo.saveDevice({ nombre: dispositivo });
+    const acc = await this.central.activar({ server: d.server, org: d.org, usuario, codigo, dev: this.device.id, devNombre: dispositivo || this.device.nombre || '', cred, password });
+    this._sesionPendiente = acc.sesion;
+    try {
+      if (d.vinculado) await this.repo.unlockConSecreto(acc.secret);
+      else { await this.repo.setupCentral(acc.secret); await this._vincular(acc); }
+      this.centralMeta = await this.central.meta();
+      await this.repo.aplicarPerfil(acc.usuario);
+      await this.central.syncNow();
+      const u = await this.repo.userByName(usuario);
+      if (!u || !u.activo) throw new AppError('Tu usuario no está activo en el servidor central');
+      if (pin != null) { await this.repo._startSession(u); await this.repo.establecerPin(u.id, pin, cred); await this.repo._startSession(await this.repo.db.get('users', u.id)); }
+      else await this.repo.establecerClaveLocal(u.id, password);
+      await this._guardarSesion(u.id, acc.sesion);
+    } finally { this._sesionPendiente = null; }
+    await this._afterLogin();
+  }
+  // Administración del espacio en modo servidor (las comprobaciones las hace el servidor)
+  async usuariosServidor() { return this.central.admin('usuarios'); }
+  async crearUsuarioServidor({ usuario, nombre, metodo = 'password', password = null, perfil = null, ajustes = null, alcance = null }) {
+    const body = { usuario, nombre, metodo, perfil, ajustes, alcance };
+    if (metodo === 'password' && password) {
+      if (String(password).length < 8) throw new AppError('La contraseña debe tener al menos 8 caracteres');
+      const { cuentaDerivar, CUENTA_ITER } = await import('../core/crypto.js');
+      const salt = crypto.getRandomValues(new Uint8Array(16)); const iter = this.central.cuentaIter || CUENTA_ITER;
+      body.pw = { salt: b64(salt), iter, verif: (await cuentaDerivar(password, salt, iter)).verif };
+    }
+    const r = await this.central.admin('usuarios', { method: 'POST', body });
+    this.central.kick(); return r;
+  }
+  async cambiarUsuarioServidor(id, cambios) { const r = await this.central.admin('usuarios/' + encodeURIComponent(id), { method: 'PATCH', body: cambios }); this.central.kick(); return r; }
+  async codigoUsuarioServidor(id) { return this.central.admin('usuarios/' + encodeURIComponent(id) + '/codigo', { method: 'POST', body: {} }); }
+  async revocarUsuarioServidor(id, { dev = null, dispositivos = false } = {}) { return this.central.admin('usuarios/' + encodeURIComponent(id) + '/revocar', { method: 'POST', body: { dev, dispositivos } }); }
+  async perfilesServidor() { return (await this.central.admin('perfiles')).perfiles; }
+  async guardarPerfilesServidor(perfiles) { const r = await this.central.admin('perfiles', { method: 'PUT', body: { perfiles } }); this.central.kick(); return r.perfiles; }
+  async ajustesServidor(cambios = null) { return (await this.central.admin('ajustes', cambios ? { method: 'PUT', body: cambios } : {})).ajustes; }
+  async auditoriaServidor({ usuario = '', limite = 500 } = {}) { return (await this.central.admin('auditoria?usuario=' + encodeURIComponent(usuario) + '&limite=' + limite)).registros; }
+  /** Migración del espacio central 1.3.0 al modo servidor (código de administración del servidor + contraseña propia) */
+  async migrarAlModoServidor({ codigo, password }) {
+    this._needCentral();
+    if (!this.centralMeta) throw new AppError('Este dispositivo no está conectado al servidor central');
+    if (this.modoServidor()) throw new AppError('El espacio central ya está en modo servidor');
+    if (!(await this.repo.verifyPassword(password))) throw new AppError('Tu contraseña no es correcta');
+    await this.central.syncNow(); // lo pendiente sale antes con el formato anterior
+    const r = await this.central.migrar({ codigo: String(codigo || '').trim(), usuario: this.user.usuario });
+    this.centralMeta = await this.central.meta();
+    await this.renovarSesion(password);
+    await this.repo.audit('Espacio central migrado al modo servidor', this.centralMeta.server, 'Cifrado de extremo a extremo', r.usuarios + ' usuarios, ' + r.preventivos + ' preventivos');
+    this.central.kick(); this.emit('central', {});
+    return r;
+  }
   async setup(data) { const r = await this.repo.setup(data); await this._afterLogin(); return r; }
   async recover(code, u, p) { await this.repo.recover(code, u, p); await this._afterLogin(); }
   async _afterLogin() {
@@ -77,6 +219,7 @@ export class AppCore {
     clearInterval(this._bk);
     this._bk = setInterval(() => this.autoBackup(), Math.max(1, Number(this.cfg.copiaAutoMin) || 10) * 60000);
     this.centralMeta = await this.central.meta();
+    this._sesiones = await this.repo.sesionesCentral(); await this._refrescarPermisos();
     // Bajas del espacio central que una migración local hubiera vuelto a añadir: se aplican de nuevo
     if (this.centralMeta) await this._centralConfig([]).catch(e => console.warn('Configuración central', e));
     this.repo.minPassword = this.centralMeta || this.centralRemoto ? 8 : 6;
@@ -88,6 +231,7 @@ export class AppCore {
     await this.autoBackup();
     this.sync.stopAll(); this.central.stop(); clearInterval(this._bk);
     this.engines.clear(); this.metas.clear(); this.cur = null;
+    this._sesiones = {}; this.rolesCache = null; this._pc = null; this._avisoSesion = false;
     await this.repo.logout(); this.emit('session', {});
   }
   async autoBackup(force = false) {
@@ -362,7 +506,8 @@ export class AppCore {
   meta(pid = this.cur) { return this.metas.get(pid) || {}; }
   isShared(pid = this.cur) { return this.meta(pid).modalidad === 'compartida'; }
   ctxFor(pid, engine) {
-    return { engine: engine || this.engine(pid), user: this.user, device: this.device, hlc: this.hlc, pid, mode: this.isShared(pid) ? 'compartida' : 'independiente', noDisponibles: tiposNoDisponibles(this.cfg) };
+    const user = this.user ? { ...this.user, perms: this.permisos(pid) } : this.user;
+    return { engine: engine || this.engine(pid), user, device: this.device, hlc: this.hlc, pid, mode: this.isShared(pid) ? 'compartida' : 'independiente', noDisponibles: tiposNoDisponibles(this.cfg) };
   }
   async loadEngine(pid) {
     const ops = await this.repo.loadOps(pid);
@@ -512,6 +657,8 @@ export class AppCore {
   async _acceder(server, org, usuario, password) {
     try { return await this.central.acceder({ server, org, usuario, password }); }
     catch (e) {
+      // Cuenta que existe pero no está activa (pendiente, suspendida…): el servidor lo explica tras comprobar la contraseña
+      if (e.status === 403 && e.body && String(e.body.codigo || '').startsWith('cuenta_')) throw new AppError(e.message, 'cuenta');
       if (e.status === 403) throw new AppError('Usuario o contraseña incorrectos', 'credenciales');
       if (e.status === 429) throw new AppError('Demasiados intentos fallidos con este usuario: espera 15 minutos');
       if (e.code === 'red') throw new AppError('Sin conexión con el servidor central: el primer acceso de un usuario en un dispositivo necesita conexión', 'red');
@@ -519,8 +666,8 @@ export class AppCore {
     }
   }
   /** Vincula el dispositivo al espacio: secreto cifrado, puntero no secreto y clave local envuelta */
-  async _vincular({ server, org, secret, nombre, pruebas }) {
-    this.centralMeta = await this.central.unirConSecreto({ server, org, secret, nombre, pruebas });
+  async _vincular({ server, org, secret, nombre, pruebas, sesion = null }) {
+    this.centralMeta = await this.central.unirConSecreto({ server, org, secret, nombre, pruebas, sesion });
     await this.repo.setOrgWrap(secret);
     await this.repo.setCentralPointer({ server: this.centralMeta.server, org, pruebas: !!this.centralMeta.pruebas, nombre: this.centralMeta.nombre });
     this.repo.minPassword = 8;
@@ -536,13 +683,18 @@ export class AppCore {
     if (!c) throw new AppError('Sin conexión con el servidor central. Comprueba la conexión a Internet e inténtalo de nuevo.');
     if (!c.org) throw new AppError('El servidor central aún no está activado: un administrador debe activarlo una vez');
     const acc = await this._acceder(c.server, c.org, usuario, password);
-    await this.repo.setupCentral(acc.secret);
-    await this._vincular(acc);
-    await this._descargarCentral();
-    const u = await this.repo.userByName(usuario);
-    if (!u || !u.activo) throw new AppError('Tu usuario no está activo en el servidor central');
-    if (dispositivo || this.device.nombre === 'Dispositivo') await this.repo.saveDevice({ nombre: dispositivo || 'Dispositivo de ' + u.nombre });
-    await this.repo.establecerClaveLocal(u.id, password);
+    this._sesionPendiente = acc.sesion || null;
+    try {
+      await this.repo.setupCentral(acc.secret);
+      await this._vincular(acc);
+      if (acc.usuario) await this.repo.aplicarPerfil(acc.usuario);
+      await this._descargarCentral();
+      const u = await this.repo.userByName(usuario);
+      if (!u || !u.activo) throw new AppError('Tu usuario no está activo en el servidor central');
+      if (dispositivo || this.device.nombre === 'Dispositivo') await this.repo.saveDevice({ nombre: dispositivo || 'Dispositivo de ' + u.nombre });
+      await this.repo.establecerClaveLocal(u.id, password);
+      if (acc.sesion) await this._guardarSesion(u.id, acc.sesion);
+    } finally { this._sesionPendiente = null; }
     await this._afterLogin();
   }
   /** Inicio de sesión. Sin clave local para ese usuario (primer acceso aquí, usuario nuevo o contraseña
@@ -555,17 +707,25 @@ export class AppCore {
       let acc;
       try { acc = await this._acceder(ptr.server, ptr.org, u, p); }
       catch (err) { if (err.code === 'credenciales' || (err.code === 'red' && e.code === 'credenciales')) throw e; throw err; }
-      await this.repo.unlockConSecreto(acc.secret);
-      this.centralMeta = await this.central.meta();
-      if (this.centralMeta) await this.central.syncNow(); // perfiles al día (usuario nuevo o contraseña cambiada)
-      const usr = await this.repo.userByName(u);
-      if (!usr || !usr.activo) { this.repo.dek = null; throw new AppError('Usuario o contraseña incorrectos'); }
-      await this.repo.establecerClaveLocal(usr.id, p);
+      this._sesionPendiente = acc.sesion || null;
+      try {
+        await this.repo.unlockConSecreto(acc.secret);
+        this.centralMeta = await this.central.meta();
+        if (acc.modo === 'servidor' && this.centralMeta && this.centralMeta.modo !== 'servidor') { this.centralMeta.modo = 'servidor'; await this.repo.putDoc('central', this.centralMeta); }
+        if (acc.usuario) await this.repo.aplicarPerfil(acc.usuario);
+        if (this.centralMeta) await this.central.syncNow(); // perfiles al día (usuario nuevo o contraseña cambiada)
+        const usr = await this.repo.userByName(u);
+        if (!usr || !usr.activo) { this.repo.dek = null; throw new AppError('Usuario o contraseña incorrectos'); }
+        await this.repo.establecerClaveLocal(usr.id, p);
+        if (acc.sesion) await this._guardarSesion(usr.id, acc.sesion);
+      } finally { this._sesionPendiente = null; }
       await this._afterLogin();
       return;
     }
     await this._afterLogin();
-    this._provisionarCuenta(p).catch(err => console.warn('Cuenta central no publicada', err));
+    // Modo servidor: sesión del servidor si este dispositivo aún no la tiene (sin conexión, se pedirá más tarde)
+    if (this.modoServidor()) { if (!this._sesionToken()) this.renovarSesion(p).catch(err => { if (err.status === 403) this._cuentaNoActiva(err.message); }); }
+    else this._provisionarCuenta(p).catch(err => console.warn('Cuenta central no publicada', err));
   }
   /** Publica la cuenta del usuario que acaba de entrar si aún no lo estaba (usuarios anteriores al servidor central) */
   async _provisionarCuenta(password) {
@@ -577,21 +737,30 @@ export class AppCore {
     await this.central.guardarConfig('usr:' + u.id, this.repo.perfil(u2));
   }
   /** Primera vez: activa el servidor central (una sola vez, con el código de administración del servidor) */
-  async centralActivar({ codigo, password, nombre = 'Gestor de Emergencias UCO' }) {
+  async centralActivar({ codigo, password, nombre = 'Gestor de Emergencias UCO', modo = 'servidor' }) {
     this._needCentral();
     if (!(await this.repo.verifyPassword(password))) throw new AppError('Tu contraseña no es correcta');
     if (String(password).length < 8) throw new AppError('Para activar el servidor central tu contraseña debe tener al menos 8 caracteres: cámbiala antes en Sistema → Mi cuenta');
     const c = await this.consultarCentral();
     if (!c) throw new AppError('Sin conexión con el servidor central');
     if (c.org) throw new AppError('El servidor central ya está activado: conecta este dispositivo con tu usuario y contraseña');
-    const m = await this.central.crear({ server: c.server, nombre, codigo, principal: true });
+    // 1.4.0: el espacio nace en modo servidor (el servidor valida usuarios y permisos). Un servidor anterior
+    // no lo admite y sigue como hasta ahora (modo cifrado de extremo a extremo).
+    const admin = modo === 'servidor' ? { id: this.user.id, usuario: this.user.usuario, nombre: this.user.nombre, password } : null;
+    const m = await this.central.crear({ server: c.server, nombre, codigo, principal: true, admin, dev: this.device.id });
     await this.repo.setOrgWrap(m.secretBytes);
     await this.repo.setCentralPointer({ server: m.server, org: m.org, pruebas: m.pruebas, nombre: m.nombre });
     this.centralMeta = await this.central.meta(); this.repo.minPassword = 8;
-    await this._publicarDirectorio();
-    await this.central.guardarCuenta(this.user.usuario, password);
-    const u = await this.repo.marcarCuentaPublicada(this.user.id);
-    await this.central.guardarConfig('usr:' + u.id, this.repo.perfil(u));
+    if (this.modoServidor()) {
+      await this._guardarSesion(this.user.id, m.sesion);
+      const u = await this.repo.marcarCuentaPublicada(this.user.id);
+      u.perfil = 'rol_admin'; u.estado = 'activo'; u.metodo = 'password'; await this.repo.db.put('users', u);
+    } else {
+      await this._publicarDirectorio();
+      await this.central.guardarCuenta(this.user.usuario, password);
+      const u = await this.repo.marcarCuentaPublicada(this.user.id);
+      await this.central.guardarConfig('usr:' + u.id, this.repo.perfil(u));
+    }
     const n = await this._centralRegistrarLocales();
     await this.repo.audit('Servidor central activado', 'Espacio central creado en ' + m.server, '', (m.nombre || '') + (n ? ' · ' + n + ' preventivo(s) compartido(s) publicados' : ''));
     this.central.start(); await this.central.syncNow(); this.emit('central', {});
@@ -605,14 +774,23 @@ export class AppCore {
     if (!c.org) throw new AppError('El servidor central aún no está activado');
     const acc = await this._acceder(c.server, c.org, usuario, password);
     const rolesLocales = await this.repo.getRoles();
-    await this._vincular(acc);
-    await this._descargarCentral();
-    // La sesión pasa a la cuenta común del usuario que ha conectado
-    const u = await this.repo.userByName(usuario);
-    if (!u || !u.activo) throw new AppError('Tu usuario no está activo en el servidor central');
-    await this.repo.establecerClaveLocal(u.id, password);
+    this._sesionPendiente = acc.sesion || null;
+    let u;
+    try {
+      await this._vincular(acc);
+      if (acc.usuario) await this.repo.aplicarPerfil(acc.usuario);
+      await this._descargarCentral();
+      // La sesión pasa a la cuenta común del usuario que ha conectado
+      u = await this.repo.userByName(usuario);
+      if (!u || !u.activo) throw new AppError('Tu usuario no está activo en el servidor central');
+      await this.repo.establecerClaveLocal(u.id, password);
+      if (acc.sesion) await this._guardarSesion(u.id, acc.sesion);
+    } finally { this._sesionPendiente = null; }
     const d = await this.central.datos();
-    if (this.can('usuarios.admin')) {
+    if (this.modoServidor()) {
+      // El servidor es quien da de alta a los usuarios: los que solo existían en este dispositivo se desactivan aquí
+      for (const x of await this.repo.db.getAll('users')) if (!d.items['usr:' + x.id] && x.activo) { x.activo = false; x.estado = 'desactivado'; await this.repo.db.put('users', x); }
+    } else if (this.can('usuarios.admin')) {
       // Roles propios de este dispositivo que no existían en el espacio: se añaden
       const cen = (d.items.roles && d.items.roles.data) || null;
       if (!cen) await this.central.guardarConfig('roles', rolesLocales);
@@ -640,6 +818,7 @@ export class AppCore {
   }
   /** Publica usuarios (perfiles, sin claves) y roles de este dispositivo en el espacio central */
   async _publicarDirectorio({ soloNuevos = false } = {}) {
+    if (this.modoServidor()) return; // el directorio lo lleva el servidor
     const d = await this.central.datos();
     if (!soloNuevos || !d.items.roles) await this.central.guardarConfig('roles', await this.repo.getRoles());
     for (const p of await this.repo.perfiles()) {
@@ -691,6 +870,7 @@ export class AppCore {
       if (id === 'roles') { if (Array.isArray(it.data) && !it.borrado) { await this.repo.putDoc('roles', it.data); usuarios = true; } }
       else if (id.startsWith('usr:')) { if (it.data) { await this.repo.aplicarPerfil(it.data, { borrado: !!it.borrado }); usuarios = true; } }
     }
+    if (usuarios) await this._refrescarPermisos();
     if (usuarios && this.repo.session) {
       const s = this.repo.session.user;
       const u = (await this.repo.db.get('users', s.id)) || (await this.repo.userByName(s.usuario));
@@ -715,6 +895,7 @@ export class AppCore {
   }
   // Usuarios y roles: se guardan aquí y se comparten con todos los dispositivos del espacio
   async saveUser(data, password) {
+    if (this.modoServidor()) throw new AppError('Con el servidor central los usuarios se gestionan en Sistema → Usuarios y permisos del servidor');
     const id = await this.repo.saveUser(data, password);
     if (this.centralMeta) {
       let u = await this.repo.db.get('users', id);
@@ -730,7 +911,9 @@ export class AppCore {
     return id;
   }
   async changeOwnPassword(oldPwd, newPwd) {
+    if (this.user && this.user.metodo === 'pin') throw new AppError('Tu cuenta entra con PIN: no tiene contraseña');
     await this.repo.changeOwnPassword(oldPwd, newPwd);
+    if (this.centralMeta && this.modoServidor()) { await this.central.guardarCuenta(this.user.usuario, newPwd); return; } // el servidor publica el perfil
     if (this.centralMeta) {
       await this.central.guardarCuenta(this.user.usuario, newPwd);
       const u = await this.repo.marcarCuentaPublicada(this.user.id);
@@ -738,6 +921,7 @@ export class AppCore {
     }
   }
   async saveRoles(roles) {
+    if (this.modoServidor()) throw new AppError('Con el servidor central los perfiles de permisos se gestionan en Sistema → Usuarios y permisos del servidor');
     await this.repo.saveRoles(roles);
     if (this.centralMeta) await this.central.guardarConfig('roles', await this.repo.getRoles());
   }

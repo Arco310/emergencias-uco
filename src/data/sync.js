@@ -9,7 +9,7 @@ import { prevKeys, seal, open, sealBytes, openBytes } from '../core/crypto.js';
 export const SYNC_ESTADOS = {
   sincronizado: 'Sincronizado', pendiente: 'Cambios pendientes', sin_conexion: 'Sin conexión', error: 'Error de sincronización',
   conflicto: 'Conflictos por resolver', local: 'Solo por archivo', desactivado: 'Independiente', sincronizando: 'Sincronizando…',
-  bloqueado: 'Actualiza la aplicación',
+  bloqueado: 'Actualiza la aplicación', sesion: 'Inicia sesión para sincronizar', cuenta: 'Cuenta no activa',
 };
 
 export function encodeJoinCode({ server, pid, secret, nombre }) {
@@ -31,7 +31,7 @@ export class SyncManager {
   /**
    * hooks: { repo, onRemoteOps(pid, ops), onNumber(pid, opId, num), getPlano(pid) }
    */
-  constructor(hooks) { this.h = hooks; this.keysCache = new Map(); this.st = new Map(); this.timers = new Map(); this.running = new Set(); this.fetch = (...a) => globalThis.fetch(...a); this.intervalMs = 5000; }
+  constructor(hooks) { this.h = hooks; this.keysCache = new Map(); this.st = new Map(); this.timers = new Map(); this.running = new Map(); this.otraVez = new Map(); this.fetch = (...a) => globalThis.fetch(...a); this.intervalMs = 5000; }
 
   status(pid) { return this.st.get(pid) || { estado: 'desactivado' }; }
   _set(pid, patch) { const s = { ...this.status(pid), ...patch }; this.st.set(pid, s); this.h.onStatus && this.h.onStatus(pid, s); return s; }
@@ -54,8 +54,8 @@ export class SyncManager {
       else if (body) headers['Content-Type'] = 'application/octet-stream';
       const r = await this.fetch(server + '/api/v1' + path, { method, headers, body: b, signal: ctl ? ctl.signal : undefined, cache: 'no-store' });
       if (!r.ok) {
-        let msg = 'Error ' + r.status; try { const j = await r.json(); if (j.error) msg = j.error; } catch { }
-        throw Object.assign(new AppError(msg, 'http'), { status: r.status });
+        let msg = 'Error ' + r.status; let j = null; try { j = await r.json(); if (j.error) msg = j.error; } catch { }
+        throw Object.assign(new AppError(msg, 'http'), { status: r.status, body: j });
       }
       return raw ? new Uint8Array(await r.arrayBuffer()) : r.json();
     } catch (e) {
@@ -65,28 +65,44 @@ export class SyncManager {
   }
   async ping(server) { return this._req(normServer(server), '/salud', { timeout: 8000 }); }
 
-  async register(pid, { startNum = 0 } = {}) {
+  async register(pid, { startNum = 0, kk = null } = {}) {
     const meta = await this.h.repo.getPrevMeta(pid);
     if (!meta.server) throw new AppError('No hay servidor configurado');
     const k = await this.keys(pid);
-    const r = await this._req(meta.server, '/prev', { method: 'POST', body: { pid, tokenHash: k.tokenHash, startNum } });
+    // Espacio en modo servidor: lo registra el usuario con su sesión y el servidor custodia la clave del preventivo
+    const ms = kk && kk.ms;
+    const r = await this._req(meta.server, '/prev', { method: 'POST', token: ms ? kk.token : undefined, body: { pid, tokenHash: k.tokenHash, startNum, ...(ms ? { org: ms.org, secret: meta.secret } : {}) } });
     meta.registrado = true; await this.h.repo.savePrevMeta(pid, meta);
     return r;
   }
 
   async push(pid, meta, k) {
-    let total = 0;
+    let total = 0; const sinSesion = new Set();
     for (;;) {
-      const pend = await this.h.repo.pendingOps(pid);
+      let pend = await this.h.repo.pendingOps(pid);
+      // Modo servidor: cada operación va con la sesión de su autor (el servidor comprueba que coincide)
+      if (k.ms) pend = pend.filter(op => { const t = k.ms.sesion(op.u && op.u.id); if (!t) sinSesion.add(op.u ? op.u.n || op.u.id : '?'); return !!t; });
       if (!pend.length) break;
-      const chunk = pend.slice(0, 200);
+      const autor = k.ms ? pend[0].u && pend[0].u.id : null;
+      const delAutor = k.ms ? pend.filter(op => op.u && op.u.id === autor) : pend;
+      // Un lote (misma acción) nunca se parte entre dos envíos: el servidor lo valida junto
+      let n = Math.min(200, delAutor.length); while (n < delAutor.length && delAutor[n].b && delAutor[n].b === delAutor[n - 1].b) n++;
+      const chunk = delAutor.slice(0, n);
       const body = { ops: await Promise.all(chunk.map(async op => ({ id: op.id, d: op.d, h: op.h, nn: !!op.nn, num: op.num ?? null, c: await seal(k.key, transportBody(op)) }))) };
-      const r = await this._req(meta.server, '/prev/' + encodeURIComponent(pid) + '/ops', { method: 'POST', token: k.token, body });
-      await this.h.repo.markSynced(r.res);
+      const r = await this._req(meta.server, '/prev/' + encodeURIComponent(pid) + '/ops', { method: 'POST', token: k.ms ? k.ms.sesion(autor) : k.token, body });
+      const rech = r.res.filter(x => x.rechazada);
+      await this.h.repo.markSynced(r.res.filter(x => !x.rechazada));
       for (const x of r.res) if (x.num != null) this.h.onNumber(pid, x.id, x.num);
+      if (rech.length) {
+        // Rechazadas por el servidor (permisos, reglas o datos antiguos): se quitan de este dispositivo y se avisa
+        const porId = new Map(chunk.map(op => [op.id, op]));
+        await this.h.repo.descartarOps(rech.map(x => x.id));
+        if (this.h.onRechazos) await this.h.onRechazos(pid, rech.map(x => ({ ...x, op: porId.get(x.id) || null })));
+      }
       total += chunk.length;
-      if (pend.length <= 200) break;
+      if (pend.length <= chunk.length) break;
     }
+    if (sinSesion.size) this._sinSesion = [...sinSesion];
     return total;
   }
 
@@ -136,9 +152,18 @@ export class SyncManager {
   }
 
   /** Un ciclo completo: registrar, enviar, recibir, archivos */
-  async syncNow(pid) {
-    if (this.running.has(pid)) return this.status(pid);
-    this.running.add(pid);
+  /** Sincroniza ahora. Si ya hay una sincronización en curso de ese preventivo, espera a que termine y
+   *  vuelve a sincronizar una vez (puede haber cambios posteriores): nunca devuelve un estado sin sincronizar. */
+  syncNow(pid) {
+    if (this.running.has(pid)) {
+      if (!this.otraVez.has(pid)) this.otraVez.set(pid, this.running.get(pid).catch(() => null).then(() => { this.otraVez.delete(pid); return this.syncNow(pid); }));
+      return this.otraVez.get(pid);
+    }
+    const p = this._syncNow(pid).finally(() => this.running.delete(pid));
+    this.running.set(pid, p);
+    return p;
+  }
+  async _syncNow(pid) {
     try {
       const meta = await this.h.repo.getPrevMeta(pid);
       if (meta.modalidad !== 'compartida') return this._set(pid, { estado: 'desactivado' });
@@ -148,19 +173,30 @@ export class SyncManager {
       const bloqueo = this.h.bloqueo && this.h.bloqueo(meta.server);
       if (bloqueo) return this._set(pid, { estado: 'bloqueado', error: bloqueo, pendientes: await this.h.repo.countPending(pid) });
       this._set(pid, { estado: 'sincronizando' });
-      const k = await this.keys(pid);
-      if (!meta.registrado) await this.register(pid, { startNum: meta.startNum || 0 });
+      const k0 = await this.keys(pid);
+      // Espacio central en modo servidor (1.4.0): las peticiones van con la sesión del usuario, no con el token del preventivo
+      const ms = this.h.modoServidor ? this.h.modoServidor(pid, meta) : null;
+      let k = k0;
+      if (ms) {
+        const tok = ms.sesion();
+        if (!tok) return this._set(pid, { estado: 'sesion', error: 'Inicia sesión con conexión para sincronizar', pendientes: await this.h.repo.countPending(pid) });
+        k = { key: k0.key, tokenHash: k0.tokenHash, token: tok, ms };
+      }
+      if (!meta.registrado) await this.register(pid, { startNum: meta.startNum || 0, kk: k });
+      this._sinSesion = null;
       const pushed = await this.push(pid, meta, k);
       const pulled = await this.pull(pid, meta, k);
       await this.syncBlobs(pid, meta, k);
       const pendientes = await this.h.repo.countPending(pid);
       this.fails = 0;
-      return this._set(pid, { estado: pendientes ? 'pendiente' : 'sincronizado', pendientes, ultimo: now(), error: null, pushed, pulled });
+      return this._set(pid, { estado: pendientes ? 'pendiente' : 'sincronizado', pendientes, ultimo: now(), error: null, pushed, pulled, sinSesion: this._sinSesion });
     } catch (e) {
       this.fails = (this.fails || 0) + 1;
       const pendientes = await this.h.repo.countPending(pid).catch(() => 0);
+      if (e.status === 401 && e.body && e.body.codigo === 'sesion') { this.h.onSesion && this.h.onSesion(e.message); return this._set(pid, { estado: 'sesion', error: e.message, pendientes, ultimoIntento: now() }); }
+      if (e.status === 403 && e.body && String(e.body.codigo || '').startsWith('cuenta_')) { if (this.h.onCuenta) await this.h.onCuenta(e.message); return this._set(pid, { estado: 'cuenta', error: e.message, pendientes, ultimoIntento: now() }); }
       return this._set(pid, { estado: e.code === 'red' ? 'sin_conexion' : 'error', error: e.message, pendientes, ultimoIntento: now() });
-    } finally { this.running.delete(pid); }
+    }
   }
 
   /** Bucle automático con reintentos (espera exponencial ante errores) */

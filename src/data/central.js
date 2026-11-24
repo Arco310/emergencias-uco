@@ -8,12 +8,12 @@
 //    optimista: si dos dispositivos cambian lo mismo, se detecta y se resuelve, nunca se pisa.
 // Todo viaja cifrado con la clave de la organización, que el servidor no conoce.
 import { b64url, unb64url, enc, dec, b64, unb64, now, randomBytes, AppError, stableStringify } from '../core/util.js';
-import { orgKeys, seal, open, cuentaDerivar, sha256hex, CUENTA_ITER } from '../core/crypto.js';
+import { orgKeys, seal, open, cuentaDerivar, sha256hex, sha256, CUENTA_ITER } from '../core/crypto.js';
 import { normServer } from './sync.js';
 
 export const CENTRAL_ESTADOS = {
   sin_configurar: 'Sin configurar', conectado: 'Conectado', sincronizando: 'Sincronizando…',
-  sin_conexion: 'Sin conexión', error: 'Error', pendiente: 'Cambios pendientes',
+  sin_conexion: 'Sin conexión', error: 'Error', pendiente: 'Cambios pendientes', sesion: 'Inicia sesión para sincronizar', cuenta: 'Cuenta no activa', bloqueado: 'Actualiza la aplicación',
 };
 
 export function encodeAltaCode({ server, org, secret, nombre, pruebas }) {
@@ -30,6 +30,12 @@ export function decodeAltaCode(code) {
 
 const VACIO = () => ({ items: {}, pendCfg: {}, conflictos: {}, pendPrevs: {}, registro: {}, pendCuentas: {} });
 export const normUsuario = u => String(u || '').trim().toLowerCase().replace(/\s+/g, '.');
+/** Prueba de trabajo del registro: sha256(reto:nonce) con «dif» bits iniciales a cero (~1–2 s en un móvil) */
+export async function resolverReto(reto, dif) {
+  const ok = h => { let n = 0; for (const b of h) { if (b === 0) { n += 8; if (n >= dif) return true; continue; } n += Math.clz32(b) - 24; break; } return n >= dif; };
+  for (let n = 0; n < 1e8; n++) { if (ok(await sha256(reto + ':' + n))) return n; }
+  throw new AppError('No se pudo completar la comprobación anti-abuso');
+}
 /** Identificador opaco de una cuenta en el servidor (no revela el nombre de usuario) */
 export const cuentaUid = (org, usuario) => sha256hex('uco-cuenta:' + org + ':' + normUsuario(usuario));
 
@@ -78,20 +84,36 @@ export class CentralSync {
       if (e.status === 404) return { server, org: null, nombre: '', pruebas: false, version: await this.detectar(server), antiguo: true };
       throw e;
     }
-    return { server, org: (j && j.org) || null, nombre: (j && j.nombre) || '', pruebas: !!(j && j.pruebas), version: j && j.version };
+    return { server, org: (j && j.org) || null, nombre: (j && j.nombre) || '', pruebas: !!(j && j.pruebas), version: j && j.version, modo: (j && j.modo) || 'cifrado', registroAbierto: !!(j && j.registroAbierto) };
+  }
+  /** Token de las peticiones: en modo servidor (1.4.0) la sesión del usuario; si no, el del espacio */
+  async _token(meta) {
+    if (meta.modo === 'servidor') {
+      const t = this.h.sesion && this.h.sesion();
+      if (!t) throw Object.assign(new AppError('Inicia sesión con conexión para sincronizar con el servidor central', 'sesion'), { status: 401 });
+      return t;
+    }
+    return (await this.keys(meta)).token;
+  }
+  async _api(path, { method = 'GET', body, timeout } = {}) {
+    const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
+    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + path, { method, body, token: await this._token(meta), timeout });
   }
 
   // ---------------- alta ----------------
   /** Primer dispositivo: crea el espacio central con el código de administración del servidor */
-  async crear({ server, nombre, codigo, principal = true }) {
+  async crear({ server, nombre, codigo, principal = true, admin = null, dev = '' }) {
     server = normServer(server);
     if (!server) throw new AppError('No hay servidor central configurado');
     const secret = randomBytes(32); const k = await orgKeys(secret);
     const org = 'org_' + b64url(randomBytes(12));
-    const r = await this._req(server, '/org', { method: 'POST', body: { org, tokenHash: k.tokenHash, nombre: nombre || '', pruebas: !!this.h.pruebas, codigo, principal } });
-    const meta = { server, org, secret: b64(secret), nombre: nombre || '', pruebas: !!this.h.pruebas, alta: now(), lastSeq: 0, creador: true, principal: !!(r && r.principal) };
+    // 1.4.0: con los datos del administrador el espacio nace en modo servidor (el servidor valida permisos)
+    let adminBody = null;
+    if (admin) { const salt = randomBytes(16); const d = await cuentaDerivar(admin.password, salt, this.cuentaIter || CUENTA_ITER); adminBody = { id: admin.id, usuario: admin.usuario, nombre: admin.nombre, pw: { salt: b64(salt), iter: this.cuentaIter || CUENTA_ITER, verif: d.verif } }; }
+    const r = await this._req(server, '/org', { method: 'POST', body: { org, tokenHash: k.tokenHash, nombre: nombre || '', pruebas: !!this.h.pruebas, codigo, principal, ...(adminBody ? { modo: 'servidor', secret: b64(secret), admin: adminBody, dev } : {}) } });
+    const meta = { server, org, secret: b64(secret), nombre: nombre || '', pruebas: !!this.h.pruebas, alta: now(), lastSeq: 0, creador: true, principal: !!(r && r.principal), modo: r && r.modo === 'servidor' ? 'servidor' : 'cifrado' };
     await this.h.repo.putDoc('central', meta); await this._saveDatos(VACIO()); this._k = null;
-    return { ...meta, secretBytes: secret };
+    return { ...meta, secretBytes: secret, sesion: (r && r.sesion) || null };
   }
   /** Acceso con cuenta desde un dispositivo nuevo: devuelve el secreto del espacio. 403 = credenciales incorrectas */
   async acceder({ server, org, usuario, password }) {
@@ -99,17 +121,54 @@ export class CentralSync {
     const uid = await cuentaUid(org, usuario); const base = '/org/' + encodeURIComponent(org) + '/acceso';
     const s = await this._req(server, base + '/sal', { method: 'POST', body: { uid } });
     const d = await cuentaDerivar(password, unb64(s.salt), s.iter);
-    const r = await this._req(server, base, { method: 'POST', body: { uid, prueba: b64(d.prueba) } });
+    const r = await this._req(server, base, { method: 'POST', body: { uid, prueba: b64(d.prueba), dev: this.h.device ? this.h.device().id : '' } });
+    if (r.modo === 'servidor') return { server, org, secret: unb64(r.secret), nombre: r.nombre || '', pruebas: !!r.pruebas, modo: 'servidor', sesion: r.sesion, usuario: r.usuario };
     let o; try { o = await open(d.envKey, r.wrap); } catch { throw new AppError('No se pudo abrir la clave del servidor central'); }
     return { server, org, secret: unb64(o.s), nombre: r.nombre || '', pruebas: !!r.pruebas };
   }
+  // ---------------- modo servidor (1.4.0): registro, activación con código y acceso con PIN ----------------
+  /** Solicitud de cuenta desde el inicio de sesión (queda pendiente de aprobación). Incluye una prueba de trabajo. */
+  async registrar({ server, org, usuario, nombre, password }) {
+    server = normServer(server); const base = '/org/' + encodeURIComponent(org) + '/registro';
+    const reto = await this._req(server, base + '/reto');
+    const nonce = await resolverReto(reto.reto, reto.dificultad);
+    const salt = randomBytes(16); const iter = this.cuentaIter || CUENTA_ITER; const d = await cuentaDerivar(password, salt, iter);
+    return this._req(server, base, { method: 'POST', body: { usuario, nombre, salt: b64(salt), iter, verif: d.verif, ...reto, nonce } });
+  }
+  /** Primer acceso con el código de un solo uso: con PIN (credencial del dispositivo) o con contraseña nueva */
+  async activar({ server, org, usuario, codigo, dev, devNombre, cred = null, password = null }) {
+    server = normServer(server);
+    const body = { usuario, codigo, dev, devNombre };
+    if (cred) body.cred = cred;
+    if (password) { const salt = randomBytes(16); const iter = this.cuentaIter || CUENTA_ITER; const d = await cuentaDerivar(password, salt, iter); body.pw = { salt: b64(salt), iter, verif: d.verif }; }
+    const r = await this._req(server, '/org/' + encodeURIComponent(org) + '/activacion', { method: 'POST', body });
+    return { server, org, secret: unb64(r.secret), nombre: r.nombre || '', pruebas: !!r.pruebas, modo: 'servidor', sesion: r.sesion, usuario: r.usuario };
+  }
+  /** Acceso con PIN: el PIN desbloquea en el dispositivo su credencial; el servidor comprueba la credencial */
+  async accederDispositivo({ server, org, usuario, dev, cred }) {
+    server = normServer(server);
+    const r = await this._req(server, '/org/' + encodeURIComponent(org) + '/acceso/dispositivo', { method: 'POST', body: { uid: await cuentaUid(org, usuario), dev, cred } });
+    return { server, org, secret: unb64(r.secret), modo: 'servidor', sesion: r.sesion, usuario: r.usuario };
+  }
+  /** Administración del espacio en modo servidor (permisos comprobados en el servidor) */
+  admin(path, { method = 'GET', body } = {}) { return this._api('/admin/' + path, { method, body }); }
+  yo() { return this._api('/yo'); }
+  cerrarSesion() { return this._api('/sesion/cerrar', { method: 'POST', body: {} }).catch(() => null); }
+  /** Migración 1.3.0 → 1.4.0: entrega la clave del espacio al servidor (exige el código de administración del servidor) */
+  async migrar({ codigo, usuario }) {
+    const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
+    const k = await this.keys(meta);
+    const r = await this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/migrar', { method: 'POST', token: k.token, body: { secret: meta.secret, codigo, usuario, dev: this.h.device ? this.h.device().id : '' }, timeout: 60000 });
+    meta.modo = 'servidor'; await this.h.repo.putDoc('central', meta);
+    return r;
+  }
   /** Vincula este dispositivo al espacio con su secreto (obtenido con una cuenta o con un enlace de alta) */
-  async unirConSecreto({ server, org, secret, nombre = '', pruebas = false }) {
+  async unirConSecreto({ server, org, secret, nombre = '', pruebas = false, sesion = null }) {
     if (!!pruebas !== !!this.h.pruebas) throw new AppError(pruebas ? 'Ese espacio es del entorno de pruebas (CLAUDE_TEST): ábrelo en el entorno de pruebas' : 'Ese espacio es el real: no puede usarse en el entorno de pruebas');
     server = normServer(server);
     const k = await orgKeys(secret);
-    const info = await this._req(server, '/org/' + encodeURIComponent(org), { token: k.token });
-    const meta = { server, org, secret: b64(secret), nombre: info.nombre || nombre, pruebas: !!info.pruebas, alta: now(), lastSeq: 0, principal: !!info.principal };
+    const info = await this._req(server, '/org/' + encodeURIComponent(org), { token: sesion || k.token });
+    const meta = { server, org, secret: b64(secret), nombre: info.nombre || nombre, pruebas: !!info.pruebas, alta: now(), lastSeq: 0, principal: !!info.principal, modo: info.modo === 'servidor' ? 'servidor' : 'cifrado' };
     await this.h.repo.putDoc('central', meta); await this._saveDatos(VACIO()); this._k = null;
     return meta;
   }
@@ -182,7 +241,9 @@ export class CentralSync {
       const bloqueo = this.h.bloqueo && this.h.bloqueo();
       if (bloqueo) return this._set({ estado: 'bloqueado', error: bloqueo, server: meta.server });
       this._set({ estado: 'sincronizando', server: meta.server });
-      const k = await this.keys(meta); const tok = k.token; const base = '/org/' + encodeURIComponent(meta.org);
+      const k = await this.keys(meta); const tok = await this._token(meta); const base = '/org/' + encodeURIComponent(meta.org);
+      // Modo servidor: los usuarios y perfiles los escribe el servidor (se gestionan desde la administración)
+      if (meta.modo === 'servidor') await this._conDatos(d => { for (const id of Object.keys(d.pendCfg)) if (id.startsWith('usr:') || id === 'roles') delete d.pendCfg[id]; });
       const pend = await this.datos(); const cambiados = [];
       // 1. Enviar registros de preventivos, cuentas y configuración pendientes. Un pendiente solo se da por
       //    enviado si no ha cambiado mientras tanto (si cambió, se enviará la versión nueva en la siguiente vuelta).
@@ -203,6 +264,13 @@ export class CentralSync {
             else if (d.pendCfg[id]) d.pendCfg[id].base = r.v; // cambiado de nuevo: se envía después sobre esta versión
           });
         } catch (e) {
+          if (e.status === 403 && meta.modo === 'servidor') {
+            // Sin permiso en el servidor (p. ej. datos antiguos): se descarta y se vuelve a descargar la configuración
+            await this._conDatos(d => { if (mismo(d)) delete d.pendCfg[id]; d.rechazos = { ...(d.rechazos || {}), [id]: { error: e.message, t: now() } }; });
+            const m0 = await this.meta(); if (m0) { m0.lastSeq = 0; await this.h.repo.putDoc('central', m0); meta.lastSeq = 0; }
+            this.h.onRechazoConfig && this.h.onRechazoConfig(id, e.message);
+            continue;
+          }
           if (e.status !== 409) throw e;
           const a = e.body && e.body.actual;
           const suyo = a ? (await open(k.key, a.c)).data : null;
@@ -241,25 +309,29 @@ export class CentralSync {
       }
       return this._set({ estado: resto.pend ? 'pendiente' : 'conectado', ultimo: now(), error: null, conflictos: resto.conflictos });
     } catch (e) {
+      // Modo servidor: sesión caducada o revocada (hay que volver a entrar) o cuenta que ya no está activa
+      if (e.status === 401 && (e.code === 'sesion' || (e.body && e.body.codigo === 'sesion'))) {
+        const m = await this.meta(); if (m && e.body && e.body.modo === 'servidor' && m.modo !== 'servidor') { m.modo = 'servidor'; await this.h.repo.putDoc('central', m); }
+        this.h.onSesion && this.h.onSesion(e.message);
+        return this._set({ estado: 'sesion', error: e.message, ultimoIntento: now() });
+      }
+      if (e.status === 403 && e.body && String(e.body.codigo || '').startsWith('cuenta_')) { if (this.h.onCuenta) await this.h.onCuenta(e.message); return this._set({ estado: 'cuenta', error: e.message, ultimoIntento: now() }); }
       return this._set({ estado: e.code === 'red' ? 'sin_conexion' : 'error', error: e.message, ultimoIntento: now() });
     }
   }
   async dispositivos() {
     const meta = await this.meta(); if (!meta) return {};
-    const k = await this.keys(meta);
-    return (await this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/dispositivos', { token: k.token })).dispositivos;
+    return (await this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/dispositivos', { token: await this._token(meta) })).dispositivos;
   }
   /** Estado de las actualizaciones del servidor central (lo pueden consultar los dispositivos del espacio) */
   async adminActualizaciones() {
     const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
-    const k = await this.keys(meta);
-    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { token: k.token });
+    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { token: await this._token(meta) });
   }
   /** Acción sobre las actualizaciones del servidor: exige además el código de administración del servidor */
   async accionActualizaciones(body) {
     const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
-    const k = await this.keys(meta);
-    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { method: 'POST', token: k.token, body, timeout: 60000 });
+    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { method: 'POST', token: await this._token(meta), body, timeout: 60000 });
   }
   start() {
     this.stop();

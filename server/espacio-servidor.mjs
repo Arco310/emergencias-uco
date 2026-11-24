@@ -176,8 +176,16 @@ export function crearModoServidor(deps) {
       d.ultimo = Date.now();
       return send(res, 200, respuestaAcceso(o, u, nuevaSesion(o, u, b.dev)));
     }
+    // Qué pide un código (PIN o contraseña nueva), sin consumirlo; cuenta como intento
+    if (r === 'activacion' && r2 === 'consultar' && req.method === 'POST') {
+      const b = await readJson(req); const uid = cuentaUid(org, b.usuario);
+      limiteAcceso('act:' + uid);
+      const id = ms.porUid.get(uid); const u = id && ms.usuarios[id]; const c = u && u.codigo;
+      if (!c || Date.now() > c.exp || !safeEq(sha256hex(normCodigo(b.codigo)), c.hash)) { falloAcceso('act:' + uid); return send(res, 403, { error: 'Código no válido o caducado. Pide uno nuevo a un administrador.', codigo: 'codigo' }); }
+      return send(res, 200, { metodo: u.metodo || 'password', tipo: c.tipo, nombre: u.nombre });
+    }
     // Activación con código de un solo uso (cuenta sin contraseña o restablecimiento de contraseña)
-    if (r === 'activacion' && req.method === 'POST') {
+    if (r === 'activacion' && !r2 && req.method === 'POST') {
       const b = await readJson(req);
       const uid = cuentaUid(org, b.usuario);
       if (!/^[A-Za-z0-9_-]{4,80}$/.test(b.dev || '')) return send(res, 400, { error: 'Datos no válidos' });
@@ -544,5 +552,7 @@ export function crearModoServidor(deps) {
     auditar(o, quien, 'Cambio de contraseña', quien.u.usuario, '', 'Las demás sesiones siguen abiertas; los otros dispositivos piden la nueva contraseña');
   }
 
-  return { activo, preparar, autenticar, publico, privado, exige, validarConfig, configGuardada, validarRegistro, puedeVerPrev, validarOps, aplicar, iniciarEspacio, migrar, indexar, custodiarPrev, cambiarContrasena, orgDePrev: pid => pidOrg.get(pid) || null };
+  /** ¿Admite el espacio solicitudes de cuenta? (dato público para mostrar «Crear una cuenta») */
+  const registroAbierto = o => (o.ms ? !!o.ms.ajustes.registroAbierto : rd(o, 'ajustes.json', {}).registroAbierto !== false);
+  return { registroAbierto, activo, preparar, autenticar, publico, privado, exige, validarConfig, configGuardada, validarRegistro, puedeVerPrev, validarOps, aplicar, iniciarEspacio, migrar, indexar, custodiarPrev, cambiarContrasena, orgDePrev: pid => pidOrg.get(pid) || null };
 }

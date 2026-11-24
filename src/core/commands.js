@@ -214,12 +214,12 @@ const UNIT_EDIT = ['ind', 'nombre', 'denom', 'tipo', 'subtipo', 'categoria', 'se
 
 /** Un tipo de recurso de la configuración general que aún no está en el catálogo del preventivo se
  *  incorpora a él al usarlo (sin modificar ni quitar ninguno de los existentes). */
-function incorporarTipo(ctx, s, tipoId, tipoDef) {
+function incorporarTipo(ctx, s, tipoId, tipoDef, b = uid('b_')) {
   if (!tipoId || s.prev.cat.tiposRecurso.some(t => t.id === tipoId)) return { ops: [], tipo: s.prev.cat.tiposRecurso.find(t => t.id === tipoId) || null };
   if (!tipoDef || tipoDef.id !== tipoId || !String(tipoDef.nombre || '').trim()) fail('El tipo de recurso no existe en este preventivo');
   const def = clone(tipoDef); delete def.activo; delete def.orden;
   const n = [...s.prev.cat.tiposRecurso, def];
-  return { ops: [mkOp(ctx, 'prev.cat', ctx.pid, { cat: 'tiposRecurso', o: s.prev.cat.tiposRecurso, n }, uid('b_'))], tipo: def };
+  return { ops: [mkOp(ctx, 'prev.cat', ctx.pid, { cat: 'tiposRecurso', o: s.prev.cat.tiposRecurso, n }, b)], tipo: def };
 }
 /** Un tipo desactivado o retirado (en el preventivo o en la configuración general: ctx.noDisponibles)
  *  no se puede usar en unidades nuevas ni elegir al cambiar el tipo de una unidad. */
@@ -240,7 +240,8 @@ export function unitCreate(ctx, d) {
   const s = editable(ctx);
   const ind = checkInd(s, d.ind);
   checkTipoNuevo(ctx, s, d.tipo, d.tipoDef);
-  const inc = incorporarTipo(ctx, s, d.tipo, d.tipoDef);
+  const b = uid('b_'); // la incorporación del tipo va en el mismo lote que la unidad (el servidor lo reconoce así)
+  const inc = incorporarTipo(ctx, s, d.tipo, d.tipoDef, b);
   const tipo = inc.tipo;
   checkSector(s, d.sector, d.sectorOtro);
   const color = isHexColor(d.colorC0) ? d.colorC0 : (tipo && isHexColor(tipo.color) ? tipo.color : '#2E7D32');
@@ -251,7 +252,7 @@ export function unitCreate(ctx, d) {
   };
   if (d.sector === SECTOR_OTROS) u.sectorOtro = String(d.sectorOtro).trim();
   if (d.plantilla) u.plantilla = { id: d.plantilla.id, nombre: d.plantilla.nombre };
-  return [...inc.ops, mkOp(ctx, 'unit.create', uid('u_'), { u }, uid('b_'))];
+  return [...inc.ops, mkOp(ctx, 'unit.create', uid('u_'), { u }, b)];
 }
 
 /** Unidad a partir de una unidad plantilla: solo se piden los campos que indica la plantilla.
@@ -307,7 +308,8 @@ export function unitUpdate(ctx, id, cambios) {
   for (const k of Object.keys(cambios)) if (!UNIT_EDIT.includes(k.split('.')[0])) fail('Campo no editable: ' + k);
   if ('ind' in cambios) cambios.ind = checkInd(s, cambios.ind, id);
   let pre = [];
-  if ('tipo' in cambios && (cambios.tipo || null) !== (u.tipo || null)) { needPerm(ctx.user, 'unidades.tipos'); checkTipoNuevo(ctx, s, cambios.tipo, tipoDef); pre = incorporarTipo(ctx, s, cambios.tipo, tipoDef).ops; }
+  const b = uid('b_');
+  if ('tipo' in cambios && (cambios.tipo || null) !== (u.tipo || null)) { needPerm(ctx.user, 'unidades.tipos'); checkTipoNuevo(ctx, s, cambios.tipo, tipoDef); pre = incorporarTipo(ctx, s, cambios.tipo, tipoDef, b).ops; }
   if ('sector' in cambios || 'sectorOtro' in cambios) {
     const sec = 'sector' in cambios ? cambios.sector : u.sector;
     if (sec !== SECTOR_OTROS) { if (u.sectorOtro) cambios.sectorOtro = ''; else delete cambios.sectorOtro; }
@@ -316,7 +318,7 @@ export function unitUpdate(ctx, id, cambios) {
   }
   const f = fieldsDiff(u, cambios);
   if (!Object.keys(f).length) return [];
-  return [...pre, mkOp(ctx, 'unit.update', id, { f }, uid('b_'))];
+  return [...pre, mkOp(ctx, 'unit.update', id, { f }, b)];
 }
 
 /** Claves a las que puede pasar la unidad (transiciones permitidas) */

@@ -1,4 +1,5 @@
 // Servidor central con cuentas comunes: activación única, acceso desde dispositivos nuevos solo con
+// Modo anterior (espacio cifrado de extremo a extremo, sin migrar): sigue funcionando en la 1.4.0.
 // usuario y contraseña, preventivos que aparecen solos, cambios de contraseña, bajas, conexión de un
 // dispositivo ya en uso y protecciones del acceso público. Sin interfaz, contra el servidor real.
 import test from 'node:test';
@@ -53,9 +54,9 @@ test('activación única: el primer administrador crea el espacio con el código
   assert.equal(r0.org, null, 'servidor sin activar');
   await A.setup({ usuario: 'jefe', nombre: 'Jefa de guardia', password: 'clave-jefa-1' });
   assert.equal(A.minPassword(), 8, 'con servidor central accesible se exigen 8 caracteres');
-  await rechaza(A.centralActivar({ codigo: 'XXXXX-XXXXX-XXXXX-XXXXX', password: 'clave-jefa-1' }), /incorrecto/i);
-  await rechaza(A.centralActivar({ codigo: ADMIN, password: 'otra-clave' }), /no es correcta/);
-  const m = await A.centralActivar({ codigo: ADMIN, password: 'clave-jefa-1', nombre: 'UCO pruebas' });
+  await rechaza(A.centralActivar({ codigo: 'XXXXX-XXXXX-XXXXX-XXXXX', password: 'clave-jefa-1', modo: 'cifrado' }), /incorrecto/i);
+  await rechaza(A.centralActivar({ codigo: ADMIN, password: 'otra-clave', modo: 'cifrado' }), /no es correcta/);
+  const m = await A.centralActivar({ codigo: ADMIN, password: 'clave-jefa-1', nombre: 'UCO pruebas', modo: 'cifrado' });
   assert.ok(m.org.startsWith('org_'));
   assert.equal(m.principal, true);
   const pub = await (await api('/central')).json();
@@ -63,7 +64,7 @@ test('activación única: el primer administrador crea el espacio con el código
   // un segundo intento no puede sustituir el espacio principal real
   const B0 = await dispositivo('B0');
   await B0.setup({ usuario: 'intruso', nombre: 'X', password: 'clave-intruso' });
-  await rechaza(B0.centralActivar({ codigo: ADMIN, password: 'clave-intruso' }), /ya está activado/);
+  await rechaza(B0.centralActivar({ codigo: ADMIN, password: 'clave-intruso', modo: 'cifrado' }), /ya está activado/);
 });
 
 test('crear un preventivo no pide servidor: queda compartido y vinculado al espacio central', async () => {
@@ -189,7 +190,7 @@ test('protecciones del acceso público: sal señuelo, límite de intentos y ento
   const T = await dispositivo('T', { pruebas: true });
   assert.equal((await T.consultarCentral()).org, null, 'el entorno de pruebas no ve el espacio real');
   await T.setup({ usuario: 'claude_test', nombre: 'CLAUDE_TEST', password: 'clave-de-prueba' });
-  const mt = await T.centralActivar({ codigo: PRUEBAS, password: 'clave-de-prueba', nombre: 'CLAUDE_TEST' });
+  const mt = await T.centralActivar({ codigo: PRUEBAS, password: 'clave-de-prueba', nombre: 'CLAUDE_TEST', modo: 'cifrado' });
   assert.equal(mt.pruebas, true);
   assert.equal((await (await api('/central')).json()).org, org, 'el espacio real sigue siendo el principal');
   assert.equal((await (await api('/central?entorno=pruebas')).json()).org, mt.org);

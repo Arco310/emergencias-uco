@@ -398,7 +398,7 @@ async function api(req, res, url) {
   if (parts[2] === 'central' && req.method === 'GET') {
     const slot = url.searchParams.get('entorno') === 'pruebas' ? 'pruebas' : 'produccion';
     const org = principal()[slot]; const o = org && orgLoad(org);
-    return send(res, 200, o ? { ok: true, org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, version: VERSION } : { ok: true, org: null, version: VERSION });
+    return send(res, 200, o ? { ok: true, org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, version: VERSION, modo: MS.activo(o) ? 'servidor' : 'cifrado', registroAbierto: MS.activo(o) && MS.registroAbierto(o) } : { ok: true, org: null, version: VERSION });
   }
   if (parts[2] !== 'prev') return send(res, 404, { error: 'No encontrado' });
   if (parts.length === 3 && req.method === 'POST') {
@@ -512,7 +512,7 @@ async function handler(req, res) {
     return serveStatic(req, res, url);
   } catch (e) {
     log('Error', e.message);
-    if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'Error interno' });
+    if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'Error interno', ...(e.status && e.codigo ? { codigo: e.codigo } : {}) });
   }
 }
 

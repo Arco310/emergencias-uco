@@ -80,6 +80,16 @@ test('permiso que exige cada operación (lo mismo que comprueba la app)', () => 
   assert.deepEqual(permisosOp(lote[0], st, lote), ['estados.cambiar']);
   assert.deepEqual(permisosOp(lote[0], st, []), ['estados.cambiar', 'estados.forzar']);
   assert.deepEqual(P('conf.resolve', {}), ['conflictos.resolver']);
+  // Incorporar un tipo general al preventivo al crear (o cambiar de tipo) una unidad: basta con ese permiso
+  const o = [{ id: 'rt_a' }]; const n = [{ id: 'rt_a' }, { id: 'rt_dron' }];
+  const inc = [{ k: 'prev.cat', b: 'b7', x: { cat: 'tiposRecurso', o, n } }, { k: 'unit.create', b: 'b7', e: 'u9', x: { u: { tipo: 'rt_dron' } } }];
+  assert.deepEqual(permisosOp(inc[0], st, inc), ['unidades.crear']);
+  const inc2 = [inc[0], { k: 'unit.update', b: 'b7', e: 'u1', x: { f: { tipo: { o: 'rt_a', n: 'rt_dron' } } } }];
+  assert.deepEqual(permisosOp(inc2[0], st, inc2), ['unidades.tipos']);
+  assert.deepEqual(permisosOp(inc[0], st, [inc[0]]), ['config.editar'], 'sola, es un cambio de catálogo');
+  // Unidades copiadas al crear un preventivo (plantilla o duplicado)
+  const nuevo = [{ k: 'prev.create', b: 'b8', x: {} }, { k: 'unit.create', b: 'b8', e: 'u5', x: { u: { tipo: 'rt_a' } } }];
+  assert.deepEqual(permisosOp(nuevo[1], st, nuevo), ['preventivos.crear']);
   assert.equal(P('desconocida'), null, 'operación desconocida: se rechaza');
 });
 

@@ -1,4 +1,5 @@
 // Tipos de recurso y unidades plantilla comunes a todos los dispositivos a través del servidor central.
+// Modo anterior (espacio cifrado de extremo a extremo, sin migrar): sigue funcionando en la 1.4.0.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -33,7 +34,7 @@ test('los tipos y plantillas de un dispositivo llegan a un dispositivo nuevo', a
   await A.consultarCentral();
   await A.setup({ usuario: 'jefe', nombre: 'Jefa', password: 'clave-jefa-1' });
   dron = await A.crearTipoRecurso({ nombre: 'Dron', categoria: 'Apoyo', color: '#455A64', vis: { icono: 'antena', forma: 'rombo' } });
-  await A.centralActivar({ codigo: ADMIN, password: 'clave-jefa-1' });
+  await A.centralActivar({ codigo: ADMIN, password: 'clave-jefa-1', modo: 'cifrado' });
   plt = await A.guardarPlantillaUnidad({ nombre: 'DRON', tipo: dron.id, prefijo: 'DRN', color: '#455A64' });
   await A.saveUser({ usuario: 'coord', nombre: 'Coordinador', rol: 'rol_admin', activo: true }, 'clave-coord-1');
   await A.central.syncNow();

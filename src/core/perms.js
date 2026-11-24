@@ -154,9 +154,17 @@ export function permisosOp(op, s, lote = []) {
       if (x.n === 'cerrado') return ['preventivos.cerrar'];
       return ['preventivos.iniciar'];
     case 'prev.archivo': return ['preventivos.archivar'];
-    case 'prev.cat': return [x.cat === 'sectores' ? 'sectores.gestionar' : 'config.editar'];
+    case 'prev.cat': {
+      // Tipo general que se incorpora al preventivo al usarlo en una unidad (mismo lote): es parte de esa operación
+      if (x.cat === 'tiposRecurso' && Array.isArray(x.o) && Array.isArray(x.n) && x.n.length === x.o.length + 1 && x.o.every((t, i) => JSON.stringify(t) === JSON.stringify(x.n[i]))) {
+        const nuevo = x.n[x.n.length - 1].id;
+        const uso = lote.find(o => o.b === op.b && ((o.k === 'unit.create' && o.x && o.x.u && o.x.u.tipo === nuevo) || (o.k === 'unit.update' && o.x && o.x.f && o.x.f.tipo && o.x.f.tipo.n === nuevo)));
+        if (uso) return [uso.k === 'unit.create' ? 'unidades.crear' : 'unidades.tipos'];
+      }
+      return [x.cat === 'sectores' ? 'sectores.gestionar' : 'config.editar'];
+    }
     case 'prev.plano': return ['planos.editar'];
-    case 'unit.create': return ['unidades.crear'];
+    case 'unit.create': return lote.some(o => o.k === 'prev.create' && o.b === op.b) ? ['preventivos.crear'] : ['unidades.crear'];
     case 'unit.update': return 'tipo' in f ? ['unidades.editar', 'unidades.tipos'] : ['unidades.editar'];
     case 'unit.clave': {
       const u = s && s.units && s.units[op.e]; const def = u && claveDe(s, u.clave);
