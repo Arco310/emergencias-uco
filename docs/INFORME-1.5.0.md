@@ -204,7 +204,7 @@ Faltaba esto, y se ha completado:
 | 38 | Sin depender del ratón ni del arrastre | E2E 13 (solo teclado; flechas en pantalla y del teclado) |
 | 39 | Formularios con teclado y lector de pantalla | E2E 13 (teclado, nombres accesibles, foco); E2E 17 (nombres accesibles de todos los controles en 14 pantallas, según el árbol de accesibilidad del navegador). **Sin probar con lectores reales** |
 | 40 | Alternativas que no dependen solo del color | `capas` 9 (símbolos en la leyenda); E2E 12–13 (lista alternativa; código de incidente en el marcador); `accesibilidad` 1–3 y E2E 17 (contraste) |
-| 41–47 | Regresión: unidades, avisos, descansos, planos, bitácora, permisos y sincronización sin pérdidas ni duplicados | Regresión E2E 1–16 y `npm test` (convergencia, numeración, conflictos y reenvío) |
+| 41–47 | Regresión: unidades, avisos, descansos, planos, bitácora, permisos y sincronización sin pérdidas ni duplicados | Regresión E2E 1–17 y `npm test` (convergencia, numeración, conflictos y reenvío) |
 
 ## 9. Pendiente y riesgos
 - **Accesibilidad.** Falta la auditoría manual con TalkBack o NVDA para poder declarar conformidad con WCAG 2.2 AA. Lo automatizable se comprueba en cada ejecución (escenario 17).
@@ -221,7 +221,7 @@ Faltaba esto, y se ha completado:
 
 ## 10. Despliegue (cuando lo autorices)
 1. Revisar `mejora-1.5.0`, que incluye la 1.4.0, y fusionarla en `main`. GitHub Pages publica la app 1.5.0 y los dispositivos se actualizan solos al abrirla.
-2. Ejecutar «Publicar versión» (GitHub Actions) para la 1.5.0. El servidor del PC la verá en Sistema → Actualizaciones y la instalará con copia previa, prueba y vuelta atrás automática.
+2. Ejecutar «Publicar versión» (GitHub Actions) para la 1.5.0. Será la **primera versión publicada en GitHub Releases**. El servidor del PC 1.3.0 la verá en Sistema → Actualizaciones (consulta cada 6 h o al pulsar «Comprobar versiones publicadas») y la instalará con copia previa, prueba y vuelta atrás automática. Es la primera vez que se probará la descarga desde GitHub real.
 3. Desde ese momento el servidor solo sincroniza con apps 1.5.0. Conviene que los dispositivos abran la app antes del siguiente preventivo.
 4. Comprobar en Sistema → Estado del sistema (pide el código de administración del servidor mientras el espacio siga en el modo anterior):
    - que no hay alertas;
