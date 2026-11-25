@@ -50,6 +50,9 @@ export const PERMISOS = [
   ['importar', 'Importar información', 'Informes y datos'],
   ['notas.crear', 'Añadir observaciones e incidencias', 'Informes y datos'],
   ['auditoria.ver', 'Consultar la auditoría', 'Informes y datos', 'ver'],
+  ['incoherencias.ver', 'Consultar las incoherencias detectadas', 'Control operativo', 'ver'],
+  ['incoherencias.revisar', 'Revisar, asignar y resolver incoherencias', 'Control operativo'],
+  ['incoherencias.reglas', 'Ajustar las reglas de incoherencias (niveles y umbrales)', 'Control operativo'],
   ['usuarios.admin', 'Administración completa de usuarios y perfiles', 'Administración'],
   ['usuarios.crear', 'Crear usuarios', 'Administración'],
   ['usuarios.editar', 'Modificar, suspender y desactivar usuarios', 'Administración'],
@@ -67,7 +70,10 @@ export const PERM_LABEL = Object.fromEntries(PERMISOS.map(p => [p[0], p[1]]));
 export const PERMISOS_VER = PERMISOS.filter(p => p[3] === 'ver').map(p => p[0]);
 /** Permisos que incluyen otros (así los roles anteriores conservan lo que ya podían hacer) */
 export const IMPLICA = {
-  'preventivos.editar': ['preventivos.iniciar'],
+  'preventivos.editar': ['preventivos.iniciar', 'incoherencias.reglas'],
+  'avisos.editar': ['incoherencias.revisar'],
+  'incoherencias.revisar': ['incoherencias.ver'],
+  'incoherencias.reglas': ['incoherencias.ver'],
   'preventivos.cerrar': ['preventivos.archivar'],
   'descansos.gestionar': ['descansos.iniciar', 'descansos.finalizar'],
   'planos.editar': ['planos.vista'],
@@ -147,6 +153,7 @@ export function permisosOp(op, s, lote = []) {
     case 'prev.update': {
       const campos = Object.keys(f);
       if (campos.length && campos.every(c => c === 'cfg.vistaMapa')) return ['planos.vista'];
+      if (campos.length && campos.every(c => c === 'cfg.reglas')) return ['incoherencias.reglas'];
       return campos.some(c => c.startsWith('cfg.descanso')) ? ['preventivos.editar', 'descansos.duracion'] : ['preventivos.editar'];
     }
     case 'prev.estado':
@@ -154,6 +161,7 @@ export function permisosOp(op, s, lote = []) {
       if (x.n === 'cerrado') return ['preventivos.cerrar'];
       return ['preventivos.iniciar'];
     case 'prev.archivo': return ['preventivos.archivar'];
+    case 'revision.set': return ['incoherencias.revisar'];
     case 'prev.cat': {
       // Tipo general que se incorpora al preventivo al usarlo en una unidad (mismo lote): es parte de esa operación
       if (x.cat === 'tiposRecurso' && Array.isArray(x.o) && Array.isArray(x.n) && x.n.length === x.o.length + 1 && x.o.every((t, i) => JSON.stringify(t) === JSON.stringify(x.n[i]))) {

@@ -16,6 +16,7 @@ import { posterior } from '../core/versiones.js';
 import { tiposNoDisponibles, tiposParaNuevaUnidad, plantillasDisponibles, tipoActivo, referenciasTipoEnConfig, explicacionBloqueo } from '../core/recursos.js';
 import { permisosEfectivos } from '../core/perms.js';
 import { describeOp } from '../core/timeline.js';
+import { detectarIncoherencias } from '../core/validaciones.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -508,6 +509,15 @@ export class AppCore {
 
   // ------------- preventivos -------------
   engine(pid = this.cur) { return this.engines.get(pid) || null; }
+  /** Incoherencias del preventivo con los datos de sincronización de este dispositivo (solo detecta e informa) */
+  async incoherencias(pid = this.cur) {
+    const e = this.engine(pid); if (!e || !e.state.prev) return [];
+    const compartido = e.state.prev.modalidad === 'compartida'; const st = this.sync.status(pid);
+    let pendientes = null;
+    if (compartido) { const l = await this.repo.pendingOps(pid); if (l.length) pendientes = { n: l.length, desde: Math.min(...l.map(o => o.t || now())) }; }
+    const rechazos = (await this.repo.rechazos()).filter(r => r.pid === pid);
+    return detectarIncoherencias(e.state, { t: now(), sync: { compartido, ultimoSync: st.ultimo || null, pendientes, rechazos } });
+  }
   get state() { const e = this.engine(); return e ? e.state : null; }
   meta(pid = this.cur) { return this.metas.get(pid) || {}; }
   isShared(pid = this.cur) { return this.meta(pid).modalidad === 'compartida'; }

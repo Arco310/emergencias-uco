@@ -15,6 +15,7 @@ import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './cata
 import { overriddenVis } from '../../core/visual.js';
 import { tipoActivo } from '../../core/recursos.js';
 import { renderUsuariosServidor, tablaAuditoria, invalidarUsuariosServidor } from './usuarios-servidor.js';
+import { resumenMenu } from './incoherencias.js';
 import { estadoApp } from '../actualizacion.js';
 import { seccionCartografia } from './cartografia.js';
 
@@ -37,6 +38,7 @@ const tile = (ic, label, a, data = {}, sub = '') => `<button class="tile" data-a
 export function renderPrevMenu() {
   const n = core().engine().pendingConflicts().length;
   return `<div class="grid-btns big">
+    ${can('incoherencias.ver') ? tile('alerta', 'Incoherencias', 'nav', { v: 'incoherencias' }, resumenMenu()) : ''}
     ${can('bitacora.ver') ? tile('bitacora', 'Bitácora y auditoría', 'nav', { v: 'bitacora' }) : ''}
     ${can('unidades.ver') ? tile('reloj', 'Cronología de unidades', 'nav', { v: 'cronologia' }) : ''}
     ${can('estadisticas.ver') ? tile('grafico', 'Tiempos y estadísticas', 'nav', { v: 'estadisticas' }) : ''}

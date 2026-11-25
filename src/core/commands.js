@@ -7,6 +7,7 @@ import { motivoTipoNoDisponible, referenciasTipoPrev } from './recursos.js';
 import { esVista, VISTA_DEFECTO } from './mapas.js';
 import { DEFAULT_CATEGORIAS_PUNTO } from './defaults.js';
 import { normalizarLoc, motivoLocNoValida } from './ubicacion.js';
+import { REGLAS, NIVELES } from './validaciones.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
@@ -140,6 +141,33 @@ export function catUpdate(ctx, cat, lista) {
   if (same(cur, lista)) return [];
   validateCatalog(cat, lista, s);
   return [mkOp(ctx, 'prev.cat', ctx.pid, { cat, o: cur, n: lista }, uid('b_'))];
+}
+
+/** Revisar, asignar o resolver una incoherencia detectada (1.5.0). Solo registra la revisión. */
+export function incoherenciaRevisar(ctx, h, { estado = 'revisada', nota = '', asignadoA = null } = {}) {
+  needPerm(ctx.user, 'incoherencias.revisar');
+  const s = ctx.engine.state; if (!s.prev) fail('Preventivo no cargado');
+  if (!['revisada', 'asignada', 'resuelta', 'abierta'].includes(estado)) fail('Estado de revisión no válido');
+  if (!h || !h.id || !h.firma) fail('Advertencia no válida');
+  if (estado === 'asignada' && !(asignadoA && asignadoA.nombre)) fail('Indica a quién se asigna');
+  const quien = asignadoA ? { id: String(asignadoA.id || ''), nombre: String(asignadoA.nombre).slice(0, 80) } : null;
+  return [mkOp(ctx, 'revision.set', ctx.pid, { id: h.id, firma: h.firma, regla: h.regla, entidad: h.entidad || null, estado, nota: String(nota || '').slice(0, 500), asignadoA: quien }, uid('b_'))];
+}
+/** Niveles, umbrales y reglas activas de las incoherencias del preventivo («reglas aprobadas») */
+export function reglasSet(ctx, reglas) {
+  needPerm(ctx.user, 'incoherencias.reglas');
+  const s = editable(ctx); const n = {};
+  for (const [id, c] of Object.entries(reglas || {})) {
+    if (!REGLAS.some(r => r.id === id)) fail('Regla desconocida: ' + id);
+    const o = {};
+    if (c.nivel != null) { if (!NIVELES[c.nivel]) fail('Nivel no válido: ' + c.nivel); o.nivel = c.nivel; }
+    if (c.activa != null) o.activa = !!c.activa;
+    if (c.umbral != null) { const u = Number(c.umbral); if (!(u > 0 && u <= 24 * 60)) fail('Umbral no válido en ' + id + ' (entre 1 y 1440 minutos)'); o.umbral = Math.round(u); }
+    if (Object.keys(o).length) n[id] = o;
+  }
+  const cur = (s.prev.cfg && s.prev.cfg.reglas) || null;
+  if (same(cur, Object.keys(n).length ? n : null)) return [];
+  return [mkOp(ctx, 'prev.update', ctx.pid, { f: { 'cfg.reglas': { o: cur ? clone(cur) : null, n: Object.keys(n).length ? n : null } } }, uid('b_'))];
 }
 
 /** Permiso para cambiar cada catálogo del preventivo (lo mismo comprueba el servidor) */

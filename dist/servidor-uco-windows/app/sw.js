@@ -10,8 +10,8 @@
 // - La versión nueva espera («waiting») hasta que la aplicación la active en un momento seguro
 //   (mensaje ACTIVAR): nunca interrumpe una operación en curso.
 // - Se conserva la versión anterior para recuperarse si la nueva no arranca (mensaje REVERTIR).
-const VERSION = '5f8be7f28fb7';
-const SHA256 = '5f8be7f28fb7e1b61644e2e7c1ac9b7538f76d1cc273547d7f582fa154b12dd0';
+const VERSION = '3135a2ce283f';
+const SHA256 = '3135a2ce283f82f233c1dca708798ed574c0688d06fc49e95308cbf6104d97d7';
 const APP_VERSION = '1.4.0';
 const CACHE = 'uco-app-' + VERSION;
 const META = 'uco-app-meta';

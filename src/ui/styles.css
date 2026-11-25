@@ -432,3 +432,11 @@ fieldset.unidades-aviso legend{font-weight:700;padding:0 .3rem}
 .mk.av.nuevo .mk-av{background:#fff;color:#C62828;border:3px dashed #C62828}
 .sheet:focus{outline:none}.sheet:focus-visible{outline:3px solid var(--acc);outline-offset:-3px}
 .lista-plano li{min-height:48px;align-items:center;border-bottom:1px solid var(--line);padding:.3rem 0}
+/* 1.5.0 · barra del plano en el móvil: una sola fila que se desplaza, para que el plano quede a la vista */
+@media (max-width:700px){.plan-tools{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:.3rem}.plan-tools>*{flex:0 0 auto}}
+/* 1.5.0 · incoherencias */
+.inc-b.nivel-critica{background:#B71C1C;color:#fff}.inc-b.nivel-alta{background:#D84315;color:#fff}.inc-b.nivel-moderada{background:#FFE0B2;color:#6D3A00}.inc-b.nivel-info{background:#E3F2FD;color:#0D47A1}
+.inc-grupo{border-left:5px solid #90A4AE;margin:.6rem 0}.inc-grupo.nivel-critica{border-left-color:#B71C1C}.inc-grupo.nivel-alta{border-left-color:#D84315}.inc-grupo.nivel-moderada{border-left-color:#B26A00}.inc-grupo.nivel-info{border-left-color:#1565C0}
+.inc-grupo summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.inc-list{list-style:none;margin:.3rem 0 0;padding:0}.inc-row{display:flex;gap:.6rem;align-items:flex-start;flex-wrap:wrap;padding:.5rem 0;border-top:1px solid var(--line)}
+table.reglas select,table.reglas input[type=number]{min-height:40px}table.reglas input[type=checkbox]{width:22px;height:22px}

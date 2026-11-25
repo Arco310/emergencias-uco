@@ -98,18 +98,19 @@ export function renderPlano() {
   const canEdit = editable() && can('planos.editar');
   const pl = p.plano; const fl = filtrosPlano(); const nfl = filtrosActivos(fl);
   const tools = `<div class="toolbar plan-tools">
-    ${canEdit ? btn(pl && !esMapa(pl) ? 'Cambiar imagen' : 'Importar imagen', 'plan.import', { ic: 'subir', cls: pl ? '' : 'primary' }) : ''}
-    ${canEdit ? btn('Importar desde Google Maps', 'plan.google', { ic: 'mapa', cls: pl ? '' : 'primary' }) : ''}
-    ${canEdit ? btn('Biblioteca de planos', 'plan.biblio', { ic: 'capas' }) : ''}
+    <!-- primero lo operativo; configurar el plano, al final (en el móvil la barra es una sola fila desplazable) -->
     ${pl && operativo() && can('avisos.crear') ? btn(f.marcarAviso || f.nuevoAviso ? 'Cancelar el aviso' : 'Nuevo aviso en el mapa', f.marcarAviso || f.nuevoAviso ? 'plan.avisoCancelar' : 'plan.avisoMapa', { ic: 'avisos', cls: f.marcarAviso || f.nuevoAviso ? 'primary' : '' }) : ''}
     ${pl && operativo() && can('avisos.crear') ? btn(f.dibujo ? 'Cancelar zona' : 'Aviso por zona', 'plan.zona', { ic: 'zona', cls: f.dibujo ? 'primary' : '' }) : ''}
-    ${esMapa(pl) ? btn(nombreVista(vistaActual()), 'plan.vista', { ic: 'capas', title: 'Tipo de mapa: estándar, satélite, híbrido o relieve', disabled: !puedeVista(), cls: 'vista-btn' }) : ''}
     ${pl ? `${btn('', 'plan.fit', { ic: 'ajustar', title: 'Ver todo el plano' })}
     ${btn('Capas y filtros' + (nfl ? ' · ' + nfl : ''), 'plan.capas', { ic: 'filtro', cls: nfl ? 'primary' : '', title: nfl ? nfl + ' filtro(s) activo(s)' : 'Elegir qué se ve en el plano' })}
     ${nfl ? btn('Restablecer', 'plan.restablecer', { cls: 'ghost sm', title: 'Volver a ver todo' }) : ''}
     ${btn('Lista', 'plan.lista', { ic: 'lista', title: 'Los elementos del plano en una lista (alternativa al mapa)' })}
     <label class="switch sm"><input type="checkbox" data-c="plan.capa" data-v="avisos"${fl.capas.avisos ? ' checked' : ''}><span>Avisos</span></label>
     <label class="switch sm"><input type="checkbox" data-c="plan.capa" data-v="etiquetas"${fl.capas.etiquetas ? ' checked' : ''}><span>Etiquetas</span></label>` : ''}
+    ${esMapa(pl) ? btn(nombreVista(vistaActual()), 'plan.vista', { ic: 'capas', title: 'Tipo de mapa: estándar, satélite, híbrido o relieve', disabled: !puedeVista(), cls: 'vista-btn' }) : ''}
+    ${canEdit ? btn(pl && !esMapa(pl) ? 'Cambiar imagen' : 'Importar imagen', 'plan.import', { ic: 'subir', cls: pl ? '' : 'primary' }) : ''}
+    ${canEdit ? btn('Importar desde Google Maps', 'plan.google', { ic: 'mapa', cls: pl ? '' : 'primary' }) : ''}
+    ${canEdit ? btn('Biblioteca de planos', 'plan.biblio', { ic: 'capas' }) : ''}
   </div>`;
   if (!pl) return tools + empty('No hay plano. Importa una zona de mapa (Google Maps o la biblioteca de planos: conserva las coordenadas reales) o una imagen del recinto (funciona sin Internet).');
   if (!esMapa(pl)) {

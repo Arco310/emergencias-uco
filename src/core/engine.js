@@ -32,7 +32,7 @@ export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tip
 
 export function emptyState() {
   // numAviso: índice número → aviso, para detectar duplicados sin recorrer todos los avisos
-  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {} };
+  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {}, revisiones: {} };
 }
 
 // ---------- utilidades de consulta ----------
@@ -161,6 +161,15 @@ H['prev.create'] = (s, op) => {
   for (const c of CATALOGOS) if (!Array.isArray(p.cat[c])) p.cat[c] = [];
   if (!p.cat.claves.some(c => c.base)) throw new Reject('El catálogo de claves no tiene clave base (C0)');
   s.prev = p;
+};
+
+// Revisión de una incoherencia detectada (1.5.0): queda en el preventivo con su historial; no cambia nada más
+H['revision.set'] = (s, op) => {
+  const x = op.x || {}; if (!x.id || !x.firma) throw new Reject('Revisión no válida');
+  s.revisiones = s.revisiones || {};
+  const cur = s.revisiones[x.id]; const base = cur && cur.firma === x.firma ? cur : { id: x.id, firma: x.firma, regla: x.regla || '', entidad: x.entidad || null, hist: [] };
+  const e = { t: op.t, por: op.u ? op.u.n : '', estado: x.estado, nota: x.nota || '', asignadoA: x.asignadoA || null };
+  s.revisiones[x.id] = { ...base, estado: x.estado, nota: x.nota || '', asignadoA: x.asignadoA || (x.estado === 'asignada' ? null : base.asignadoA || null), t: op.t, por: e.por, hist: [...base.hist, e] };
 };
 
 H['prev.update'] = (s, op) => {
@@ -495,7 +504,7 @@ function lazyMap(src) {
   });
 }
 export function lazyCopy(s) {
-  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso } };
+  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso }, revisiones: { ...(s.revisiones || {}) } };
 }
 
 /** Motor de un preventivo: registro ordenado + estado derivado */

@@ -1640,6 +1640,72 @@ def scenario_avisos_mapa(b):
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)
 
+# ---------------- Escenario 14 (1.5.0): incoherencias operativas ----------------
+def scenario_incoherencias(b):
+    print('\n== Escenario 14: detección de incoherencias, revisión y reglas (1.5.0) ==')
+    port = PORT + 14; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-inc-')
+    salida = os.path.join(data, 'inc.json')
+    subprocess.run(['node', 'tests/e2e/generar_incoherencias.mjs', salida], cwd=ROOT, check=True)
+    datos = json.load(open(salida))
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'incoherencias', TABLET, base=url)
+        def grupos(): return {g.locator('summary b').inner_text(): g.locator('.inc-row').count() for g in A.pg.locator('.inc-grupo').all()}
+        def deteccion():
+            A.setup('Lola Coordinadora', 'lola', 'clave-lola-1', 'Tablet', 'L'); A.perms(False)
+            ops = datos['prev_inc']; nmax = max([o.get('num') or 0 for o in ops])
+            A.pg.evaluate("async ([pid, ops, n]) => { const c = window.__UCO.core; await c.repo.appendOps(pid, ops); await c.repo.maxCounter(pid, n); await c.openPrev(pid); await c._summary(pid); window.__UCO.render(); }", ['prev_inc', ops, nmax])
+            A.pg.wait_for_selector('.inc-b', timeout=15000)
+            insignia = A.pg.locator('.inc-b').inner_text(); assert 'Alta' in insignia, insignia
+            A.antes = A.state("return JSON.stringify([s.units, s.avisos])")
+            A.pg.locator('.inc-b').click(); A.pg.wait_for_selector('.inc-grupo', timeout=10000)
+            g = grupos()
+            assert g.get('Cambios simultáneos por resolver') == 1, g
+            assert g.get('Aviso sin unidad asignada') == 2 and g.get('Aviso abierto demasiado tiempo') == 2, g
+            assert g.get('Descanso con una duración incoherente') == 1, g
+            primero = A.pg.locator('.inc-grupo').first
+            assert 'nivel-alta' in primero.get_attribute('class'), 'lo más grave, primero'
+            for t in ['Por qué:', 'Consecuencias:', 'Qué hacer:']: assert t in primero.inner_text(), t
+            A.pg.wait_for_timeout(300); A.shot('01-incoherencias', True)
+            return 'distintivo «Alta» en la barra; agrupadas por regla (2 avisos sin unidad, 2 abiertos demasiado, 1 descanso de 10 h, 1 conflicto) con por qué, consecuencias y qué hacer'
+        check('Incoherencias: detectadas, clasificadas y agrupadas', deteccion)
+        def revisar():
+            fila = A.pg.locator('.inc-grupo', has_text='Aviso sin unidad asignada').locator('.inc-row').first
+            fila.locator('[data-a="inc.asignar"]').click(); A.pg.wait_for_selector('.sheet-wrap form[data-f="inc.asignar"]')
+            A.sheet().locator('[name=nota]').fill('Lola busca una unidad libre'); A.sheet().locator('button.primary').click(); A.pg.wait_for_timeout(1200)
+            assert 'Asignada a Lola Coordinadora' in A.pg.locator('.inc-grupo', has_text='Aviso sin unidad asignada').inner_text()
+            fila = A.pg.locator('.inc-grupo', has_text='Aviso sin unidad asignada').locator('.inc-row').first
+            fila.locator('[data-a="inc.marcar"][data-v="resuelta"]').click(); A.pg.wait_for_selector('.sheet-wrap form[data-f="dlg.submit"]')
+            A.sheet().locator('input, textarea').first.fill('Se asignó la SVB-2 al terminar su descanso'); A.dlg_ok(); A.pg.wait_for_timeout(1200)
+            assert A.pg.locator('.inc-grupo', has_text='Aviso sin unidad asignada').locator('.inc-row').count() == 1, 'una menos en abiertas'
+            A.a('inc.tab', v='revisadas'); A.pg.wait_for_selector('.inc-grupo')
+            r = A.pg.locator('.inc-grupo').first; assert 'Resuelta por Lola Coordinadora' in r.inner_text(), r.inner_text()
+            r.locator('[data-a="inc.historial"]').click(); A.pg.wait_for_selector('.sheet-wrap .ref-list li')
+            h = A.sheet().inner_text(); assert 'Asignada' in h and 'Resuelta' in h, h
+            A.close_sheets()
+            despues = A.state("return JSON.stringify([s.units, s.avisos])")
+            assert despues == A.antes, 'revisar no cambia unidades ni avisos'
+            b2 = A.state("return Object.keys(s.revisiones).length"); assert b2 == 1, b2
+            return 'asignada a Lola y resuelta con nota; pasa a «Revisadas», historial con los dos pasos; unidades y avisos sin cambios'
+        check('Revisar, asignar y resolver (con historial, sin tocar datos operativos)', revisar)
+        def reglas():
+            A.a('inc.tab', v='reglas'); A.pg.wait_for_selector('form[data-f="inc.reglas"]')
+            A.pg.locator('[name="nivel_aviso_abierto_demasiado"]').select_option('critica')
+            A.pg.locator('[name="activa_descanso_duracion"]').uncheck()
+            A.pg.locator('form[data-f="inc.reglas"] button.primary').click(); A.pg.wait_for_timeout(1500)
+            A.a('inc.tab', v='abiertas'); A.pg.wait_for_selector('.inc-grupo')
+            primero = A.pg.locator('.inc-grupo').first
+            assert 'Aviso abierto demasiado tiempo' in primero.inner_text() and 'nivel-critica' in primero.get_attribute('class'), primero.inner_text()[:80]
+            assert 'Descanso con una duración incoherente' not in grupos(), 'regla desactivada'
+            assert 'Crítica' in A.pg.locator('.inc-b').inner_text()
+            n = A.state("return JSON.stringify(s.prev.cfg.reglas)"); assert 'critica' in n, n
+            return 'nivel cambiado a «Crítica» (sube arriba y en la barra) y una regla desactivada; guardado en el preventivo'
+        check('Reglas aprobadas: niveles y reglas activas', reglas)
+        check('Sin errores de JavaScript (escenario 14)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+        A.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1662,6 +1728,7 @@ def main():
             if only in ('', '11'): scenario_migracion_sesion(b)
             if only in ('', '12'): scenario_capas(b)
             if only in ('', '13'): scenario_avisos_mapa(b)
+            if only in ('', '14'): scenario_incoherencias(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

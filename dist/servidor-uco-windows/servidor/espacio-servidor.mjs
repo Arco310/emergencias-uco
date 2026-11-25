@@ -329,7 +329,7 @@ var SECTOR_OTROS = "otros";
 var AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|zona|cierre\.[a-z]+)$/;
 var CATALOGOS = ["claves", "motivosEsp", "sectores", "tiposAviso", "tiposRecurso", "categoriasPunto", "puntos"];
 function emptyState() {
-  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {} };
+  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {}, revisiones: {} };
 }
 function claveDef(prev, code) {
   return (prev && prev.cat && prev.cat.claves || []).find((c) => c.codigo === code) || null;
@@ -464,6 +464,15 @@ H["prev.create"] = (s, op) => {
   for (const c of CATALOGOS) if (!Array.isArray(p.cat[c])) p.cat[c] = [];
   if (!p.cat.claves.some((c) => c.base)) throw new Reject("El cat\xE1logo de claves no tiene clave base (C0)");
   s.prev = p;
+};
+H["revision.set"] = (s, op) => {
+  const x = op.x || {};
+  if (!x.id || !x.firma) throw new Reject("Revisi\xF3n no v\xE1lida");
+  s.revisiones = s.revisiones || {};
+  const cur = s.revisiones[x.id];
+  const base = cur && cur.firma === x.firma ? cur : { id: x.id, firma: x.firma, regla: x.regla || "", entidad: x.entidad || null, hist: [] };
+  const e = { t: op.t, por: op.u ? op.u.n : "", estado: x.estado, nota: x.nota || "", asignadoA: x.asignadoA || null };
+  s.revisiones[x.id] = { ...base, estado: x.estado, nota: x.nota || "", asignadoA: x.asignadoA || (x.estado === "asignada" ? null : base.asignadoA || null), t: op.t, por: e.por, hist: [...base.hist, e] };
 };
 H["prev.update"] = (s, op) => {
   const r = applyFields(s.prev, op.x.f, PREV_FIELDS);
@@ -843,7 +852,7 @@ function lazyMap(src) {
   });
 }
 function lazyCopy(s) {
-  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso } };
+  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso }, revisiones: { ...s.revisiones || {} } };
 }
 var Engine = class {
   constructor(ops = []) {
@@ -976,6 +985,9 @@ var PERMISOS = [
   ["importar", "Importar informaci\xF3n", "Informes y datos"],
   ["notas.crear", "A\xF1adir observaciones e incidencias", "Informes y datos"],
   ["auditoria.ver", "Consultar la auditor\xEDa", "Informes y datos", "ver"],
+  ["incoherencias.ver", "Consultar las incoherencias detectadas", "Control operativo", "ver"],
+  ["incoherencias.revisar", "Revisar, asignar y resolver incoherencias", "Control operativo"],
+  ["incoherencias.reglas", "Ajustar las reglas de incoherencias (niveles y umbrales)", "Control operativo"],
   ["usuarios.admin", "Administraci\xF3n completa de usuarios y perfiles", "Administraci\xF3n"],
   ["usuarios.crear", "Crear usuarios", "Administraci\xF3n"],
   ["usuarios.editar", "Modificar, suspender y desactivar usuarios", "Administraci\xF3n"],
@@ -992,7 +1004,10 @@ var PERM_KEYS = PERMISOS.map((p) => p[0]);
 var PERM_LABEL = Object.fromEntries(PERMISOS.map((p) => [p[0], p[1]]));
 var PERMISOS_VER = PERMISOS.filter((p) => p[3] === "ver").map((p) => p[0]);
 var IMPLICA = {
-  "preventivos.editar": ["preventivos.iniciar"],
+  "preventivos.editar": ["preventivos.iniciar", "incoherencias.reglas"],
+  "avisos.editar": ["incoherencias.revisar"],
+  "incoherencias.revisar": ["incoherencias.ver"],
+  "incoherencias.reglas": ["incoherencias.ver"],
   "preventivos.cerrar": ["preventivos.archivar"],
   "descansos.gestionar": ["descansos.iniciar", "descansos.finalizar"],
   "planos.editar": ["planos.vista"],
@@ -1069,6 +1084,7 @@ function permisosOp(op, s, lote = []) {
     case "prev.update": {
       const campos = Object.keys(f);
       if (campos.length && campos.every((c) => c === "cfg.vistaMapa")) return ["planos.vista"];
+      if (campos.length && campos.every((c) => c === "cfg.reglas")) return ["incoherencias.reglas"];
       return campos.some((c) => c.startsWith("cfg.descanso")) ? ["preventivos.editar", "descansos.duracion"] : ["preventivos.editar"];
     }
     case "prev.estado":
@@ -1077,6 +1093,8 @@ function permisosOp(op, s, lote = []) {
       return ["preventivos.iniciar"];
     case "prev.archivo":
       return ["preventivos.archivar"];
+    case "revision.set":
+      return ["incoherencias.revisar"];
     case "prev.cat": {
       if (x.cat === "tiposRecurso" && Array.isArray(x.o) && Array.isArray(x.n) && x.n.length === x.o.length + 1 && x.o.every((t, i) => JSON.stringify(t) === JSON.stringify(x.n[i]))) {
         const nuevo = x.n[x.n.length - 1].id;

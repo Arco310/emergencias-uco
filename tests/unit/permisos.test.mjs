@@ -8,7 +8,7 @@ const U = (extra = {}) => ({ id: 'u1', usuario: 'ana', estado: 'activo', perfil:
 
 test('catálogo agrupado por módulos, con consulta y modificación', () => {
   const mods = [...new Set(PERMISOS.map(p => p[2]))];
-  assert.deepEqual(mods, ['Preventivos', 'Unidades y recursos', 'Avisos', 'Descansos', 'Planos y mapas', 'Informes y datos', 'Administración']);
+  assert.deepEqual(mods, ['Preventivos', 'Unidades y recursos', 'Avisos', 'Descansos', 'Planos y mapas', 'Informes y datos', 'Control operativo', 'Administración']);
   for (const k of ['preventivos.ver', 'preventivos.iniciar', 'preventivos.archivar', 'preventivos.historico', 'unidades.ver', 'sectores.gestionar', 'avisos.ver', 'avisos.historico', 'descansos.ver', 'descansos.iniciar', 'descansos.finalizar', 'planos.ver', 'planos.vista', 'informes.generar', 'importar', 'bitacora.ver', 'auditoria.ver', 'usuarios.crear', 'usuarios.editar', 'usuarios.aprobar', 'usuarios.permisos'])
     assert.ok(PERM_KEYS.includes(k), k);
   assert.equal(new Set(PERM_KEYS).size, PERM_KEYS.length, 'sin claves repetidas');

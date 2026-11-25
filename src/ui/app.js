@@ -2,7 +2,7 @@
 import { openStorage, entornoPruebas } from '../data/idb.js';
 import { AppCore } from '../app/core.js';
 import { G, A, F, CH } from './state.js';
-import { esc, $, $$, toast, closeSheet, handlePop, refreshSheets, drawLayer, dialogSubmit, sheets, openSheet, confirmDlg, systemNotify } from './dom.js';
+import { esc, $, $$, toast, closeSheet, handlePop, refreshSheets, drawLayer, dialogSubmit, sheets, openSheet, confirmDlg, systemNotify, selectorDe } from './dom.js';
 import { icon } from './icons.js';
 import { fmtClock, fmtDur, now, AppError } from '../core/util.js';
 import { APP_NAME, APP_VERSION } from '../core/defaults.js';
@@ -13,6 +13,7 @@ import * as home from './views/home.js';
 import * as ops from './views/ops.js';
 import * as plano from './views/plano.js';
 import * as analysis from './views/analysis.js';
+import { renderIncoherencias, insigniaIncoherencias } from './views/incoherencias.js';
 import * as admin from './views/admin.js';
 import * as actualizaciones from './views/actualizaciones.js';
 import { iniciarActualizaciones, arranqueOk, estadoApp } from './actualizacion.js';
@@ -43,6 +44,7 @@ const VIEWS = {
   plano: { t: 'Plano táctico', ic: 'plano', scope: 'p', r: plano.renderPlano, full: true, perm: 'planos.ver' },
   mas: { t: 'Más', ic: 'mas', scope: 'p', r: admin.renderPrevMenu },
   bitacora: { t: 'Bitácora y auditoría', ic: 'bitacora', scope: 'p', r: analysis.renderLog, parent: 'mas', perm: 'bitacora.ver' },
+  incoherencias: { t: 'Incoherencias', ic: 'alerta', scope: 'p', r: renderIncoherencias, parent: 'mas', perm: 'incoherencias.ver' },
   cronologia: { t: 'Cronología de unidades', ic: 'reloj', scope: 'p', r: analysis.renderChrono, parent: 'mas', perm: 'unidades.ver' },
   estadisticas: { t: 'Tiempos y estadísticas', ic: 'grafico', scope: 'p', r: analysis.renderStats, parent: 'mas', perm: 'estadisticas.ver' },
   mapa: { t: 'Mapa real', ic: 'mapa', scope: 'p', r: ops.renderMap, parent: 'mas', perm: 'planos.ver' },
@@ -122,6 +124,8 @@ export function render() {
   if (v0 && v0.scope === 'g' && core.cur && !['cuenta', 'permisos', 'acerca'].includes(route)) { /* se permite consultar ajustes globales */ }
   const v = VIEWS[route];
   const focusId = document.activeElement && document.activeElement.id;
+  // Sin id (p. ej. un botón): se vuelve a encontrar por sus atributos para que el teclado no pierda el foco
+  const focusSel = !focusId && document.activeElement && app.contains(document.activeElement) ? selectorDe(document.activeElement) : null;
   const selStart = focusId && document.activeElement.selectionStart;
   const main = $('#main'); const scroll = main ? main.scrollTop : 0;
   let body;
@@ -133,6 +137,7 @@ export function render() {
   const m2 = $('#main'); if (m2 && G.ui._lastRoute === route) m2.scrollTop = scroll;
   G.ui._lastRoute = route;
   if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); try { if (selStart != null) el.setSelectionRange(selStart, selStart); } catch { } } }
+  else if (focusSel) { const el = app.querySelector(focusSel); if (el) el.focus({ preventScroll: true }); }
   refreshSheets();
   tick();
   if (v.after) v.after();
@@ -153,7 +158,7 @@ function layout(route, v, body) {
     ${inPrev ? `<button class="btn icon ghost" data-a="prev.exit" title="Volver a preventivos" aria-label="Volver a preventivos">${icon('atras')}</button>` : `<span class="logo">${logoSvg()}</span>`}
     <div class="top-title">${inPrev ? `<b>${esc(st.nombre)}</b><span class="chip sm ${est[1]}">${est[0]}${st.archivado ? ' · archivado' : ''}</span>` : `<b>${APP_NAME}</b>`}
       ${v.parent ? `<span class="crumb">${esc(v.t)}</span>` : ''}</div>
-    <div class="top-act">${inPrev ? syncBadge() : ''}${netBadge()}
+    <div class="top-act">${inPrev ? insigniaIncoherencias() : ''}${inPrev ? syncBadge() : ''}${netBadge()}
       <button class="btn icon ghost" data-a="user.menu" aria-label="Usuario: ${esc(core.user.nombre)}">${icon('usuario')}</button></div>
   </header>
   ${navHtml('rail')}

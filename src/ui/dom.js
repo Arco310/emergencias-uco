@@ -17,13 +17,23 @@ export function sheets() { return stack; }
  * Abre un panel. opts: { title, render: () => html, size: 's'|'m'|'l', live, onClose, footer: () => html }
  * live = true → se vuelve a dibujar cuando cambian los datos.
  */
+/** Cómo volver a encontrar un control tras repintar (la pantalla se vuelve a dibujar y el elemento cambia) */
+export function selectorDe(el) {
+  if (!el || el === document.body) return null;
+  if (el.id) return '#' + CSS.escape(el.id);
+  const d = el.dataset || {}; const extra = ['id', 'v', 'k', 'd', 'campo'].filter(k => d[k] != null).map(k => `[data-${k}="${CSS.escape(d[k])}"]`).join('');
+  if (d.a) return `[data-a="${CSS.escape(d.a)}"]` + extra;
+  if (d.c) return `[data-c="${CSS.escape(d.c)}"]` + extra;
+  const f = el.closest && el.closest('form[data-f]');
+  if (f && el.name) return `form[data-f="${CSS.escape(f.dataset.f)}"] [name="${CSS.escape(el.name)}"]`;
+  return null;
+}
 export function openSheet(opts) {
   const id = uid('sh_');
   // Quién lo abrió: al cerrar, el foco vuelve allí (teclado y lectores de pantalla no se pierden)
   const origen = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   // Si la pantalla se repinta, el elemento cambia: se guarda también cómo volver a encontrarlo
-  const d = origen && origen.dataset ? origen.dataset : {};
-  const origenSel = !origen ? null : d.a ? `[data-a="${CSS.escape(d.a)}"]` + ['id', 'v', 'k', 'd'].filter(k => d[k] != null).map(k => `[data-${k}="${CSS.escape(d[k])}"]`).join('') : origen.id ? '#' + CSS.escape(origen.id) : null;
+  const origenSel = selectorDe(origen);
   stack.push({ id, ...opts, origen, origenSel });
   drawLayer();
   // Entrada de historial para que el botón Atrás de Android cierre el panel.

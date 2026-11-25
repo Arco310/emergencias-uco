@@ -1,34 +1,24 @@
 {
- "fecha": "2026-11-25 04:31:07",
+ "fecha": "2026-11-25 04:45:22",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Aviso desde el mapa: marcar, ajustar sin arrastrar, confirmar y elegir unidades",
+   "prueba": "Incoherencias: detectadas, clasificadas y agrupadas",
    "resultado": "SUPERADA",
-   "detalle": "botón → toque → marcador provisional (sector 1) ajustado con botones y con el teclado → formulario con ubicación «marcada en el mapa», sector y unidades con su situación; SVB-1 sugerida y elegida, las ocupadas o en descanso no se pueden marcar"
+   "detalle": "distintivo «Alta» en la barra; agrupadas por regla (2 avisos sin unidad, 2 abiertos demasiado, 1 descanso de 10 h, 1 conflicto) con por qué, consecuencias y qué hacer"
   },
   {
-   "prueba": "Ubicación sin el mapa: punto del plano y coordenadas validadas",
+   "prueba": "Revisar, asignar y resolver (con historial, sin tocar datos operativos)",
    "resultado": "SUPERADA",
-   "detalle": "sin tocar el mapa: coordenadas imposibles rechazadas; punto del plano «Puerta 3» como ubicación (origen «punto»), y el aviso aparece en el plano"
+   "detalle": "asignada a Lola y resuelta con nota; pasa a «Revisadas», historial con los dos pasos; unidades y avisos sin cambios"
   },
   {
-   "prueba": "Accesibilidad: crear un aviso solo con el teclado",
+   "prueba": "Reglas aprobadas: niveles y reglas activas",
    "resultado": "SUPERADA",
-   "detalle": "desde el plano solo con Tab/Intro: «Nuevo aviso en el mapa» → «Sin el mapa» → «Más datos» → descripción → crear"
+   "detalle": "nivel cambiado a «Crítica» (sube arriba y en la barra) y una regla desactivada; guardado en el preventivo"
   },
   {
-   "prueba": "Accesibilidad: lista alternativa al mapa",
-   "resultado": "SUPERADA",
-   "detalle": "lista con unidades (situación), avisos, puntos y sectores; «Ver en el plano» con el teclado centra y abre la ficha (con el foco en ella)"
-  },
-  {
-   "prueba": "Accesibilidad: el foco entra en los paneles y vuelve al cerrarlos",
-   "resultado": "SUPERADA",
-   "detalle": "al abrir un panel el foco entra en él; al cerrarlo vuelve al botón que lo abrió"
-  },
-  {
-   "prueba": "Sin errores de JavaScript (escenario 13)",
+   "prueba": "Sin errores de JavaScript (escenario 14)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }
