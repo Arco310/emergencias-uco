@@ -128,6 +128,7 @@ Los 47 criterios de aceptación se verificarán uno a uno en el informe de entre
 - **Monitorización: cartografía desde el dispositivo.** La comprobación se hace desde el dispositivo, que es quien carga las teselas, y solo al pulsar.
 - **Monitorización: permiso** «Consultar el estado técnico del servidor y del sistema» (`sistema.estado`).
 - **Compatibilidad: el servidor 1.5.0 exige aplicaciones 1.5.0 para sincronizar** (`minCliente`). Las anteriores mostrarían las operaciones nuevas como conflictos.
+- **Datos: sin migración.** Cuando faltan las categorías de punto (en la configuración general o en preventivos anteriores) se usan las de partida, así que el esquema de datos sigue en el 3.
 - **Correcciones encontradas al probar:**
   - los diálogos con un campo de texto guardaban «[object Object]» (desde la 1.0.0);
   - en el modo servidor, las peticiones atendidas intentaban responder dos veces (1.4.0);
