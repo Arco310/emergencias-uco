@@ -4,6 +4,7 @@ import { fmtTime, fmtDateTime, fmtDur } from './util.js';
 import { fmtCoords } from './geo.js';
 import { CATEGORIAS_CLAVE } from './defaults.js';
 import { tipoAvisoDef, etiquetaTipo, etiquetaTipoAviso } from './incidentes.js';
+import { describirOrigen } from './templates.js';
 
 export const CATEGORIAS = {
   preventivo: 'Preventivo', configuracion: 'Configuración', unidad: 'Unidades', clave: 'Claves', aviso: 'Avisos',
@@ -49,7 +50,7 @@ export function describeOp(s, op, status) {
   const x = op.x || {};
   let cat = 'preventivo', elem = 'Preventivo', acc = op.k, ant = '', nue = '';
   switch (op.k) {
-    case 'prev.create': acc = 'Creación del preventivo'; nue = (x.prev && x.prev.nombre) + ' · modalidad ' + (x.prev && x.prev.modalidad) + (x.prev && x.prev.origen && x.prev.origen.nombre ? ' · desde ' + x.prev.origen.nombre : ''); break;
+    case 'prev.create': acc = 'Creación del preventivo'; nue = (x.prev && x.prev.nombre) + ' · modalidad ' + (x.prev && x.prev.modalidad) + (x.prev && x.prev.origen && x.prev.origen.nombre ? ' · origen: ' + describirOrigen(x.prev.origen) : ''); break;
     case 'prev.update': cat = Object.keys(x.f || {}).some(k => k.startsWith('cfg.')) ? 'configuracion' : 'preventivo'; acc = 'Modificación'; ant = fieldsText(s, x.f, 'o'); nue = fieldsText(s, x.f, 'n'); break;
     case 'prev.estado': acc = x.o === 'cerrado' ? 'Reapertura' : x.n === 'activo' ? 'Activación' : x.n === 'cerrado' ? 'Finalización' : 'Cambio de estado'; ant = PEST[x.o] || x.o; nue = (PEST[x.n] || x.n) + (x.motivo ? ' · Motivo: ' + x.motivo : '') + (x.advertencias ? ' · Cerrado con advertencias' : ''); break;
     case 'prev.archivo': acc = x.n ? 'Archivado' : 'Recuperado del archivo'; break;

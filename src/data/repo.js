@@ -5,6 +5,7 @@ import * as K from '../core/crypto.js';
 import { defaultGlobalConfig, SCHEMA_VERSION, APP_VERSION } from '../core/defaults.js';
 import { defaultRoles, permsOf, PERM_KEYS, permisosEfectivos } from '../core/perms.js';
 import { ESQUEMA_DATOS } from './migraciones.js';
+import { cambioContenido, versionarPlantilla } from '../core/templates.js';
 
 const LOCK_AFTER = 5;
 const credV = u => (u && u.cred && u.cred.v) || 'v0';
@@ -276,8 +277,14 @@ export class Repo {
   }
   async getTemplate(id) { return this.getDoc('tpl:' + id); }
   async saveTemplate(t, accion = 'Modificación de plantilla') {
-    t.modificada = now(); await this.putDoc('tpl:' + t.id, t);
-    await this.audit(accion, 'Plantilla ' + t.nombre, '', '');
+    // Versiones (1.5.0): si cambia lo que crea la plantilla, la anterior se conserva tal cual
+    const ant = await this.getTemplate(t.id); const por = this.session ? this.session.user.nombre : '';
+    if (ant && cambioContenido(ant, t)) Object.assign(t, versionarPlantilla(ant, t, por));
+    else if (!t.revision) { t.revision = (ant && ant.revision) || 1; t.revisiones = (ant && ant.revisiones) || []; }
+    t.modificada = now(); if (por && !t.modificadaPor) t.modificadaPor = por;
+    await this.putDoc('tpl:' + t.id, t);
+    await this.audit(accion, 'Plantilla ' + t.nombre + ' (versión ' + t.revision + ')', '', '');
+    return t;
   }
   async deleteTemplate(id) {
     const t = await this.getTemplate(id);

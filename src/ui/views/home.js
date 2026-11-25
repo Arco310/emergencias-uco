@@ -5,7 +5,7 @@ import { icon, unitSvg } from '../icons.js';
 import { now, fmtDateTime, fmtDate, isoDate, clone, uid, contrastText } from '../../core/util.js';
 import { KPIS, CAMPOS_TARJETA } from '../../core/defaults.js';
 import * as C from '../../core/commands.js';
-import { newTemplate, contentFromConfig, exportTemplate, importTemplate, normalizeContent } from '../../core/templates.js';
+import { newTemplate, contentFromConfig, exportTemplate, importTemplate, normalizeContent, ELEMENTOS_PLANTILLA } from '../../core/templates.js';
 import { prevJSON } from '../../core/exporters.js';
 import { openCatalog, catalogButtons, CAT_TITLE } from './catalogs.js';
 import { unitFields, unitValues, unitFromForm } from './ops.js';
@@ -93,34 +93,112 @@ A['home.export'] = async el => {
 let TPLS = [];
 A['home.new'] = async el => {
   const pre = (el && el.dataset && el.dataset.origen) || 'cfg';
-  TPLS = await core().repo.listTemplates();
+  TPLS = (await core().repo.listTemplates()).filter(t => t.activa !== false); // las desactivadas no se ofrecen
   const sums = core().summaries || [];
-  const opts = [['cfg', 'En blanco (configuración general)'], ...TPLS.map(t => ['tpl:' + t.id, (t.favorita ? '★ ' : '') + 'Plantilla: ' + t.nombre]), ...sums.map(s => ['dup:' + s.id, 'Duplicar: ' + s.nombre])];
+  const opts = [['cfg', 'En blanco (configuración general)'], ...(can('plantillas.usar') ? TPLS.map(t => ['tpl:' + t.id, (t.favorita ? '★ ' : '') + 'Plantilla: ' + t.nombre + ' (versión ' + (t.revision || 1) + ')']) : []), ...sums.map(s => ['dup:' + s.id, 'Duplicar: ' + s.nombre])];
   const today = isoDate(now());
   const srcName = pre.startsWith('dup:') ? (sums.find(s => s.id === pre.slice(4)) || {}).nombre : '';
+  // Asistente (1.5.0 · §3): origen → nombre → fecha y horario → sectores y recursos → opciones heredadas → modalidad → confirmación
   openSheet({
     title: 'Nuevo preventivo', size: 'l',
-    render: () => `<form data-f="home.create">
-      <h3>Origen</h3>${fieldsHtml([
+    render: () => `<form data-f="home.create" class="asistente">
+      <h3 class="paso">Origen</h3>${fieldsHtml([
         { name: 'origen', label: 'Partir de', type: 'select', options: opts, value: pre, help: 'La plantilla o el preventivo de origen se copian: los cambios posteriores en ellos no afectan a este preventivo. Nunca se copian avisos, números ni historiales.' },
-        { name: 'copUnits', label: 'Copiar unidades (duplicar)', type: 'checkbox', value: true }, { name: 'copPlan', label: 'Copiar plano táctico y posiciones (duplicar)', type: 'checkbox', value: true },
       ])}
-      <h3>Datos</h3>${fieldsHtml([
+      <h3 class="paso">Nombre</h3>${fieldsHtml([
         { name: 'nombre', label: 'Nombre del preventivo', required: true, value: srcName ? srcName + ' (copia)' : '' },
         { name: 'descripcion', label: 'Descripción', type: 'textarea', rows: 2 },
-        '<div class="row gap wrap">', { name: 'fecha', label: 'Fecha', type: 'date', value: today }, { name: 'horaInicio', label: 'Hora de inicio', type: 'time' }, { name: 'horaFin', label: 'Hora de finalización', type: 'time' }, '</div>',
+      ])}
+      <h3 class="paso">Fecha y horario</h3>${fieldsHtml([
+        '<div class="row gap wrap">', '<div class="row gap wrap">', { name: 'fecha', label: 'Fecha', type: 'date', value: today }, { name: 'horaInicio', label: 'Hora de inicio', type: 'time' }, { name: 'horaFin', label: 'Hora de finalización', type: 'time' }, '</div>', '</div>',
         { name: 'lugar', label: 'Lugar (dirección)', placeholder: 'Se puede completar después con coordenadas' },
       ])}
-      <h3>Modalidad</h3>${fieldsHtml(modalidadFields())}
+      <div data-revision-origen></div>
+      <h3 class="paso">Modalidad</h3>${fieldsHtml(modalidadFields())}
+      <h3 class="paso">Confirmación</h3><p class="resumen-crear" data-resumen-origen aria-live="polite"></p>
       <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear preventivo</button></div></form>`,
+    onMount: el2 => {
+      const f = el2.querySelector('form');
+      f.addEventListener('change', ev => { if (ev.target.name === 'origen') pintarRevision(f); else resumenCreacion(f); });
+      f.addEventListener('input', ev => { if (ev.target.name === 'nombre') resumenCreacion(f); });
+      pintarRevision(f);
+    },
   });
 };
+const plural = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
+/** Lo que una plantilla puede aportar además de unidades y sectores (solo lo que contiene) */
+function opcionesHeredables(t) {
+  const c = normalizeContent(t.contenido);
+  const det = {
+    tiposRecurso: plural(c.cat.tiposRecurso.length, 'tipo', 'tipos'),
+    puntos: c.cat.puntos.length ? plural(c.cat.puntos.length, 'punto', 'puntos') : null,
+    plano: c.plano ? c.plano.nombre || 'plano' : null,
+    capas: c.cfg.vistaMapa ? 'tipo de mapa guardado' : null,
+    tiposAviso: plural(c.cat.tiposAviso.length, 'tipo de aviso', 'tipos de aviso'),
+    parametros: 'claves, motivos y descanso de ' + (c.cfg.descansoMin || 30) + ' min',
+    reglas: c.cfg.reglas && Object.keys(c.cfg.reglas).length ? plural(Object.keys(c.cfg.reglas).length, 'regla ajustada', 'reglas ajustadas') : null,
+    participantes: c.participantes.length ? plural(c.participantes.length, 'persona', 'personas') : null,
+  };
+  return ELEMENTOS_PLANTILLA.filter(([k]) => det[k]).map(([k, l]) => [k, l, det[k]]);
+}
+function listaRevision(name, titulo, items) {
+  if (!items.length) return `<p class="muted small">${esc(titulo)}: ninguno en la plantilla.</p>`;
+  return `<details class="rev-lista"><summary>${esc(titulo)}: <b data-n="${name}">${items.length}</b> de ${items.length}</summary>
+    <div class="row gap-s">${btn('Todas', 'home.revMarcar', { cls: 'ghost', data: { g: name, v: '1' }, title: 'Marcar todas' })}${btn('Ninguna', 'home.revMarcar', { cls: 'ghost', data: { g: name, v: '0' }, title: 'Desmarcar todas' })}</div>
+    <fieldset class="rev-items" data-field="1" data-type="checks" data-name="${name}"><legend class="sr-only">${esc(titulo)}</legend>
+    ${items.map(([v, h]) => `<label class="u-asig"><input type="checkbox" data-group="${name}" value="${attr(v)}" checked><span class="grow">${h}</span></label>`).join('')}</fieldset></details>`;
+}
+function revisionPlantilla(t) {
+  if (!t) return '<p class="bad-txt">La plantilla ya no está disponible.</p>';
+  const c = normalizeContent(t.contenido);
+  const tipos = new Map(c.cat.tiposRecurso.map(x => [x.id, x.nombre])); const secs = new Map(c.cat.sectores.map(x => [x.id, x.nombre]));
+  const uds = c.unidades.map(u => [u.ind, `<b>${esc(u.ind)}</b>${u.nombre ? ' ' + esc(u.nombre) : ''}<span class="muted small d-block">${esc([tipos.get(u.tipo) || 'Sin tipo', u.sector ? secs.get(u.sector) || 'Sector desconocido' : 'Sin sector', u.plan ? 'con posición en el plano' : ''].filter(Boolean).join(' · '))}</span>`]);
+  const ss = c.cat.sectores.map(x => [x.id, `<span class="swatch" style="background:${attr(x.color || '#999999')}"></span>${esc(x.nombre)}${x.zona ? ' <span class="muted small">· delimitado en el plano</span>' : ''}`]);
+  const ofr = opcionesHeredables(t);
+  return `<h3 class="paso">Sectores y recursos previstos</h3>
+    <p class="muted small">Plantilla «${esc(t.nombre)}», versión ${t.revision || 1}. Desmarca lo que no vaya a utilizarse en este preventivo: la plantilla no cambia. Las unidades de un sector que no se hereda quedan sin sector.</p>
+    ${listaRevision('t_u', 'Unidades previstas', uds)}${listaRevision('t_s', 'Sectores', ss)}
+    <h3 class="paso">Opciones heredadas</h3>
+    ${fieldsHtml([{ name: 't_e', label: 'Se copian de la plantilla (lo que desmarques se toma de la configuración general)', type: 'checks', options: ofr.map(([k, l, d]) => [k, l + ' — ' + d]), value: ofr.map(e => e[0]) }])}
+    ${c.plano ? '<p class="muted small">Sin el plano no se conservan posiciones, puntos ni delimitaciones: todos se sitúan sobre él.</p>' : ''}`;
+}
+function pintarRevision(form) {
+  const cont = form.querySelector('[data-revision-origen]'); if (!cont) return;
+  const o = form.origen.value;
+  if (o.startsWith('tpl:')) cont.innerHTML = revisionPlantilla(TPLS.find(x => x.id === o.slice(4)));
+  else if (o.startsWith('dup:')) cont.innerHTML = `<h3 class="paso">Sectores y recursos</h3>${fieldsHtml([
+    { name: 'copUnits', label: 'Copiar las unidades', type: 'checkbox', value: true }, { name: 'copPlan', label: 'Copiar el plano táctico y las posiciones', type: 'checkbox', value: true }])}
+    <p class="muted small">Se copian la configuración, los sectores y los catálogos del preventivo de origen.</p>`;
+  else { const g = core().cfg.catalogos || {}; cont.innerHTML = `<h3 class="paso">Sectores y recursos</h3><p class="muted small">Se parte de la configuración general (${plural((g.tiposRecurso || []).length, 'tipo de recurso', 'tipos de recurso')}, ${plural((g.sectores || []).length, 'sector', 'sectores')}). Las unidades y el plano se añaden después.</p>`; }
+  resumenCreacion(form);
+}
+A['home.revMarcar'] = el => { const f = el.closest('form'); for (const x of f.querySelectorAll(`input[data-group="${el.dataset.g}"]`)) x.checked = el.dataset.v === '1'; resumenCreacion(f); };
+/** Confirmación: qué se va a crear, actualizado con cada cambio */
+function resumenCreacion(form) {
+  const el = form.querySelector('[data-resumen-origen]'); if (!el) return;
+  const v = readForm(form); const o = v.origen || 'cfg'; const partes = [];
+  for (const g of ['t_u', 't_s']) { const b = form.querySelector(`[data-n="${g}"]`); if (b) b.textContent = (v[g] || []).length; }
+  if (o.startsWith('tpl:')) {
+    const t = TPLS.find(x => x.id === o.slice(4));
+    if (t) {
+      const e = new Set(v.t_e || []); const ofr = opcionesHeredables(t); const no = ofr.filter(x => !e.has(x[0]) && x[0] !== 'plano'); // el plano ya se indica aparte
+      partes.push('desde la plantilla «' + t.nombre + '» (versión ' + (t.revision || 1) + ')', plural((v.t_u || []).length, 'unidad', 'unidades'), plural((v.t_s || []).length, 'sector', 'sectores'), ofr.some(x => x[0] === 'plano') && e.has('plano') ? 'con plano' : 'sin plano');
+      if (no.length) partes.push('sin heredar: ' + no.map(x => x[1].toLowerCase()).join(', '));
+    }
+  } else if (o.startsWith('dup:')) partes.push('duplicando un preventivo', v.copUnits ? 'con sus unidades' : 'sin unidades', v.copPlan ? 'con su plano' : 'sin plano');
+  else partes.push('con la configuración general, sin unidades ni plano');
+  partes.push(v.modalidad === 'compartida' ? 'compartido' : 'independiente', v.activar ? 'activo desde el principio' : 'en preparación');
+  el.textContent = 'Se creará «' + (String(v.nombre || '').trim() || 'sin nombre') + '» ' + partes.join(', ') + '. Nunca se copian avisos, números ni historiales.';
+}
 F['home.create'] = async form => {
   const v = readForm(form); const c = core();
   let seed;
   if (v.origen.startsWith('tpl:')) {
     const t = TPLS.find(x => x.id === v.origen.slice(4)) || await c.repo.getTemplate(v.origen.slice(4));
-    seed = c.seedFromTemplate(t);
+    // Lo que se ha revisado en el asistente; si no se llegó a mostrar, se hereda todo
+    const marcadas = new Set(v.t_e || []);
+    const incluir = v.t_e ? Object.fromEntries(opcionesHeredables(t).map(([k]) => [k, marcadas.has(k)])) : {};
+    seed = c.seedFromTemplate(t, { incluir, unidades: v.t_u ?? null, sectores: v.t_s ?? null });
   } else if (v.origen.startsWith('dup:')) {
     const pid = v.origen.slice(4);
     if (!c.engines.has(pid)) await c.loadEngine(pid);
@@ -168,44 +246,52 @@ let TL = null;
 export function renderTemplates() {
   if (!TL) { core().repo.listTemplates().then(t => { TL = t; G.render(); }); return '<p class="muted">Cargando…</p>'; }
   const list = TL; TL = null;
-  const gest = can('plantillas.gestionar');
+  const gest = can('plantillas.gestionar'); const crea = can('plantillas.crear');
   return `<div class="page-head"><h1>Plantillas</h1><div class="actions">
-    ${gest ? btn('Nueva plantilla', 'tpl.new', { cls: 'primary', ic: 'mas_add' }) : ''}${gest ? btn('Importar', 'tpl.import', { ic: 'subir' }) : ''}</div></div>
+    ${crea ? btn('Nueva plantilla', 'tpl.new', { cls: 'primary', ic: 'mas_add' }) : ''}${crea ? btn('Importar', 'tpl.import', { ic: 'subir' }) : ''}</div></div>
   <p class="muted">Preparan preventivos habituales: tipos de recurso, unidades de referencia, sectores, plano, tipos de aviso, claves, roles previstos y preferencias. Cambiar una plantilla no modifica los preventivos ya creados.</p>
-  <div class="plist">${list.map(t => `<article class="pcard">
-    <button class="pcard-main" data-a="tpl.edit" data-id="${t.id}"><span class="row gap-s"><b class="pname">${t.favorita ? '★ ' : ''}${esc(t.nombre)}</b>${chip(t.contenido.modalidad === 'compartida' ? 'Compartida' : 'Independiente', '#546E7A')}</span>
+  <div class="plist">${list.map(t => `<article class="pcard${t.activa === false ? ' inactiva' : ''}">
+    <button class="pcard-main" data-a="tpl.edit" data-id="${t.id}"><span class="row gap-s"><b class="pname">${t.favorita ? '★ ' : ''}${esc(t.nombre)}</b>${chip('versión ' + (t.revision || 1), '#546E7A')}${t.activa === false ? chip('Desactivada', '#757575') : ''}${chip(t.contenido.modalidad === 'compartida' ? 'Compartida' : 'Independiente', '#546E7A')}</span>
       ${t.descripcion ? `<span class="small">${esc(t.descripcion)}</span>` : ''}
       <span class="pstats"><span><b>${t.contenido.unidades.length}</b> unidades</span><span><b>${t.contenido.cat.sectores.length}</b> sectores</span><span><b>${t.contenido.cat.tiposRecurso.length}</b> tipos</span><span>${t.contenido.plano ? 'con plano' : 'sin plano'}</span></span>
       <span class="muted small">Usada ${t.usos.length} ${t.usos.length === 1 ? 'vez' : 'veces'}${t.usos.length ? ' · última: ' + fmtDateTime(t.usos[t.usos.length - 1].t) : ''} · modificada ${fmtDateTime(t.modificada)}</span></button>
     <div class="pcard-act">
-      ${can('preventivos.crear') ? btn('', 'home.new', { cls: 'icon ghost', ic: 'play', data: { origen: 'tpl:' + t.id }, title: 'Crear preventivo con esta plantilla' }) : ''}
+      ${can('preventivos.crear') && can('plantillas.usar') && t.activa !== false ? btn('', 'home.new', { cls: 'icon ghost', ic: 'play', data: { origen: 'tpl:' + t.id }, title: 'Crear preventivo con esta plantilla' }) : ''}
+      ${gest ? btn('', 'tpl.activa', { cls: 'icon ghost' + (t.activa === false ? '' : ' on'), ic: 'ojo', data: { id: t.id }, title: t.activa === false ? 'Activar (volver a ofrecerla)' : 'Desactivar (no se ofrece al crear preventivos)' }) : ''}
       ${gest ? btn('', 'tpl.fav', { cls: 'icon ghost' + (t.favorita ? ' on' : ''), ic: 'estrella', data: { id: t.id }, title: t.favorita ? 'Quitar de favoritas' : 'Marcar como favorita' }) : ''}
-      ${gest ? btn('', 'tpl.dup', { cls: 'icon ghost', ic: 'copiar', data: { id: t.id }, title: 'Duplicar' }) : ''}
+      ${crea ? btn('', 'tpl.dup', { cls: 'icon ghost', ic: 'copiar', data: { id: t.id }, title: 'Duplicar' }) : ''}
       ${btn('', 'tpl.export', { cls: 'icon ghost', ic: 'descargar', data: { id: t.id }, title: 'Exportar' })}
       ${gest ? btn('', 'tpl.del', { cls: 'icon ghost', ic: 'papelera', data: { id: t.id }, title: 'Eliminar' }) : ''}
     </div></article>`).join('') || empty('No hay plantillas. Crea una desde la configuración general o desde un preventivo existente (Más → Crear plantilla).')}</div>`;
 }
 const reloadT = () => { TL = null; G.render(); };
+/** Las acciones con plantillas comprueban el permiso aunque su botón no se muestre */
+const exige = k => { if (can(k)) return true; toast('No tienes permiso para esta acción con plantillas', 'error'); return false; };
 A['tpl.new'] = async () => {
+  if (!exige('plantillas.crear')) return;
   const r = await confirmDlg({ title: 'Nueva plantilla', ok: 'Crear', fields: [{ name: 'nombre', label: 'Nombre', required: true }, { name: 'descripcion', label: 'Descripción', type: 'textarea' }] });
   if (!r) return;
   const t = newTemplate({ nombre: r.nombre, descripcion: r.descripcion, contenido: contentFromConfig(core().cfg), origen: { tipo: 'manual' } });
   await core().repo.saveTemplate(t, 'Creación de plantilla'); toast('Plantilla creada', 'ok'); reloadT(); openTpl(t);
 };
 A['tpl.fromPrev'] = async () => {
+  if (!exige('plantillas.crear')) return;
   const r = await confirmDlg({ title: 'Plantilla desde este preventivo', ok: 'Crear plantilla', fields: [
     { name: 'nombre', label: 'Nombre', required: true, value: core().state.prev.nombre }, { name: 'descripcion', label: 'Descripción', type: 'textarea' },
-    { name: 'unidades', label: 'Incluir unidades como referencia', type: 'checkbox', value: true }, { name: 'plano', label: 'Incluir plano y posiciones', type: 'checkbox', value: true }] });
+    ...ELEMENTOS_PLANTILLA.map(([k, l, def]) => ({ name: k, label: 'Incluir: ' + l, type: 'checkbox', value: def }))] });
   if (!r) return;
   await core().templateFromCurrent(r); toast('Plantilla creada (sin avisos, números ni historiales)', 'ok', 5000);
 };
-A['tpl.fav'] = async el => { const t = await core().repo.getTemplate(el.dataset.id); t.favorita = !t.favorita; await core().repo.saveTemplate(t, t.favorita ? 'Plantilla marcada como favorita' : 'Plantilla desmarcada como favorita'); reloadT(); };
+A['tpl.activa'] = async el => { if (!exige('plantillas.gestionar')) return; const t = await core().repo.getTemplate(el.dataset.id); t.activa = t.activa === false; await core().repo.saveTemplate(t, t.activa ? 'Plantilla activada' : 'Plantilla desactivada'); toast(t.activa ? 'Plantilla activa: se ofrece al crear preventivos' : 'Plantilla desactivada: no se ofrece (los preventivos creados con ella no cambian)', 'ok'); reloadT(); };
+A['tpl.fav'] = async el => { if (!exige('plantillas.gestionar')) return; const t = await core().repo.getTemplate(el.dataset.id); t.favorita = !t.favorita; await core().repo.saveTemplate(t, t.favorita ? 'Plantilla marcada como favorita' : 'Plantilla desmarcada como favorita'); reloadT(); };
 A['tpl.dup'] = async el => {
+  if (!exige('plantillas.crear')) return;
   const t = await core().repo.getTemplate(el.dataset.id);
   const n = newTemplate({ nombre: t.nombre + ' (copia)', descripcion: t.descripcion, contenido: clone(t.contenido), origen: { tipo: 'duplicada', id: t.id, nombre: t.nombre } });
   await core().repo.saveTemplate(n, 'Duplicación de plantilla'); toast('Plantilla duplicada', 'ok'); reloadT();
 };
 A['tpl.del'] = async el => {
+  if (!exige('plantillas.gestionar')) return;
   const t = await core().repo.getTemplate(el.dataset.id);
   if (!(await confirmDlg({ title: 'Eliminar plantilla', text: '¿Eliminar «' + t.nombre + '»? Los preventivos creados con ella no se ven afectados.', ok: 'Eliminar', danger: true }))) return;
   await core().repo.deleteTemplate(t.id); reloadT();
@@ -218,6 +304,7 @@ A['tpl.export'] = async el => {
 };
 function b64bytes(u) { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
 A['tpl.import'] = async () => {
+  if (!exige('plantillas.crear')) return;
   const f = await pickFile('.json,application/json'); if (!f) return;
   const obj = JSON.parse(await readText(f));
   const t = importTemplate(obj);
@@ -235,11 +322,14 @@ function openTpl(t) {
   TP = { t: clone(t), tab: 'gen' };
   openSheet({ title: () => 'Plantilla · ' + esc(TP ? TP.t.nombre : ''), size: 'l', live: true, render: tplBody, onClose: () => { TP = null; reloadT(); } });
 }
-const saveTP = async (accion = 'Modificación de plantilla') => { TP.t.contenido = normalizeContent(TP.t.contenido); await core().repo.saveTemplate(TP.t, accion); refreshSheets(); toast('Plantilla guardada', 'ok'); };
+const saveTP = async (accion = 'Modificación de plantilla') => { if (!exige('plantillas.gestionar')) return; TP.t.contenido = normalizeContent(TP.t.contenido); await core().repo.saveTemplate(TP.t, accion); refreshSheets(); toast('Plantilla guardada', 'ok'); };
 function tplBody() {
   if (!TP) return '';
   const t = TP.t; const c = t.contenido; const ro = !can('plantillas.gestionar');
-  const head = `${tabs([['gen', 'General'], ['cat', 'Catálogos'], ['uni', 'Unidades', c.unidades.length], ['pref', 'Preferencias'], ['plano', 'Plano'], ['usos', 'Usos', t.usos.length]], TP.tab, 'tp.tab')}`;
+  const head = `${tabs([['gen', 'General'], ['cat', 'Catálogos'], ['uni', 'Unidades', c.unidades.length], ['pref', 'Preferencias'], ['plano', 'Plano'], ['usos', 'Usos', t.usos.length], ['vers', 'Versiones', t.revision || 1]], TP.tab, 'tp.tab')}`;
+  if (TP.tab === 'vers') return head + `<p class="muted small">Cada cambio en lo que crea la plantilla genera una versión nueva; las anteriores se conservan tal cual. Cada preventivo recuerda con qué versión se creó.</p>
+    <ul class="ref-list"><li><b>Versión ${t.revision || 1} (actual)</b> · ${esc(fmtDateTime(t.modificada))}${t.modificadaPor ? ' · ' + esc(t.modificadaPor) : ''} · ${esc(resumenContenido(c))}</li>${(t.revisiones || []).slice().reverse().map(v => `<li><b>Versión ${v.revision}</b> · ${esc(fmtDateTime(v.t))}${v.por ? ' · ' + esc(v.por) : ''} · ${esc(v.nombre)} — ${esc(resumenContenido(v.contenido))}
+      <span class="row gap-s">${ro ? '' : btn('Restaurar', 'tp.restaurar', { cls: 'sm ghost', data: { r: v.revision }, title: 'Crea una versión nueva con este contenido' })}</span></li>`).join('')}</ul>`;
   if (TP.tab === 'gen') return head + `<form data-f="tp.gen">${fieldsHtml([
     { name: 'nombre', label: 'Nombre', required: true, disabled: ro }, { name: 'descripcion', label: 'Descripción de la plantilla', type: 'textarea', disabled: ro },
     { name: 'descripcionPrev', label: 'Descripción que tendrá el preventivo', type: 'textarea', disabled: ro },
@@ -260,9 +350,21 @@ function tplBody() {
     { name: 'camposTarjeta', label: 'Campos visibles en tarjetas', type: 'checks', options: Object.entries(CAMPOS_TARJETA), disabled: ro },
   ], c.cfg)}${ro ? '' : '<div class="row end"><button class="btn primary">Guardar</button></div>'}</form>`;
   if (TP.tab === 'plano') return head + (c.plano ? `<p>Plano: <b>${esc(c.plano.nombre || 'imagen')}</b> (${c.plano.w}×${c.plano.h})</p>` : '<p class="muted">Sin plano.</p>') + (ro ? '' : `<div class="actions">${btn(c.plano ? 'Cambiar imagen' : 'Importar imagen', 'tp.plano', { ic: 'subir' })}${c.plano ? btn('Quitar plano', 'tp.planoDel', { ic: 'papelera' }) : ''}</div>`);
-  return head + `<ul class="tl">${t.usos.slice().reverse().map(u => `<li><time>${fmtDateTime(u.t)}</time><span>${esc(u.nombre)}</span></li>`).join('') || '<li class="muted">Todavía no se ha utilizado</li>'}</ul>`;
+  return head + `<ul class="tl">${t.usos.slice().reverse().map(u => `<li><time>${fmtDateTime(u.t)}</time><span>${esc(u.nombre)}${u.revision ? ' · versión ' + u.revision : ''}</span></li>`).join('') || '<li class="muted">Todavía no se ha utilizado</li>'}</ul>`;
 }
 A['tp.tab'] = el => { TP.tab = el.dataset.v; refreshSheets(); };
+/** Resumen de lo que crea una versión de la plantilla */
+function resumenContenido(c0) {
+  const c = normalizeContent(c0);
+  return [plural(c.unidades.length, 'unidad', 'unidades'), plural(c.cat.sectores.length, 'sector', 'sectores'), plural(c.cat.tiposRecurso.length, 'tipo de recurso', 'tipos de recurso'), c.cat.puntos.length ? plural(c.cat.puntos.length, 'punto', 'puntos') : '', c.plano ? 'con plano' : 'sin plano'].filter(Boolean).join(', ');
+}
+A['tp.restaurar'] = async el => {
+  if (!exige('plantillas.gestionar')) return;
+  const v = (TP.t.revisiones || []).find(r => String(r.revision) === el.dataset.r); if (!v) return;
+  if (!(await confirmDlg({ title: 'Restaurar la versión ' + v.revision, text: 'Se creará la versión ' + ((TP.t.revision || 1) + 1) + ' con el contenido de la versión ' + v.revision + '. La versión actual se conserva en el historial y los preventivos ya creados no cambian.', ok: 'Restaurar' }))) return;
+  TP.t.nombre = v.nombre; TP.t.descripcion = v.descripcion || ''; TP.t.contenido = clone(v.contenido);
+  await saveTP('Restauración de la versión ' + v.revision + ' de la plantilla');
+};
 F['tp.gen'] = async form => {
   const v = readForm(form);
   TP.t.nombre = v.nombre; TP.t.descripcion = v.descripcion;

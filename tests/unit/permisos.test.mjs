@@ -110,3 +110,10 @@ test('protecciones: nadie cambia sus propios permisos ni concede lo que no tiene
   const solo = [admin, oper];
   assert.throws(() => comprobarCambioUsuario({ actor: { ...admin, id: 'otro', perfil: 'rol_admin' }, antes: admin, despues: { ...admin, estado: 'desactivado' }, perfiles, usuarios: solo }), /al menos un administrador/i);
 });
+
+test('los permisos incluidos se aplican en cadena (quien edita avisos revisa incoherencias y, por tanto, las ve)', () => {
+  const perfiles = [{ id: 'p_v2', v: 2, nombre: 'Solo edición', permisos: ['avisos.editar', 'preventivos.editar'] }];
+  const e = permisosEfectivos({ id: 'u', perfil: 'p_v2' }, perfiles);
+  assert.ok(e.has('incoherencias.revisar') && e.has('incoherencias.reglas'));
+  assert.ok(e.has('incoherencias.ver'), 'revisar o configurar reglas incluye verlas');
+});

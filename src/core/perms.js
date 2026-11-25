@@ -17,7 +17,9 @@ export const PERMISOS = [
   ['preventivos.cerrar', 'Finalizar preventivos', 'Preventivos'],
   ['preventivos.archivar', 'Archivar y recuperar preventivos', 'Preventivos'],
   ['preventivos.reabrir', 'Reabrir preventivos finalizados', 'Preventivos'],
-  ['plantillas.gestionar', 'Gestionar plantillas de preventivo', 'Preventivos'],
+  ['plantillas.crear', 'Crear plantillas de preventivo (desde la configuración, un preventivo, duplicando o importando)', 'Preventivos'],
+  ['plantillas.gestionar', 'Modificar, desactivar y eliminar plantillas de preventivo', 'Preventivos'],
+  ['plantillas.usar', 'Crear preventivos a partir de plantillas', 'Preventivos'],
   ['unidades.ver', 'Consultar unidades', 'Unidades y recursos', 'ver'],
   ['unidades.crear', 'Crear unidades', 'Unidades y recursos'],
   ['unidades.editar', 'Modificar unidades y ponerlas fuera de servicio', 'Unidades y recursos'],
@@ -72,6 +74,8 @@ export const PERMISOS_VER = PERMISOS.filter(p => p[3] === 'ver').map(p => p[0]);
 export const IMPLICA = {
   'preventivos.editar': ['preventivos.iniciar', 'incoherencias.reglas'],
   'avisos.editar': ['incoherencias.revisar'],
+  'preventivos.crear': ['plantillas.usar'],
+  'plantillas.gestionar': ['plantillas.crear'],
   'incoherencias.revisar': ['incoherencias.ver'],
   'incoherencias.reglas': ['incoherencias.ver'],
   'preventivos.cerrar': ['preventivos.archivar'],
@@ -106,10 +110,10 @@ export function normalizarPerfil(p) {
   if ((p.v || 1) >= 2) return p;
   return { ...p, permisos: [...new Set([...(p.permisos || []), ...VER])] };
 }
-/** Añade los permisos incluidos */
+/** Añade los permisos incluidos, también en cadena (A incluye B y B incluye C) */
 export function expandir(set) {
-  const out = new Set(set);
-  for (const k of [...out]) for (const x of IMPLICA[k] || []) out.add(x);
+  const out = new Set(set); const pend = [...out];
+  while (pend.length) for (const x of IMPLICA[pend.pop()] || []) if (!out.has(x)) { out.add(x); pend.push(x); }
   return out;
 }
 
@@ -149,7 +153,7 @@ const claveDe = (s, c) => ((s.prev && s.prev.cat && s.prev.cat.claves) || []).fi
 export function permisosOp(op, s, lote = []) {
   const x = op.x || {}; const f = x.f || {};
   switch (op.k) {
-    case 'prev.create': return ['preventivos.crear'];
+    case 'prev.create': return x.prev && x.prev.origen && x.prev.origen.tipo === 'plantilla' ? ['preventivos.crear', 'plantillas.usar'] : ['preventivos.crear'];
     case 'prev.update': {
       const campos = Object.keys(f);
       if (campos.length && campos.every(c => c === 'cfg.vistaMapa')) return ['planos.vista'];

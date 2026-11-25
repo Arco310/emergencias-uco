@@ -16,6 +16,7 @@ import { overriddenVis } from '../../core/visual.js';
 import { tipoActivo } from '../../core/recursos.js';
 import { renderUsuariosServidor, tablaAuditoria, invalidarUsuariosServidor } from './usuarios-servidor.js';
 import { resumenMenu } from './incoherencias.js';
+import { describirOrigen } from '../../core/templates.js';
 import { estadoApp } from '../actualizacion.js';
 import { seccionCartografia } from './cartografia.js';
 
@@ -46,7 +47,7 @@ export function renderPrevMenu() {
     ${tile('ajustes', 'Configuración del preventivo', 'nav', { v: 'ajustes' })}
     ${tile('sync', 'Sincronización', 'nav', { v: 'sync' }, core().isShared() ? (n ? n + ' conflicto(s)' : SYNC_ESTADOS[core().sync.status(core().cur).estado] || '') : 'Independiente')}
     ${tile('candado', 'Finalizar preventivo e informes', 'nav', { v: 'cierre' })}
-    ${can('plantillas.gestionar') ? tile('plantilla', 'Crear plantilla desde este preventivo', 'tpl.fromPrev') : ''}
+    ${can('plantillas.crear') ? tile('plantilla', 'Crear plantilla desde este preventivo', 'tpl.fromPrev') : ''}
     ${can('preventivos.crear') ? tile('copiar', 'Duplicar preventivo', 'prev.dupCurrent') : ''}
     ${tile('ajustes', 'Configuración general', 'nav', { v: 'config' })}
     ${tile('salir', 'Salir del preventivo', 'prev.exit')}
@@ -66,7 +67,7 @@ export function renderPrevConfig() {
     '<div class="row gap wrap">', { name: 'fecha', label: 'Fecha', type: 'date', disabled: ro }, { name: 'horaInicio', label: 'Hora de inicio', type: 'time', disabled: ro }, { name: 'horaFin', label: 'Hora de finalización', type: 'time', disabled: ro }, '</div>',
     { name: 'participantes', label: 'Usuarios participantes (uno por línea: Nombre — Rol)', type: 'textarea', rows: 4, disabled: ro },
   ], { ...p, participantes: part })}
-  <p class="muted small">Identificador: <code>${esc(p.id)}</code> · creado ${fmtDateTime(p.creado)} por ${esc(p.creadoPor)}${p.origen && p.origen.nombre ? ' · origen: ' + esc(p.origen.tipo) + ' «' + esc(p.origen.nombre) + '»' : ''}</p>
+  <p class="muted small">Identificador: <code>${esc(p.id)}</code> · creado ${fmtDateTime(p.creado)} por ${esc(p.creadoPor)}${p.origen && p.origen.tipo && p.origen.tipo !== 'nuevo' ? ' · origen: ' + esc(describirOrigen(p.origen)) : ''}</p>
   ${ro ? '' : '<div class="row end"><button class="btn primary">Guardar</button></div>'}</form></section>
   <section class="card pad"><h2>Funcionamiento</h2><form data-f="pcfg.cfg">${fieldsHtml([
     { name: 'descansoMin', label: 'Duración predeterminada del descanso (minutos)', type: 'number', min: 1, max: 600, disabled: ro || !can('descansos.duracion'), help: can('descansos.duracion') ? '' : 'Requiere el permiso "Cambiar duración del descanso"' },

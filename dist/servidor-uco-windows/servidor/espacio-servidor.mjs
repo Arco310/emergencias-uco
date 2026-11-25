@@ -952,7 +952,9 @@ var PERMISOS = [
   ["preventivos.cerrar", "Finalizar preventivos", "Preventivos"],
   ["preventivos.archivar", "Archivar y recuperar preventivos", "Preventivos"],
   ["preventivos.reabrir", "Reabrir preventivos finalizados", "Preventivos"],
-  ["plantillas.gestionar", "Gestionar plantillas de preventivo", "Preventivos"],
+  ["plantillas.crear", "Crear plantillas de preventivo (desde la configuraci\xF3n, un preventivo, duplicando o importando)", "Preventivos"],
+  ["plantillas.gestionar", "Modificar, desactivar y eliminar plantillas de preventivo", "Preventivos"],
+  ["plantillas.usar", "Crear preventivos a partir de plantillas", "Preventivos"],
   ["unidades.ver", "Consultar unidades", "Unidades y recursos", "ver"],
   ["unidades.crear", "Crear unidades", "Unidades y recursos"],
   ["unidades.editar", "Modificar unidades y ponerlas fuera de servicio", "Unidades y recursos"],
@@ -1006,6 +1008,8 @@ var PERMISOS_VER = PERMISOS.filter((p) => p[3] === "ver").map((p) => p[0]);
 var IMPLICA = {
   "preventivos.editar": ["preventivos.iniciar", "incoherencias.reglas"],
   "avisos.editar": ["incoherencias.revisar"],
+  "preventivos.crear": ["plantillas.usar"],
+  "plantillas.gestionar": ["plantillas.crear"],
   "incoherencias.revisar": ["incoherencias.ver"],
   "incoherencias.reglas": ["incoherencias.ver"],
   "preventivos.cerrar": ["preventivos.archivar"],
@@ -1051,7 +1055,11 @@ function normalizarPerfil(p) {
 }
 function expandir(set) {
   const out = new Set(set);
-  for (const k of [...out]) for (const x of IMPLICA[k] || []) out.add(x);
+  const pend = [...out];
+  while (pend.length) for (const x of IMPLICA[pend.pop()] || []) if (!out.has(x)) {
+    out.add(x);
+    pend.push(x);
+  }
   return out;
 }
 var estadoUsuario = (u) => u ? u.estado || (u.activo === false ? "desactivado" : "activo") : "desactivado";
@@ -1080,7 +1088,7 @@ function permisosOp(op, s, lote = []) {
   const f = x.f || {};
   switch (op.k) {
     case "prev.create":
-      return ["preventivos.crear"];
+      return x.prev && x.prev.origen && x.prev.origen.tipo === "plantilla" ? ["preventivos.crear", "plantillas.usar"] : ["preventivos.crear"];
     case "prev.update": {
       const campos = Object.keys(f);
       if (campos.length && campos.every((c) => c === "cfg.vistaMapa")) return ["planos.vista"];

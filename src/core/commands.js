@@ -51,6 +51,7 @@ function checkInd(s, ind, exceptId) {
 // ---------------- Preventivos ----------------
 export function prevCreate(ctx, { datos, cat, cfg, unidades = [], plano = null, origen = null }) {
   needPerm(ctx.user, 'preventivos.crear');
+  if (origen && origen.tipo === 'plantilla') needPerm(ctx.user, 'plantillas.usar');
   if (!String(datos.nombre || '').trim()) fail('El nombre del preventivo es obligatorio');
   if (!['independiente', 'compartida'].includes(datos.modalidad)) fail('Selecciona la modalidad');
   if (!cat || !Array.isArray(cat.claves) || !cat.claves.some(c => c.base)) fail('Falta el catálogo de claves');

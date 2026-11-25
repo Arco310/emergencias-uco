@@ -7,6 +7,7 @@ import { logEntries, AVISO_ESTADO } from './timeline.js';
 import { fmtCoords } from './geo.js';
 import { APP_NAME, APP_VERSION } from './defaults.js';
 import { etiquetaTipoAviso, tipoAvisoDef } from './incidentes.js';
+import { describirOrigen } from './templates.js';
 
 const named = (list, id) => ((list || []).find(x => x.id === id) || {}).nombre || '—';
 const PEST = { preparacion: 'En preparación', activo: 'Activo', cerrado: 'Finalizado' };
@@ -25,7 +26,7 @@ export async function buildReport(engine, { usuario = '', dispositivo = '' } = {
     ['Lugar', p.lugar ? [p.lugar.txt, fmtCoords(p.lugar)].filter(Boolean).join(' · ') : '—'], ['Modalidad', p.modalidad === 'compartida' ? 'Compartida (varios dispositivos)' : 'Independiente'],
     ['Estado', PEST[p.estado] + (p.archivado ? ' (archivado)' : '')], ['Creado', fmtDateTime(p.creado) + ' por ' + (p.creadoPor || '—')],
     ['Activado', p.activadoEn ? fmtDateTime(p.activadoEn) : '—'], ['Finalizado', p.cerradoEn ? fmtDateTime(p.cerradoEn) + ' por ' + (p.cerradoPor || '—') : '—'],
-    ['Duración analizada', fmtDur(st.duracion)], ['Origen', p.origen && p.origen.nombre ? p.origen.tipo + ': ' + p.origen.nombre : 'Nuevo'],
+    ['Duración analizada', fmtDur(st.duracion)], ['Origen', describirOrigen(p.origen)],
     ['Informe generado', fmtDateTime(t) + ' por ' + (usuario || '—')], ['Aplicación', APP_NAME + ' ' + APP_VERSION + (dispositivo ? ' · ' + dispositivo : '')],
   ]);
   if (p.descripcion) doc.para(p.descripcion);

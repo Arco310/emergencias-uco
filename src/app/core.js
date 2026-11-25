@@ -1001,7 +1001,7 @@ export class AppCore {
     await this._commit(pid, engine, ops);
     if (seed.origen && seed.origen.tipo === 'plantilla') {
       const t = await this.repo.getTemplate(seed.origen.id);
-      if (t) { t.usos = [...(t.usos || []), { t: now(), pid, nombre: datos.nombre }]; await this.repo.saveTemplate(t, 'Uso de plantilla'); }
+      if (t) { t.usos = [...(t.usos || []), { t: now(), pid, nombre: datos.nombre, revision: seed.origen.revision || t.revision || 1 }]; await this.repo.saveTemplate(t, 'Uso de plantilla'); }
     }
     await this.openPrev(pid);
     if (central) await this._registrarCentral(pid);
@@ -1013,7 +1013,8 @@ export class AppCore {
     const e = this.engine(pid); const c = contentFromPrev(e.state, { unidades, plano });
     return { cat: c.cat, cfg: c.cfg, unidades: c.unidades, plano: c.plano, participantes: c.participantes, origen: { tipo: 'duplicado', id: pid, nombre: e.state.prev.nombre } };
   }
-  seedFromTemplate(tpl) { return seedFromTemplate(tpl); }
+  /** Semilla desde una plantilla; lo que no se hereda se toma de la configuración general */
+  seedFromTemplate(tpl, opciones = {}) { return seedFromTemplate(tpl, opciones, contentFromConfig(this.cfg)); }
 
   joinCode(pid = this.cur) {
     const m = this.meta(pid);
@@ -1115,10 +1116,10 @@ export class AppCore {
   }
 
   // ------------- plantillas -------------
-  async templateFromCurrent({ nombre, descripcion, unidades = true, plano = true }) {
-    if (!this.can('plantillas.gestionar')) throw new AppError('No tienes permiso para gestionar plantillas', 'permiso');
+  async templateFromCurrent({ nombre, descripcion, ...incluir }) {
+    if (!this.can('plantillas.crear')) throw new AppError('No tienes permiso para crear plantillas', 'permiso');
     const roles = await this.repo.getRoles();
-    const t = newTemplate({ nombre, descripcion, contenido: contentFromPrev(this.state, { unidades, plano, roles }), origen: { tipo: 'preventivo', id: this.cur, nombre: this.state.prev.nombre } });
+    const t = newTemplate({ nombre, descripcion, contenido: contentFromPrev(this.state, { ...incluir, roles }), origen: { tipo: 'preventivo', id: this.cur, nombre: this.state.prev.nombre, estado: this.state.prev.estado } });
     await this.repo.saveTemplate(t, 'Creación de plantilla');
     return t;
   }

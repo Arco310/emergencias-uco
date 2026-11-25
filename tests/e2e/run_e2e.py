@@ -1706,6 +1706,99 @@ def scenario_incoherencias(b):
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)
 
+def scenario_plantillas(b):
+    print('\n== Escenario 15: plantillas de preventivo con versiones y asistente de creación (1.5.0) ==')
+    port = PORT + 15; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-tpl-')
+    salida = os.path.join(data, 'tpl.json')
+    subprocess.run(['node', 'tests/e2e/generar_plantillas.mjs', salida], cwd=ROOT, check=True)
+    datos = json.load(open(salida))
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'plantillas', TABLET, base=url)
+        def tpls(): return A.pg.evaluate("async () => (await window.__UCO.core.repo.listTemplates()).map(t => ({ nombre: t.nombre, revision: t.revision, activa: t.activa, versiones: (t.revisiones || []).length, puntos: t.contenido.cat.puntos.length, unidades: t.contenido.unidades.length, reglas: !!(t.contenido.cfg.reglas), avisos: JSON.stringify(t).includes('Aviso que no se copia'), usos: t.usos.map(u => u.revision) }))")
+        def crear():
+            A.setup('Rosa Coordinadora', 'rosa', 'clave-rosa-1', 'Tablet', 'R'); A.perms(False)
+            ops = datos['prev_origen']; nmax = max([o.get('num') or 0 for o in ops])
+            A.pg.evaluate("async ([pid, ops, n]) => { const c = window.__UCO.core; await c.repo.appendOps(pid, ops); await c.repo.maxCounter(pid, n); await c.openPrev(pid); await c._summary(pid); window.__UCO.go('panel'); }", ['prev_origen', ops, nmax])
+            A.pg.wait_for_selector('.kpis', timeout=15000)
+            A.nav('mas'); A.a('tpl.fromPrev'); A.pg.wait_for_selector('.sheet-wrap form[data-f="dlg.submit"]')
+            n = A.sheet().locator('input[type=checkbox]').count(); assert n == 10, n
+            assert not A.sheet().locator('[name=participantes]').is_checked(), 'los datos personales solo si se piden'
+            A.sheet().locator('input[name=nombre]').fill('Concierto tipo'); A.sheet().locator('[name=puntos]').uncheck(force=True)
+            A.shot('01-plantilla-elementos', True); A.dlg_ok(); A.pg.wait_for_timeout(800)
+            t = tpls(); assert len(t) == 1 and t[0]['revision'] == 1 and t[0]['puntos'] == 0 and t[0]['unidades'] == 3 and t[0]['reglas'] and not t[0]['avisos'], t
+            return 'desde el preventivo: 10 elementos a elegir (personas previstas desmarcadas); sin puntos por elección; 3 unidades y reglas; ningún aviso'
+        check('Plantilla desde un preventivo, eligiendo qué incluir', crear)
+        def versiones():
+            A.a('prev.exit'); A.nav('plantillas'); A.pg.wait_for_selector('.pcard')
+            assert 'versión 1' in A.pg.locator('.pcard').first.inner_text()
+            A.pg.locator('.pcard-main').first.click(); A.pg.wait_for_selector('form[data-f="tp.gen"]')
+            A.sheet().locator('[name=descripcion]').fill('Escenario en la Puerta del Sol'); A.sheet().locator('form[data-f="tp.gen"] button.primary').click(); A.pg.wait_for_timeout(800)
+            A.a('tp.tab', v='vers'); A.pg.wait_for_selector('.sheet-wrap .ref-list li')
+            txt = A.sheet().inner_text(); assert 'Versión 2 (actual)' in txt and 'Versión 1' in txt, txt[:300]
+            A.shot('02-versiones', True); A.close_sheets(); A.pg.wait_for_timeout(300)
+            assert 'versión 2' in A.pg.locator('.pcard').first.inner_text()
+            A.pg.locator('.pcard [data-a="tpl.fav"]').first.click(); A.pg.wait_for_timeout(500)
+            t = tpls(); assert t[0]['revision'] == 2 and t[0]['versiones'] == 1, t
+            return 'cambiar la descripción crea la versión 2 y conserva la 1; marcarla como favorita no es otra versión'
+        check('Versiones de plantilla', versiones)
+        def asistente():
+            A.pg.locator('.pcard [data-a="home.new"]').first.click(); A.pg.wait_for_selector('.sheet-wrap form[data-f="home.create"] [data-revision-origen] details')
+            pasos = A.sheet().locator('h3.paso').all_inner_texts()
+            for t in ['Origen', 'Nombre', 'Fecha y horario', 'Sectores y recursos previstos', 'Opciones heredadas', 'Modalidad', 'Confirmación']: assert t in pasos, (t, pasos)
+            A.fill('nombre', 'Concierto 2')
+            d = A.sheet().locator('details.rev-lista')
+            d.nth(0).locator('summary').click(); d.nth(0).locator('input[data-group=t_u][value="SVB-2"]').uncheck()
+            d.nth(1).locator('summary').click(); d.nth(1).locator('input[data-group=t_s][value="sec_grada"]').uncheck()
+            A.sheet().locator('input[data-group=t_e][value="plano"]').uncheck(force=True)
+            A.sheet().locator('[name=activar]').check(force=True)
+            res = A.sheet().locator('[data-resumen-origen]').inner_text()
+            for t in ['«Concierto 2»', 'versión 2', '2 unidades', 'sin plano', 'activo desde el principio']: assert t in res, (t, res)
+            assert A.sheet().locator('[data-n="t_u"]').inner_text() == '2'
+            A.shot('03-asistente', True)
+            A.sheet().locator('form[data-f="home.create"] button.primary').click(); A.pg.wait_for_selector('.kpis', timeout=15000); A.pg.wait_for_timeout(500)
+            st = A.pg.evaluate("() => { const s = window.__UCO.core.state; const u = Object.values(s.units); return { inds: u.map(x => x.ind).sort(), sva: (u.find(x => x.ind === 'SVA-1') || {}).sector || null, plan: u.filter(x => x.plan).length, plano: !!s.prev.plano, grada: s.prev.cat.sectores.some(x => x.id === 'sec_grada'), avisos: Object.keys(s.avisos).length, origen: s.prev.origen, estado: s.prev.estado } }")
+            assert st['inds'] == ['SVA-1', 'SVB-1'] and st['sva'] is None and st['plan'] == 0 and not st['plano'] and not st['grada'], st
+            assert st['avisos'] == 0 and st['estado'] == 'activo' and st['origen']['revision'] == 2 and st['origen']['excluidos'] == ['plano'] and st['origen']['unidadesOmitidas'] == 1, st
+            A.nav('mas'); A.a('nav', v='ajustes'); A.pg.wait_for_timeout(500)
+            txt = A.pg.locator('main').inner_text(); assert 'Plantilla «Concierto tipo», versión 2 (sin heredar: plano y posiciones; 1 unidad prevista sin incluir)' in txt, txt[:600]
+            return 'asistente en 7 pasos; sin SVB-2, sin la grada (SVA-1 queda sin sector) y sin plano; resumen previo; el preventivo dice «versión 2» y qué no se heredó'
+        check('Crear un preventivo con el asistente, revisando lo heredado', asistente)
+        def gestionar():
+            A.a('prev.exit'); A.nav('plantillas'); A.pg.wait_for_selector('.pcard')
+            A.pg.locator('.pcard [data-a="tpl.activa"]').first.click(); A.pg.wait_for_timeout(600)
+            assert 'Desactivada' in A.pg.locator('.pcard').first.inner_text()
+            assert A.pg.locator('.pcard [data-a="home.new"]').count() == 0, 'no se puede usar desactivada'
+            A.nav('inicio'); A.a('home.new'); A.pg.wait_for_selector('.sheet-wrap form[data-f="home.create"]')
+            ops = A.sheet().locator('select[name=origen] option').all_inner_texts(); assert not any('Concierto tipo' in o for o in ops), ops
+            A.close_sheets(); A.nav('plantillas'); A.pg.wait_for_selector('.pcard')
+            A.pg.locator('.pcard [data-a="tpl.activa"]').first.click(); A.pg.wait_for_timeout(600)
+            A.pg.locator('.pcard-main').first.click(); A.a('tp.tab', v='vers'); A.pg.wait_for_selector('[data-a="tp.restaurar"]')
+            A.pg.locator('[data-a="tp.restaurar"]').first.click(); A.dlg_ok(); A.pg.wait_for_timeout(800)
+            A.a('tp.tab', v='usos'); txt = A.sheet().inner_text(); assert 'Concierto 2 · versión 2' in txt, txt[:300]
+            A.close_sheets()
+            t = tpls(); assert t[0]['revision'] == 3 and t[0]['versiones'] == 2 and t[0]['activa'] and t[0]['usos'] == [2], t
+            A.pg.locator('.pcard [data-a="tpl.dup"]').first.click(); A.pg.wait_for_timeout(600)
+            t = tpls(); assert len(t) == 2 and any(x['nombre'] == 'Concierto tipo (copia)' and x['revision'] == 1 for x in t), t
+            A.pg.locator('.pcard', has_text='Concierto tipo (copia)').locator('[data-a="tpl.del"]').click(); A.dlg_ok(); A.pg.wait_for_timeout(600)
+            assert len(tpls()) == 1
+            return 'desactivada: no se ofrece al crear; reactivada; versión 1 restaurada como versión 3; usos con su versión; duplicar y eliminar'
+        check('Desactivar, restaurar, duplicar y eliminar plantillas', gestionar)
+        def movil():
+            A.pg.set_viewport_size({'width': 390, 'height': 844}); A.pg.wait_for_timeout(400)
+            A.pg.locator('.pcard [data-a="home.new"]').first.click(); A.pg.wait_for_selector('.sheet-wrap form[data-f="home.create"] [data-revision-origen] details')
+            A.sheet().locator('details.rev-lista').nth(0).locator('summary').click(); A.pg.wait_for_timeout(300)
+            anchos = A.pg.evaluate("() => { const f = document.querySelector('.sheet-wrap form[data-f=\"home.create\"]'); return [f.scrollWidth, f.clientWidth, document.documentElement.scrollWidth, innerWidth] }")
+            assert anchos[0] <= anchos[1] + 1 and anchos[2] <= anchos[3] + 1, anchos
+            alto = A.pg.locator('details.rev-lista').nth(0).locator('label.u-asig').first.bounding_box()['height']; assert alto >= 44, alto
+            A.shot('04-asistente-movil', True); A.close_sheets(); A.pg.set_viewport_size(TABLET['viewport']); A.pg.wait_for_timeout(300)
+            return f'sin desplazamiento horizontal ({anchos[0]} px en {anchos[1]} px); filas de unidades de {alto:.0f} px'
+        check('Asistente en el móvil', movil)
+        check('Sin errores de JavaScript (escenario 15)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+        A.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1729,6 +1822,7 @@ def main():
             if only in ('', '12'): scenario_capas(b)
             if only in ('', '13'): scenario_avisos_mapa(b)
             if only in ('', '14'): scenario_incoherencias(b)
+            if only in ('', '15'): scenario_plantillas(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

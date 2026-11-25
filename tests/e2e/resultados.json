@@ -1,24 +1,34 @@
 {
- "fecha": "2026-11-25 04:45:22",
+ "fecha": "2026-11-25 12:03:08",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Incoherencias: detectadas, clasificadas y agrupadas",
+   "prueba": "Plantilla desde un preventivo, eligiendo qué incluir",
    "resultado": "SUPERADA",
-   "detalle": "distintivo «Alta» en la barra; agrupadas por regla (2 avisos sin unidad, 2 abiertos demasiado, 1 descanso de 10 h, 1 conflicto) con por qué, consecuencias y qué hacer"
+   "detalle": "desde el preventivo: 10 elementos a elegir (personas previstas desmarcadas); sin puntos por elección; 3 unidades y reglas; ningún aviso"
   },
   {
-   "prueba": "Revisar, asignar y resolver (con historial, sin tocar datos operativos)",
+   "prueba": "Versiones de plantilla",
    "resultado": "SUPERADA",
-   "detalle": "asignada a Lola y resuelta con nota; pasa a «Revisadas», historial con los dos pasos; unidades y avisos sin cambios"
+   "detalle": "cambiar la descripción crea la versión 2 y conserva la 1; marcarla como favorita no es otra versión"
   },
   {
-   "prueba": "Reglas aprobadas: niveles y reglas activas",
+   "prueba": "Crear un preventivo con el asistente, revisando lo heredado",
    "resultado": "SUPERADA",
-   "detalle": "nivel cambiado a «Crítica» (sube arriba y en la barra) y una regla desactivada; guardado en el preventivo"
+   "detalle": "asistente en 7 pasos; sin SVB-2, sin la grada (SVA-1 queda sin sector) y sin plano; resumen previo; el preventivo dice «versión 2» y qué no se heredó"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 14)",
+   "prueba": "Desactivar, restaurar, duplicar y eliminar plantillas",
+   "resultado": "SUPERADA",
+   "detalle": "desactivada: no se ofrece al crear; reactivada; versión 1 restaurada como versión 3; usos con su versión; duplicar y eliminar"
+  },
+  {
+   "prueba": "Asistente en el móvil",
+   "resultado": "SUPERADA",
+   "detalle": "sin desplazamiento horizontal (358 px en 358 px); filas de unidades de 78 px"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 15)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }
