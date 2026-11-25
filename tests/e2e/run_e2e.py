@@ -1616,6 +1616,25 @@ def scenario_avisos_mapa(b):
             A.close_sheets()
             return 'desde el plano solo con Tab/Intro: «Nuevo aviso en el mapa» → «Sin el mapa» → «Más datos» → descripción → crear'
         check('Accesibilidad: crear un aviso solo con el teclado', teclado)
+        def lista():
+            A.nav('plano'); A.pg.wait_for_timeout(800); A.a('plan.lista'); A.pg.wait_for_selector('.sheet-wrap .lista-plano')
+            t = A.sheet().inner_text()
+            for x in ['SVB-1', 'En descanso', 'Puerta 3', 'Hospital de referencia', 'Sector 1', 'Mareo junto a la fuente']: assert x in t, x
+            assert not nombres_vacios('.sheet-wrap'), nombres_vacios('.sheet-wrap')
+            boton = A.sheet().locator('li', has_text='SVB-1').locator('[data-a="plan.verEn"]'); boton.focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('.map-card[data-map-card="u"]', timeout=5000)
+            assert 'SVB-1' in A.pg.locator('.map-card').inner_text()
+            assert A.pg.evaluate('() => !!document.activeElement.closest("[data-map-card]")'), 'el foco pasa a la ficha del mapa'
+            A.shot('03-lista-alternativa')
+            return 'lista con unidades (situación), avisos, puntos y sectores; «Ver en el plano» con el teclado centra y abre la ficha (con el foco en ella)'
+        check('Accesibilidad: lista alternativa al mapa', lista)
+        def foco():
+            A.pg.locator('[data-a="plan.capas"]').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('.sheet-wrap .chips-f')
+            dentro = A.pg.evaluate('() => !!document.activeElement.closest(".sheet-wrap")')
+            A.pg.keyboard.press('Escape'); A.pg.wait_for_timeout(500)
+            vuelve = A.pg.evaluate('() => document.activeElement && document.activeElement.dataset.a')
+            assert dentro and vuelve == 'plan.capas', (dentro, vuelve)
+            return 'al abrir un panel el foco entra en él; al cerrarlo vuelve al botón que lo abrió'
+        check('Accesibilidad: el foco entra en los paneles y vuelve al cerrarlos', foco)
         check('Sin errores de JavaScript (escenario 13)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
         A.ctx.close()
     finally:

@@ -206,6 +206,8 @@ function bindGlobal() {
   });
   const onCh = ev => { if (G.repintandoHoja) return; const el = ev.target.closest('[data-c]'); if (!el) return; const fn = CH[el.dataset.c]; if (fn) runAction(fn, el, ev); };
   document.addEventListener('change', onCh);
+  // Escape cierra el panel de encima (convención de los diálogos; un diálogo de confirmación cuenta como «Cancelar»)
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && document.body.classList.contains('has-sheet')) { ev.preventDefault(); closeSheet(); } });
   document.addEventListener('input', ev => { const el = ev.target.closest('[data-c][data-live]'); if (el) onCh(ev); });
   window.addEventListener('popstate', () => {
     if (!handlePop()) { const r = location.hash.slice(1); if (r && r !== G.ui.route && VIEWS[r]) go(r); }

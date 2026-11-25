@@ -430,3 +430,5 @@ fieldset.unidades-aviso legend{font-weight:700;padding:0 .3rem}
 .aviso-prov .ajuste .btn{min-width:44px;min-height:44px;font-size:1.1rem;font-weight:800}
 .aviso-prov:focus-within{outline:3px solid var(--acc);outline-offset:2px}
 .mk.av.nuevo .mk-av{background:#fff;color:#C62828;border:3px dashed #C62828}
+.sheet:focus{outline:none}.sheet:focus-visible{outline:3px solid var(--acc);outline-offset:-3px}
+.lista-plano li{min-height:48px;align-items:center;border-bottom:1px solid var(--line);padding:.3rem 0}

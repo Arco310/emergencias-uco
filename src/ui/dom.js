@@ -19,7 +19,12 @@ export function sheets() { return stack; }
  */
 export function openSheet(opts) {
   const id = uid('sh_');
-  stack.push({ id, ...opts });
+  // Quién lo abrió: al cerrar, el foco vuelve allí (teclado y lectores de pantalla no se pierden)
+  const origen = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+  // Si la pantalla se repinta, el elemento cambia: se guarda también cómo volver a encontrarlo
+  const d = origen && origen.dataset ? origen.dataset : {};
+  const origenSel = !origen ? null : d.a ? `[data-a="${CSS.escape(d.a)}"]` + ['id', 'v', 'k', 'd'].filter(k => d[k] != null).map(k => `[data-${k}="${CSS.escape(d[k])}"]`).join('') : origen.id ? '#' + CSS.escape(origen.id) : null;
+  stack.push({ id, ...opts, origen, origenSel });
   drawLayer();
   // Entrada de historial para que el botón Atrás de Android cierre el panel.
   // No se retrocede al cerrar desde la interfaz (evita carreras con history.back()).
@@ -29,6 +34,7 @@ export function openSheet(opts) {
     if (!el) return;
     const f = el.querySelector('[autofocus]') || el.querySelector('.sheet-body input:not([type=hidden]):not([disabled]), .sheet-body select, .sheet-body textarea');
     if (f && opts.focus !== false && !matchMedia('(pointer: coarse)').matches) f.focus();
+    else if (opts.focus !== false) { const sec = el.querySelector('.sheet'); if (sec) sec.focus({ preventScroll: true }); } // se anuncia el panel sin abrir el teclado
     opts.onMount && opts.onMount(el);
     if (G.tick) G.tick();
   });
@@ -40,6 +46,12 @@ export function closeSheet(id) {
   const [s] = stack.splice(i, 1);
   drawLayer();
   s.onClose && s.onClose();
+  // El foco vuelve a quien abrió el panel (tras el repintado, por si la pantalla se ha vuelto a dibujar)
+  if (s.origen || s.origenSel) requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (stack.length || (document.activeElement && document.activeElement !== document.body)) return;
+    const volver = s.origen && s.origen.isConnected ? s.origen : s.origenSel ? document.querySelector(s.origenSel) : null;
+    if (volver) { try { volver.focus({ preventScroll: true }); } catch { } }
+  }));
 }
 function pushSheetEntry() {
   try { if (!(history.state && history.state.uco === 'sheet')) history.pushState({ uco: 'sheet' }, ''); } catch { /* entorno sin historial */ }
@@ -76,7 +88,7 @@ export function drawLayer() {
     wrap.style.zIndex = 100 + i * 2;
     const title = typeof s.title === 'function' ? s.title() : esc(s.title || '');
     wrap.innerHTML = `<div class="sheet-backdrop" data-a="sheet.close"></div>
-      <section class="sheet" role="dialog" aria-modal="true" aria-label="${attr(typeof s.title === 'string' ? s.title : '')}">
+      <section class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="${attr(typeof s.title === 'string' ? s.title : (typeof s.title === 'function' ? String(s.title()).replace(/<[^>]*>/g, '') : ''))}">
         <header class="sheet-head"><h2 class="sheet-title">${title}</h2>
         <button class="btn icon ghost" data-a="sheet.close" aria-label="Cerrar">${icon('cerrar')}</button></header>
         <div class="sheet-body">${s.render()}</div>

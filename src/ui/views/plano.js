@@ -107,6 +107,7 @@ export function renderPlano() {
     ${pl ? `${btn('', 'plan.fit', { ic: 'ajustar', title: 'Ver todo el plano' })}
     ${btn('Capas y filtros' + (nfl ? ' · ' + nfl : ''), 'plan.capas', { ic: 'filtro', cls: nfl ? 'primary' : '', title: nfl ? nfl + ' filtro(s) activo(s)' : 'Elegir qué se ve en el plano' })}
     ${nfl ? btn('Restablecer', 'plan.restablecer', { cls: 'ghost sm', title: 'Volver a ver todo' }) : ''}
+    ${btn('Lista', 'plan.lista', { ic: 'lista', title: 'Los elementos del plano en una lista (alternativa al mapa)' })}
     <label class="switch sm"><input type="checkbox" data-c="plan.capa" data-v="avisos"${fl.capas.avisos ? ' checked' : ''}><span>Avisos</span></label>
     <label class="switch sm"><input type="checkbox" data-c="plan.capa" data-v="etiquetas"${fl.capas.etiquetas ? ' checked' : ''}><span>Etiquetas</span></label>` : ''}
   </div>`;
@@ -588,6 +589,29 @@ function renderCapas() {
 }
 
 A['plan.secFicha'] = el => { closeSheet(); seleccionar('s', el.dataset.id); };
+// ---------- alternativa al mapa: los mismos elementos en una lista ----------
+A['plan.lista'] = () => openSheet({ title: 'Elementos del plano', size: 'l', live: true, render: renderListaPlano });
+function renderListaPlano() {
+  const s = S(); const p = P(); const fl = filtrosPlano(); const t = now();
+  const posTxt = pos => !pos ? 'sin situar en el plano' : esMapa(p.plano) && pos.lat != null ? fmtCoords({ lat: pos.lat, lon: pos.lon }) : 'en el plano a ' + Math.round(pos.x * 100) + ' %, ' + Math.round(pos.y * 100) + ' %';
+  const acc = (k, id, pos, ficha) => `<span class="row gap-s">${pos ? btn('Ver en el plano', 'plan.verEn', { cls: 'sm', data: { k, id } }) : ''}${ficha ? btn('Ficha', 'plan.fichaDe', { cls: 'sm ghost', data: { k, id } }) : ''}</span>`;
+  const us = filtrarUnidades(s, fl, t); const avs = filtrarAvisos(s, fl); const pts = puntosVisibles(p, fl); const secs = sectoresVisibles(p, fl); const cats = categoriasPunto(p);
+  return `<p class="muted small">Lo mismo que muestra el plano, en forma de lista y con las mismas capas y filtros. «Ver en el plano» lo centra y abre su ficha.</p>
+    <h3>Unidades (${us.length})</h3><ul class="ref-list lista-plano">${us.map(u => { const sit = unitSituation(s, u, t); return `<li class="row gap wrap"><span class="grow"><b>${esc(unitLabel(u))}</b> · clave ${esc(u.clave)} · ${simboloDisponibilidad(sit)} ${esc(SITUACION_LABEL[sit] || sit)} · sector ${esc(sectorNombre(p, u, '—'))} · ${esc(posTxt(u.plan))}</span>${acc('u', u.id, u.plan, true)}</li>`; }).join('') || '<li class="muted">Ninguna con estas capas y filtros</li>'}</ul>
+    <h3>Avisos (${avs.length})</h3><ul class="ref-list lista-plano">${avs.map(a => `<li class="row gap wrap"><span class="grow"><b>Aviso ${esc(avisoNumber(a))}</b>${a.num == null && a.ref ? ' (pendiente de confirmar)' : ''} · ${esc(AVISO_ESTADO[a.estado] || a.estado)} · ${esc(etiquetaTipoAviso(p.cat.tiposAviso, a.tipo) || a.desc || '')} · ${esc(a.loc && a.loc.txt ? a.loc.txt : posTxt(posAviso(a)))}</span>${acc('a', a.id, posAviso(a), true)}</li>`).join('') || '<li class="muted">Ninguno con estas capas y filtros</li>'}</ul>
+    <h3>Puntos (${pts.length})</h3><ul class="ref-list lista-plano">${pts.map(pt => `<li class="row gap wrap"><span class="grow"><b>${esc(pt.nombre)}</b> · ${esc((cats.find(c => c.id === pt.categoria) || {}).nombre || '')}${pt.zona ? ' · zona' : ''}</span>${acc('p', pt.id, pt.pos || centroide(pt.zona.pts), false)}</li>`).join('') || '<li class="muted">Ninguno</li>'}</ul>
+    <h3>Sectores delimitados (${secs.length})</h3><ul class="ref-list lista-plano">${secs.map(x => `<li class="row gap wrap"><span class="grow"><b>${esc(x.nombre)}</b> · ${liveUnits(s).filter(u => u.sector === x.id).length} unidad(es)</span>${acc('s', x.id, centroide(x.zona.pts), false)}</li>`).join('') || '<li class="muted">Ninguno</li>'}</ul>`;
+}
+A['plan.verEn'] = el => {
+  const { k, id } = el.dataset; const s = S(); const p = P(); let pos = null;
+  if (k === 'u') pos = s.units[id] && s.units[id].plan;
+  else if (k === 'a') pos = s.avisos[id] && posAviso(s.avisos[id]);
+  else if (k === 'p') { const pt = (p.cat.puntos || []).find(x => x.id === id); pos = pt && (pt.pos || centroide(pt.zona.pts)); }
+  else if (k === 's') { const sec = (p.cat.sectores || []).find(x => x.id === id); pos = sec && sec.zona && centroide(sec.zona.pts); }
+  closeSheet(); if (M && pos) M.map.setView(aLatLng(pos), Math.max(M.map.getZoom(), esMapa(p.plano) ? 18 : 0));
+  seleccionar(k, id); enfocar('[data-map-card] button');
+};
+A['plan.fichaDe'] = el => { closeSheet(); if (el.dataset.k === 'u') openUnit(el.dataset.id); else openAviso(el.dataset.id); };
 // ---------- delimitación de sectores ----------
 A['plan.secDelimitar'] = el => {
   const sec = (P().cat.sectores || []).find(x => x.id === el.dataset.id); if (!sec) return;

@@ -1,74 +1,34 @@
 {
- "fecha": "2026-11-25 04:28:23",
+ "fecha": "2026-11-25 04:31:07",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Servidor central (espacio 1.3.0 sin migrar): activación con el código del servidor",
+   "prueba": "Aviso desde el mapa: marcar, ajustar sin arrastrar, confirmar y elegir unidades",
    "resultado": "SUPERADA",
-   "detalle": "espacio central como el de la 1.3.0 (sin migrar), activado con el código del servidor; estado conectado"
+   "detalle": "botón → toque → marcador provisional (sector 1) ajustado con botones y con el teclado → formulario con ubicación «marcada en el mapa», sector y unidades con su situación; SVB-1 sugerida y elegida, las ocupadas o en descanso no se pueden marcar"
   },
   {
-   "prueba": "Servidor central: alta de usuario",
+   "prueba": "Ubicación sin el mapa: punto del plano y coordenadas validadas",
    "resultado": "SUPERADA",
-   "detalle": "usuario creado en la tablet; su cuenta queda publicada en el servidor central"
+   "detalle": "sin tocar el mapa: coordenadas imposibles rechazadas; punto del plano «Puerta 3» como ubicación (origen «punto»), y el aviso aparece en el plano"
   },
   {
-   "prueba": "Servidor central: dispositivo nuevo con usuario y contraseña",
+   "prueba": "Accesibilidad: crear un aviso solo con el teclado",
    "resultado": "SUPERADA",
-   "detalle": "el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza"
+   "detalle": "desde el plano solo con Tab/Intro: «Nuevo aviso en el mapa» → «Sin el mapa» → «Más datos» → descripción → crear"
   },
   {
-   "prueba": "Compartido: crear preventivo sin pedir servidor",
+   "prueba": "Accesibilidad: lista alternativa al mapa",
    "resultado": "SUPERADA",
-   "detalle": "creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central"
+   "detalle": "lista con unidades (situación), avisos, puntos y sectores; «Ver en el plano» con el teclado centra y abre la ficha (con el foco en ella)"
   },
   {
-   "prueba": "Compartido: el preventivo aparece solo en el otro dispositivo",
+   "prueba": "Accesibilidad: el foco entra en los paneles y vuelve al cerrarlos",
    "resultado": "SUPERADA",
-   "detalle": "aparece solo en el móvil y se abre con un toque, con sus 3 unidades"
+   "detalle": "al abrir un panel el foco entra en él; al cerrarlo vuelve al botón que lo abrió"
   },
   {
-   "prueba": "Compartido: avisos simultáneos sin duplicados",
-   "resultado": "SUPERADA",
-   "detalle": "números definitivos únicos 1 y 2 en ambos dispositivos"
-  },
-  {
-   "prueba": "Compartido: desconexión, trabajo local y reconexión",
-   "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional KP-2, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas"
-  },
-  {
-   "prueba": "Compartido: resolución de conflictos",
-   "resultado": "SUPERADA",
-   "detalle": "conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador"
-  },
-  {
-   "prueba": "Servidor central: varios preventivos usan el mismo servidor",
-   "resultado": "SUPERADA",
-   "detalle": "2 preventivos compartidos, todos con el servidor central http://127.0.0.1:8650 sin haberlo pedido"
-  },
-  {
-   "prueba": "Tipos de recurso: el tipo nuevo aparece en el otro dispositivo",
-   "resultado": "SUPERADA",
-   "detalle": "tipo «Bicicleta sanitaria» creado en la tablet → disponible en el móvil sin hacer nada"
-  },
-  {
-   "prueba": "Actualizaciones: estado del servidor y de los dispositivos",
-   "resultado": "SUPERADA",
-   "detalle": "Sistema → Actualizaciones muestra el servidor y los 2 dispositivos con su nombre y versión"
-  },
-  {
-   "prueba": "Servidor central: caída temporal del servidor sin interrumpir el trabajo",
-   "resultado": "SUPERADA",
-   "detalle": "servidor detenido: se sigue trabajando en local (sin_conexion, 2 pendiente(s)); al volver se envía todo y el otro dispositivo lo recibe"
-  },
-  {
-   "prueba": "Tablet: panel operativo multicolumna",
-   "resultado": "SUPERADA",
-   "detalle": "panel de 3 columnas y navegación lateral"
-  },
-  {
-   "prueba": "Sin errores de JavaScript (multidispositivo)",
+   "prueba": "Sin errores de JavaScript (escenario 13)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }
