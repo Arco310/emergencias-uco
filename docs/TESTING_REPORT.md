@@ -1,4 +1,37 @@
-# Informe de pruebas — Evolución integral (versión 1.3.0)
+# Informe de pruebas — Evolución integral (versiones 1.3.0 y 1.4.0)
+
+## 1.4.0 (25/11/2026, rama `mejora-1.4.0`, sin publicar)
+
+Solo pruebas ejecutadas de verdad, en el entorno de desarrollo (Linux, Node 22, Chromium de Playwright, servidor real en `127.0.0.1`).
+
+| Conjunto | Resultado |
+|---|---|
+| `npm test` (unidad y servidor; incluye el paquete de Windows con `UCO_SERVIDOR_JS`) | **149/149** |
+| E2E completo, una sola ejecución (`python3 tests/e2e/run_e2e.py`, escenarios 1–11) | **104/104** |
+
+Escenarios nuevos:
+- **8.** Recursos activos e inactivos, eliminación segura (7).
+- **9.** Tipo de mapa (5).
+- **10.** Usuarios y permisos en el servidor: alta con y sin contraseña, código + PIN, registro, aprobación, permisos individuales, perfiles y auditoría (9).
+- **11.** Paso al modo servidor desde la app, renovar la sesión y cambios rechazados (5).
+
+El escenario 2 reproduce ahora el espacio de producción (creado con la 1.3.0 y sin pasar al modo servidor) y pasa igual que en la 1.3.0.
+
+Fallos encontrados por las pruebas y corregidos:
+1. El repintado por la sincronización desmarcaba las casillas de los formularios (la del paso al modo servidor impedía enviarlo).
+2. La casilla de confirmación de la migración no la leía el formulario.
+3. El `pattern` del usuario no era válido con la bandera `v` de los navegadores actuales.
+4. El editor de perfiles borraba el nombre al marcar un permiso; lo mismo pasaba con el perfil elegido al aprobar una solicitud.
+5. `syncNow` volvía antes de terminar si ya había una sincronización en curso.
+
+Cada uno tiene su prueba.
+
+No probado aquí: Android real, el PC servidor con la 1.4.0 y Google Maps con una clave real.
+
+Capturas: `docs/evidencias/1.4.0/`. Criterios de aceptación uno a uno: `docs/INFORME-1.4.0.md` §6.
+
+---
+
 
 Fecha: 19/11/2026. Solo se recogen pruebas ejecutadas de verdad, con su resultado real.
 
