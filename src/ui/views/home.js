@@ -35,7 +35,7 @@ export function renderHome() {
 function centralBanner() {
   const { meta, st, remoto } = core().centralEstado();
   if (meta) {
-    const est = { conectado: ['Conectado', 'ok'], sincronizando: ['Sincronizando…', 'ok'], pendiente: ['Cambios pendientes', 'warn'], sin_conexion: ['Sin conexión: se trabaja en local', 'warn'], error: ['Error', 'bad'] }[st.estado] || ['Comprobando…', 'muted'];
+    const est = { conectado: ['Conectado', 'ok'], sincronizando: ['Sincronizando…', 'ok'], pendiente: ['Cambios pendientes', 'warn'], sin_conexion: ['Sin conexión: se trabaja en local', 'warn'], error: ['Error', 'bad'], sesion: ['Inicia sesión para sincronizar', 'warn'], cuenta: ['Cuenta no activa', 'bad'] }[st.estado] || ['Comprobando…', 'muted'];
     return `<div class="central-bar" data-central-estado="${attr(st.estado || '')}"><span class="chip ${est[1]}">Servidor central: ${esc(est[0])}</span><span class="muted small">${esc(meta.nombre || meta.server)}${st.ultimo ? ' · ' + esc(fmtDateTime(st.ultimo)) : ''}</span>${btn('Detalles', 'nav', { cls: 'sm ghost', data: { v: 'central' } })}</div>`;
   }
   if (remoto && remoto.antiguo) return can('central.gestionar') ? `<div class="note" data-central-aviso="actualizar">El servidor (versión ${esc(remoto.version || '?')}) debe actualizarse a la 1.1.0 o posterior para usar el servidor central. Mientras tanto todo funciona como hasta ahora.</div>` : '';

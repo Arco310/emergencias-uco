@@ -14,6 +14,7 @@ import { SYNC_ESTADOS } from '../../data/sync.js';
 import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './catalogs.js';
 import { overriddenVis } from '../../core/visual.js';
 import { tipoActivo } from '../../core/recursos.js';
+import { renderUsuariosServidor, tablaAuditoria, invalidarUsuariosServidor } from './usuarios-servidor.js';
 import { estadoApp } from '../actualizacion.js';
 import { seccionCartografia } from './cartografia.js';
 
@@ -36,10 +37,10 @@ const tile = (ic, label, a, data = {}, sub = '') => `<button class="tile" data-a
 export function renderPrevMenu() {
   const n = core().engine().pendingConflicts().length;
   return `<div class="grid-btns big">
-    ${tile('bitacora', 'Bitácora y auditoría', 'nav', { v: 'bitacora' })}
-    ${tile('reloj', 'Cronología de unidades', 'nav', { v: 'cronologia' })}
+    ${can('bitacora.ver') ? tile('bitacora', 'Bitácora y auditoría', 'nav', { v: 'bitacora' }) : ''}
+    ${can('unidades.ver') ? tile('reloj', 'Cronología de unidades', 'nav', { v: 'cronologia' }) : ''}
     ${can('estadisticas.ver') ? tile('grafico', 'Tiempos y estadísticas', 'nav', { v: 'estadisticas' }) : ''}
-    ${tile('mapa', 'Mapa real', 'nav', { v: 'mapa' })}
+    ${can('planos.ver') ? tile('mapa', 'Mapa real', 'nav', { v: 'mapa' }) : ''}
     ${tile('ajustes', 'Configuración del preventivo', 'nav', { v: 'ajustes' })}
     ${tile('sync', 'Sincronización', 'nav', { v: 'sync' }, core().isShared() ? (n ? n + ' conflicto(s)' : SYNC_ESTADOS[core().sync.status(core().cur).estado] || '') : 'Independiente')}
     ${tile('candado', 'Finalizar preventivo e informes', 'nav', { v: 'cierre' })}
@@ -385,10 +386,10 @@ G.applyTheme = applyTheme;
 export function renderSystemMenu() {
   const ce = core().centralEstado();
   return `<div class="grid-btns big">
-    ${tile('sync', 'Servidor central', 'nav', { v: 'central' }, ce.meta ? ({ conectado: 'Conectado', sin_conexion: 'Sin conexión', error: 'Error', pendiente: 'Cambios pendientes', sincronizando: 'Sincronizando…' }[ce.st.estado] || 'Configurado') : 'Sin configurar')}
-    ${tile('usuario', 'Usuarios y roles', 'nav', { v: 'usuarios' })}
+    ${tile('sync', 'Servidor central', 'nav', { v: 'central' }, ce.meta ? ({ conectado: 'Conectado', sin_conexion: 'Sin conexión', error: 'Error', pendiente: 'Cambios pendientes', sincronizando: 'Sincronizando…', sesion: 'Inicia sesión para sincronizar', cuenta: 'Cuenta no activa' }[ce.st.estado] || 'Configurado') : 'Sin configurar')}
+    ${tile('usuario', core().modoServidor() ? 'Usuarios y permisos' : 'Usuarios y roles', 'nav', { v: 'usuarios' }, core().modoServidor() ? 'En el servidor central' : '')}
     ${tile('archivar', 'Copias de seguridad', 'nav', { v: 'copias' })}
-    ${tile('bitacora', 'Auditoría del sistema', 'nav', { v: 'auditoria' })}
+    ${can('auditoria.ver') ? tile('bitacora', 'Auditoría del sistema', 'nav', { v: 'auditoria' }) : ''}
     ${tile('descargar', 'Actualizaciones', 'nav', { v: 'actualizaciones' }, core().bloqueoSync ? 'Actualización necesaria' : estadoApp().lista ? 'Versión ' + (estadoApp().lista.version || 'nueva') + ' lista' : 'Versión ' + APP_VERSION)}
     ${tile('escudo', 'Permisos del dispositivo', 'nav', { v: 'permisos' })}
     ${tile('llave', 'Mi cuenta', 'nav', { v: 'cuenta' })}
@@ -423,9 +424,12 @@ export function renderCentral() {
       ])}<p class="muted small">Se publicarán los usuarios, roles y preventivos compartidos de este dispositivo.</p>
       <div class="row end"><button class="btn primary">Activar servidor central</button></div></form></section>` : '<p class="note">El servidor central aún no está activado. Debe activarlo un administrador.</p>'}`;
   }
-  const est = { conectado: ['Conectado', 'ok'], sincronizando: ['Sincronizando…', 'ok'], pendiente: ['Cambios pendientes', 'warn'], sin_conexion: ['Sin conexión: se sigue trabajando en local y se sincroniza al volver', 'warn'], error: ['Error: ' + (st.error || ''), 'bad'] }[st.estado] || ['Comprobando…', 'muted'];
+  const est = { conectado: ['Conectado', 'ok'], sincronizando: ['Sincronizando…', 'ok'], pendiente: ['Cambios pendientes', 'warn'], sin_conexion: ['Sin conexión: se sigue trabajando en local y se sincroniza al volver', 'warn'], error: ['Error: ' + (st.error || ''), 'bad'], sesion: ['Inicia sesión para sincronizar', 'warn'], cuenta: ['Cuenta no activa: ' + (st.error || ''), 'bad'] }[st.estado] || ['Comprobando…', 'muted'];
+  const ms = c.modoServidor();
   const disp = CENTRAL_DISP ? Object.entries(CENTRAL_DISP).sort((a, b) => b[1].visto - a[1].visto) : null;
   const confl = c._centralConflictos || [];
+  const rech = c._centralRechazos || [];
+  if (!c._centralRechazosP) c._centralRechazosP = c.repo.rechazos().then(r => { const antes = JSON.stringify(c._centralRechazos || []); c._centralRechazos = r; c._centralRechazosP = null; if (JSON.stringify(r) !== antes) G.render(); }).catch(() => { c._centralRechazosP = null; });
   if (!c._centralConflictosP) c._centralConflictosP = c.central.datos().then(d => { c._centralConflictos = Object.entries(d.conflictos).map(([id, x]) => ({ id, ...x })); c._centralConflictosP = null; if (c._centralConflictos.length !== confl.length) G.render(); });
   return `<section class="card pad"><h3>Estado</h3>
       <dl class="kv">
@@ -433,16 +437,58 @@ export function renderCentral() {
         <dt>Servidor</dt><dd>${esc(meta.server)} <span class="muted small">(preconfigurado, HTTPS)</span></dd>
         <dt>Organización</dt><dd>${esc(meta.nombre || '—')}${meta.pruebas ? ' ' + chip('PRUEBAS · CLAUDE_TEST', '#C62828') : ''}</dd>
         <dt>Última comunicación</dt><dd>${st.ultimo ? esc(fmtDateTime(st.ultimo)) : '—'}</dd>
+        <dt>Modo</dt><dd>${ms ? chip('Servidor que valida', '#1565C0') + ' <span class="muted small">usuarios, permisos y operaciones comprobados en el servidor</span>' : chip('Cifrado de extremo a extremo', '#607D8B') + ' <span class="muted small">el servidor no lee los datos ni comprueba permisos</span>'}</dd>
       </dl>
+      ${st.estado === 'sesion' ? `<form data-f="central.sesion" class="note warn">${icon('llave')} Tu sesión del servidor ha caducado o no se ha abierto todavía en este dispositivo. Tus cambios se guardan aquí y se enviarán al volver a entrar.
+        ${c.user && c.user.metodo === 'pin' ? `<div class="row gap wrap">${btn('Volver a entrar con mi PIN', 'central.reentrar', { cls: 'primary' })}</div>` : `<div class="row gap wrap"><input type="password" name="p" placeholder="Tu contraseña" autocomplete="current-password" aria-label="Contraseña" required><button class="btn primary">Abrir sesión</button></div>`}</form>` : ''}
       <div class="row gap wrap">${btn('Comprobar ahora', 'central.sync', { ic: 'sync' })}${gestion ? btn('Ver dispositivos', 'central.disp', { ic: 'usuario' }) : ''}</div>
       <p class="muted small">Para añadir un dispositivo: abre la aplicación en él e inicia sesión con tu usuario y contraseña. No hay que configurar nada más.</p>
     </section>
     ${confl.length ? `<section class="card pad"><h3>Cambios simultáneos por resolver ${chip(String(confl.length), '#C62828')}</h3><p class="muted small">Otro dispositivo cambió lo mismo a la vez. Elige qué versión se conserva; nunca se sobrescribe sin avisar.</p>
       ${confl.map(x => `<div class="conf"><b>${esc(CFG_NOMBRE(x.id))}</b>${x.id.startsWith('usr:') && (x.mio || x.suyo) ? ' ' + esc((x.mio || x.suyo).usuario || '') : ''}<div class="muted small">${esc(fmtDateTime(x.t))}</div>
         ${can('usuarios.admin') || gestion ? `<div class="actions">${btn('Mantener la de este dispositivo', 'central.resolver', { data: { id: x.id, v: 'mio' } })}${btn('Usar la del servidor', 'central.resolver', { cls: 'primary', data: { id: x.id, v: 'suyo' } })}</div>` : ''}</div>`).join('')}</section>` : ''}
+    ${rech.length ? seccionRechazos(rech) : ''}
     ${disp ? `<section class="card pad"><h3>Dispositivos conectados</h3><table class="tbl"><thead><tr><th>Dispositivo</th><th>Versión</th><th>Última comunicación</th></tr></thead><tbody>${disp.map(([id, d]) => `<tr><td>${esc(d.nombre || id)}${id === c.device.id ? ' (este)' : ''}</td><td>${esc(d.version || '—')}</td><td>${esc(fmtDateTime(d.visto))}</td></tr>`).join('')}</tbody></table></section>` : ''}
+    ${gestion && !ms ? seccionMigracion() : ''}
     ${gestion ? `<section class="card pad"><h3>Este dispositivo</h3><p class="muted small">Si este dispositivo deja de usar el servidor central, los preventivos ya descargados se conservan en él.</p>${btn('Dejar de usar el servidor central aquí', 'central.olvidar', { cls: 'danger ghost' })}</section>` : ''}`;
 }
+/** Cambios que el servidor no aceptó (p. ej. hechos sin conexión con permisos o tipos ya retirados): nunca desaparecen en silencio */
+function seccionRechazos(rech) {
+  const nuevos = rech.filter(r => !r.revisado).reverse(); const revisados = rech.filter(r => r.revisado).reverse();
+  const fila = r => `<li><b>${esc(r.que || r.k || 'Cambio')}</b>${r.prev ? ` <span class="muted">· ${esc(r.prev)}</span>` : ''}<div class="small">${esc(r.error || '')}</div><div class="muted small">${esc(fmtDateTime(r.t))}${r.autor ? ' · hecho por ' + esc(r.autor) : ''}${r.revisado ? ' · revisado' + (r.revisadoPor ? ' por ' + esc(r.revisadoPor) : '') : ''}</div></li>`;
+  return `<section class="card pad" data-rechazos><h3>Cambios rechazados por el servidor ${nuevos.length ? chip(String(nuevos.length), '#C62828') : ''}</h3>
+    <p class="muted small">El servidor no aceptó estos cambios (por ejemplo, hechos sin conexión con un permiso o un tipo de recurso que ya no estaba vigente). No se han aplicado en ningún dispositivo: si siguen siendo necesarios, vuelve a hacerlos.</p>
+    ${nuevos.length ? `<ul class="ref-list">${nuevos.slice(0, 30).map(fila).join('')}</ul><div class="row end">${btn('Marcar como revisados', 'central.rechazosRevisados', { ic: 'ok' })}</div>` : ''}
+    ${revisados.length ? `<details class="retirados"><summary>Revisados (${revisados.length})</summary><ul class="ref-list">${revisados.slice(0, 50).map(fila).join('')}</ul></details>` : ''}</section>`;
+}
+A['central.rechazosRevisados'] = async () => { await core().marcarRechazosRevisados(); core()._centralRechazos = null; toast('Marcados como revisados', 'ok'); G.render(); };
+/** Paso del espacio central al modo servidor (1.4.0): explica las consecuencias y pide el código del servidor */
+function seccionMigracion() {
+  return `<section class="card pad" data-migracion><h3>${icon('escudo')} Pasar al modo servidor (1.4.0)</h3>
+    <p class="muted small">Con este cambio el servidor comprueba los usuarios y permisos de cada operación (lo que alguien no tiene permitido se rechaza aunque manipule la aplicación), puede suspender cuentas al momento, admitir solicitudes de cuenta y cuentas con código + PIN.</p>
+    <ul class="small">
+      <li><b>Consecuencia:</b> el servidor custodiará la clave del espacio y podrá leer los preventivos compartidos (siguen cifrados en su disco). Deja de haber cifrado de extremo a extremo.</li>
+      <li>Se hace una copia de los datos del espacio antes de cambiar nada; las contraseñas siguen siendo las mismas.</li>
+      <li>Todos los dispositivos deben tener la versión 1.4.0 para seguir sincronizando.</li>
+      <li>Los preventivos independientes no cambian.</li>
+    </ul>
+    <form data-f="central.migrar">${fieldsHtml([
+      { name: 'codigo', label: 'Código de administración del servidor', required: true, placeholder: 'XXXXX-XXXXX-XXXXX-XXXXX', attrs: 'autocomplete="off" autocapitalize="characters"' },
+      { name: 'p', label: 'Tu contraseña', type: 'password', required: true, attrs: 'autocomplete="current-password"' },
+      { name: 'ok', label: 'He leído las consecuencias y quiero pasar al modo servidor', type: 'checkbox' },
+    ])}
+    <div class="row end"><button class="btn primary">Pasar al modo servidor</button></div></form></section>`;
+}
+F['central.migrar'] = async form => {
+  const v = readForm(form);
+  if (!v.ok) { toast('Confirma que has leído las consecuencias', 'error'); return; }
+  toast('Pasando el espacio central al modo servidor…', 'info', 5000);
+  const r = await core().migrarAlModoServidor({ codigo: v.codigo, password: v.p });
+  invalidarUsuariosServidor();
+  toast('Hecho: ' + r.usuarios + ' usuario(s) y ' + r.preventivos + ' preventivo(s) en modo servidor. Copia previa: ' + r.copia, 'ok', 10000); G.render();
+};
+F['central.sesion'] = async form => { await core().renovarSesion(form.p.value); toast('Sesión abierta: se sincroniza de nuevo', 'ok'); G.render(); };
+A['central.reentrar'] = async () => { await core().logout(); };
 A['central.retry'] = async () => { await core().consultarCentral(); G.render(); };
 F['central.activar'] = async form => {
   const v = readForm(form);
@@ -474,6 +520,7 @@ A['central.olvidar'] = async () => {
 // ---------- usuarios y roles ----------
 let USERS = null, ROLES = null;
 export function renderUsers() {
+  if (core().modoServidor()) return renderUsuariosServidor();
   if (!can('usuarios.admin')) return empty('No tienes permiso para administrar usuarios y roles');
   if (!USERS || !ROLES) { Promise.all([core().repo.listUsers(), core().repo.getRoles()]).then(([u, r]) => { USERS = u; ROLES = r; G.render(); }); return `<p class="muted">Cargando…</p>`; }
   const f = filt('users'); const tab = f.tab || 'u';
@@ -573,13 +620,26 @@ async function restoreFlow(p, origen) {
 
 // ---------- auditoría del sistema ----------
 let AUD = null;
+let AUD_SRV = null;
 export function renderAudit() {
-  if (!AUD) { core().repo.listAudit().then(a => { AUD = a; G.render(); }); return '<p class="muted">Cargando…</p>'; }
-  const out = `<div class="row between"><p class="muted">Operaciones administrativas del dispositivo: accesos, usuarios, roles, configuración, plantillas, copias y restauraciones. Cada preventivo tiene además su propia bitácora.</p>${btn('Actualizar', 'aud.reload', { ic: 'sync' })}</div>
+  // Modo servidor: también la auditoría del servidor (usuarios, permisos, rechazos), filtrable por usuario
+  const f = filt('aud'); const tab = core().modoServidor() ? f.tab || 'srv' : 'dev';
+  const pest = core().modoServidor() ? tabs([['srv', 'Servidor central'], ['dev', 'Este dispositivo']], tab, 'aud.tab') : '';
+  if (tab === 'srv') {
+    if (!AUD_SRV) { core().auditoriaServidor({ usuario: f.usuario || '' }).then(a => { AUD_SRV = a; G.render(); }).catch(e => { AUD_SRV = { error: e.message }; G.render(); }); return pest + '<p class="muted">Cargando la auditoría del servidor…</p>'; }
+    const out = pest + `<div class="row gap wrap"><p class="muted grow">Altas, aprobaciones, cambios de estado y de permisos, códigos, accesos revocados, migración y operaciones rechazadas: quién, qué, a quién y cuándo.</p>
+      <input type="search" placeholder="Filtrar por usuario" value="${attr(f.usuario || '')}" data-c="aud.usuario" aria-label="Filtrar por usuario">${btn('Actualizar', 'aud.reload', { ic: 'sync' })}</div>
+      ${AUD_SRV.error ? `<p class="note bad">${esc(AUD_SRV.error)}</p>` : tablaAuditoria(AUD_SRV)}`;
+    AUD_SRV = null; return out;
+  }
+  if (!AUD) { core().repo.listAudit().then(a => { AUD = a; G.render(); }); return pest + '<p class="muted">Cargando…</p>'; }
+  const out = pest + `<div class="row between"><p class="muted">Operaciones administrativas del dispositivo: accesos, usuarios, roles, configuración, plantillas, copias y restauraciones. Cada preventivo tiene además su propia bitácora.</p>${btn('Actualizar', 'aud.reload', { ic: 'sync' })}</div>
   <div class="log">${AUD.slice(0, 500).map(e => `<div class="log-row"><time>${fmtDateTime(e.t, true)}</time><div class="grow"><b>${esc(e.elemento)}</b> · ${esc(e.accion)}${e.anterior || e.nuevo ? `<div class="small">${e.anterior ? `<span class="old">${esc(e.anterior)}</span> → ` : ''}<span class="new">${esc(e.nuevo)}</span></div>` : ''}<div class="muted small">${esc(e.usuario)} · ${esc(e.dispositivo)}</div></div></div>`).join('') || empty('Sin registros')}</div>`;
   AUD = null; return out;
 }
-A['aud.reload'] = () => { AUD = null; G.render(); };
+A['aud.reload'] = () => { AUD = null; AUD_SRV = null; G.render(); };
+A['aud.tab'] = el => { filt('aud').tab = el.dataset.v; G.render(); };
+CH['aud.usuario'] = el => { filt('aud').usuario = el.value.trim(); AUD_SRV = null; G.render(); };
 
 // ---------- permisos del dispositivo ----------
 const PERMS = {};

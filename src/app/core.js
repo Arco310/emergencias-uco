@@ -15,6 +15,7 @@ import { migrarDatos } from '../data/migraciones.js';
 import { posterior } from '../core/versiones.js';
 import { tiposNoDisponibles, tiposParaNuevaUnidad, plantillasDisponibles, tipoActivo, referenciasTipoEnConfig, explicacionBloqueo } from '../core/recursos.js';
 import { permisosEfectivos } from '../core/perms.js';
+import { describeOp } from '../core/timeline.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -94,12 +95,17 @@ export class AppCore {
   }
   /** Operaciones rechazadas por el servidor: el estado local vuelve a ser el del servidor y se avisa */
   async _rechazos(pid, lista) {
-    await this.repo.anotarRechazos(lista.map(r => ({ pid, id: r.id, error: r.error, codigo: r.codigo || '', k: r.op ? r.op.k : '', autor: r.op && r.op.u ? r.op.u.n : '', t: now() })));
     const e = this.engines.get(pid);
+    // Descripción legible y nombre del preventivo antes de rehacer el estado (después la operación ya no está)
+    const prev = e && e.state.prev ? e.state.prev.nombre : ((this.summaries || []).find(x => x.id === pid) || {}).nombre || '';
+    const que = op => { if (!op) return ''; if (!e) return op.k; try { const d = describeOp(e.state, op); return [d.elemento, d.accion, d.nuevo].filter(Boolean).join(' · '); } catch { return op.k; } };
+    await this.repo.anotarRechazos(lista.map(r => ({ pid, prev, id: r.id, error: r.error, codigo: r.codigo || '', k: r.op ? r.op.k : '', que: que(r.op), autor: r.op && r.op.u ? r.op.u.n : '', t: now() })));
     if (e) { e.load(await this.repo.loadOps(pid)); await this._summary(pid); this.emit('change', { pid }); }
     for (const r of lista) await this.repo.audit('Operación rechazada por el servidor', (r.op ? r.op.k + ' · ' : '') + pid, '', r.error);
     this.emit('mensaje', { tipo: 'error', texto: (lista.length === 1 ? 'El servidor ha rechazado un cambio: ' : 'El servidor ha rechazado ' + lista.length + ' cambios: ') + lista[0].error, duracion: 12000 });
   }
+  /** Cambios rechazados por el servidor: se marcan como revisados (nunca se borran: también quedan en la auditoría) */
+  async marcarRechazosRevisados() { const r = await this.repo.marcarRechazosRevisados(this.user ? this.user.usuario : ''); this.emit('central', {}); return r; }
   _sinSesion(msg) { if (this._avisoSesion) return; this._avisoSesion = true; this.emit('mensaje', { tipo: 'warn', texto: (msg || 'Tu sesión del servidor central ha caducado') + '. Tus cambios se guardan en este dispositivo y se enviarán al volver a entrar.', duracion: 10000 }); this.emit('central', {}); }
   async _cuentaNoActiva(msg) {
     if (!this.user) return;

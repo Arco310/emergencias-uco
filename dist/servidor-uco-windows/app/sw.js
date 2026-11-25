@@ -10,9 +10,9 @@
 // - La versión nueva espera («waiting») hasta que la aplicación la active en un momento seguro
 //   (mensaje ACTIVAR): nunca interrumpe una operación en curso.
 // - Se conserva la versión anterior para recuperarse si la nueva no arranca (mensaje REVERTIR).
-const VERSION = '7e3db4563007';
-const SHA256 = '7e3db4563007f331f2c6467f911726a65fc01deb3979db436a936b8ec0d63bda';
-const APP_VERSION = '1.3.0';
+const VERSION = '43c3ab9bda8f';
+const SHA256 = '43c3ab9bda8f23de04c40874fa0235384845348b1734ebddbe24f4d3f2ec5062';
+const APP_VERSION = '1.4.0';
 const CACHE = 'uco-app-' + VERSION;
 const META = 'uco-app-meta';
 const SHELL = ['index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/favicon-64.png'];
@@ -90,8 +90,8 @@ self.addEventListener('notificationclick', e => {
     return self.clients.openWindow((e.notification.data && e.notification.data.url) || self.registration.scope);
   })());
 });
-// Teselas de OpenStreetMap ya vistas: se guardan para poder usar el plano sin conexión. Solo las que el
-// usuario ha visto (sin descargas masivas, según la política de uso de OSM) y con un máximo.
+// Teselas de OpenStreetMap y del IGN ya vistas: se guardan para poder usar el plano sin conexión. Solo las que
+// el usuario ha visto (sin descargas masivas, según las políticas de uso de OSM y del IGN) y con un máximo.
 const TESELAS = 'uco-teselas-1'; const MAX_TESELAS = 3000;
 const SEMANA = 7 * 24 * 3600 * 1000;
 async function tesela(req) {
@@ -114,7 +114,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.hostname === 'tile.openstreetmap.org') { e.respondWith(tesela(req)); return; }
+  // Teselas de OpenStreetMap y del Instituto Geográfico Nacional (satélite, híbrido y relieve)
+  if (url.hostname === 'tile.openstreetmap.org' || (url.hostname === 'www.ign.es' && url.pathname.startsWith('/wmts/'))) { e.respondWith(tesela(req)); return; }
   if (url.origin !== location.origin || url.pathname.includes('/api/')) return; // mapas, búsquedas y sincronización: siempre red
   const rel = url.pathname.slice(new URL(self.registration.scope).pathname.length);
   if (rel === 'sw.js' || rel === 'version.json') return; // siempre del servidor

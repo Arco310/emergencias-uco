@@ -76,6 +76,10 @@ test('preventivo del espacio: lo permitido se sincroniza; lo no permitido lo rec
   assert.ok(mensajes.some(m => /rechazado.*archivar/i.test(m)), mensajes.join(' | '));
   const rech = await B.repo.rechazos();
   assert.equal(rech.length, 1); assert.equal(rech[0].k, 'unit.sit');
+  // Queda una descripción legible para revisarlo después (no solo el aviso de unos segundos)
+  assert.match(rech[0].que, /SVB-1/); assert.equal(rech[0].prev, 'Maratón'); assert.ok(!rech[0].revisado);
+  await B.marcarRechazosRevisados();
+  assert.ok((await B.repo.rechazos()).every(r => r.revisado), 'marcados como revisados, sin borrarse');
   await A.sync.syncNow(pid);
   assert.equal(A.state.units[u.id].sit, 'activa', 'a los demás nunca les llega');
 });

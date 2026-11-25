@@ -30,7 +30,7 @@ const VIEWS = {
   sistema: { t: 'Sistema', ic: 'mas', scope: 'g', r: admin.renderSystemMenu },
   usuarios: { t: 'Usuarios y roles', ic: 'usuario', scope: 'g', r: admin.renderUsers, parent: 'sistema' },
   copias: { t: 'Copias de seguridad', ic: 'archivar', scope: 'g', r: admin.renderBackups, parent: 'sistema' },
-  auditoria: { t: 'Auditoría del sistema', ic: 'bitacora', scope: 'g', r: admin.renderAudit, parent: 'sistema' },
+  auditoria: { t: 'Auditoría del sistema', ic: 'bitacora', scope: 'g', r: admin.renderAudit, parent: 'sistema', perm: 'auditoria.ver' },
   permisos: { t: 'Permisos del dispositivo', ic: 'escudo', scope: 'g', r: admin.renderDevicePerms, parent: 'sistema' },
   cuenta: { t: 'Mi cuenta', ic: 'usuario', scope: 'g', r: admin.renderAccount, parent: 'sistema' },
   acerca: { t: 'Acerca de', ic: 'info', scope: 'g', r: admin.renderAbout, parent: 'sistema' },
@@ -38,14 +38,14 @@ const VIEWS = {
   actualizaciones: { t: 'Actualizaciones', ic: 'descargar', scope: 'g', r: actualizaciones.renderActualizaciones, parent: 'sistema' },
   // Dentro de un preventivo
   panel: { t: 'Centro de control', ic: 'panel', scope: 'p', r: ops.renderPanel },
-  unidades: { t: 'Unidades', ic: 'unidades', scope: 'p', r: ops.renderUnits },
-  avisos: { t: 'Avisos', ic: 'avisos', scope: 'p', r: ops.renderAvisos },
-  plano: { t: 'Plano táctico', ic: 'plano', scope: 'p', r: plano.renderPlano, full: true },
+  unidades: { t: 'Unidades', ic: 'unidades', scope: 'p', r: ops.renderUnits, perm: 'unidades.ver' },
+  avisos: { t: 'Avisos', ic: 'avisos', scope: 'p', r: ops.renderAvisos, perm: 'avisos.ver' },
+  plano: { t: 'Plano táctico', ic: 'plano', scope: 'p', r: plano.renderPlano, full: true, perm: 'planos.ver' },
   mas: { t: 'Más', ic: 'mas', scope: 'p', r: admin.renderPrevMenu },
-  bitacora: { t: 'Bitácora y auditoría', ic: 'bitacora', scope: 'p', r: analysis.renderLog, parent: 'mas' },
-  cronologia: { t: 'Cronología de unidades', ic: 'reloj', scope: 'p', r: analysis.renderChrono, parent: 'mas' },
-  estadisticas: { t: 'Tiempos y estadísticas', ic: 'grafico', scope: 'p', r: analysis.renderStats, parent: 'mas' },
-  mapa: { t: 'Mapa real', ic: 'mapa', scope: 'p', r: ops.renderMap, parent: 'mas' },
+  bitacora: { t: 'Bitácora y auditoría', ic: 'bitacora', scope: 'p', r: analysis.renderLog, parent: 'mas', perm: 'bitacora.ver' },
+  cronologia: { t: 'Cronología de unidades', ic: 'reloj', scope: 'p', r: analysis.renderChrono, parent: 'mas', perm: 'unidades.ver' },
+  estadisticas: { t: 'Tiempos y estadísticas', ic: 'grafico', scope: 'p', r: analysis.renderStats, parent: 'mas', perm: 'estadisticas.ver' },
+  mapa: { t: 'Mapa real', ic: 'mapa', scope: 'p', r: ops.renderMap, parent: 'mas', perm: 'planos.ver' },
   ajustes: { t: 'Configuración del preventivo', ic: 'ajustes', scope: 'p', r: admin.renderPrevConfig, parent: 'mas' },
   sync: { t: 'Sincronización', ic: 'sync', scope: 'p', r: admin.renderSync, parent: 'mas' },
   cierre: { t: 'Finalizar preventivo e informes', ic: 'archivo', scope: 'p', r: admin.renderClose, parent: 'mas' },
@@ -88,9 +88,28 @@ function camposEscritos(root) {
 function restaurarCampos(root, vals) {
   for (const [id, v] of vals) { const el = root.querySelector('#' + CSS.escape(id)); if (el && (el.tagName === 'SELECT' ? [...el.options].some(o => o.value === v) : true)) el.value = v; }
 }
+/** Casillas y opciones de un formulario que el usuario ha cambiado y aún no ha enviado. Los interruptores
+ *  que se aplican al momento (data-c) no se guardan: tras repintar deben mostrar el estado real. */
+const CASILLAS = 'form[data-f] input[type=checkbox][name]:not([data-c]), form[data-f] input[type=radio][name]:not([data-c])';
+function casillasEscritas(root) {
+  const out = [];
+  for (const el of root.querySelectorAll(CASILLAS)) if (el.checked !== el.defaultChecked) out.push([el.closest('form').dataset.f, el.name, el.value, el.checked]);
+  return out;
+}
+function restaurarCasillas(root, lista) {
+  for (const [f, name, value, checked] of lista) {
+    const el = [...root.querySelectorAll(CASILLAS)].find(x => x.closest('form').dataset.f === f && x.name === name && x.value === value);
+    if (el) el.checked = checked;
+  }
+}
 /** Repintado por un evento (sincronización, versión, servidor central…): nunca borra lo que el usuario
  *  está escribiendo en la pantalla */
-function renderPasivo() { const app = $('#app'); const vals = app ? camposEscritos(app) : new Map(); render(); if (vals.size && app) restaurarCampos(app, vals); }
+function renderPasivo() {
+  const app = $('#app'); const vals = app ? camposEscritos(app) : new Map(); const cas = app ? casillasEscritas(app) : [];
+  render();
+  if (app && vals.size) restaurarCampos(app, vals);
+  if (app && cas.length) restaurarCasillas(app, cas);
+}
 export function render() {
   renderQueued = false;
   const app = $('#app'); if (!app) return;
@@ -106,7 +125,9 @@ export function render() {
   const selStart = focusId && document.activeElement.selectionStart;
   const main = $('#main'); const scroll = main ? main.scrollTop : 0;
   let body;
-  try { body = v.r(); } catch (e) { console.error(e); body = `<div class="empty">${icon('alerta')}<p>Error al mostrar la pantalla: ${esc(e.message)}</p></div>`; }
+  // Permisos de consulta (1.4.0): sin permiso no se muestra la pantalla y se explica por qué
+  if (v.perm && !core.can(v.perm)) body = `<div class="empty">${icon('candado')}<p>No tienes permiso para consultar esta sección. Si lo necesitas, pídeselo a un administrador.</p></div>`;
+  else try { body = v.r(); } catch (e) { console.error(e); body = `<div class="empty">${icon('alerta')}<p>Error al mostrar la pantalla: ${esc(e.message)}</p></div>`; }
   app.className = 'app' + (v.full ? ' full' : '') + (core.cur ? ' in-prev' : '');
   app.innerHTML = layout(route, v, body);
   const m2 = $('#main'); if (m2 && G.ui._lastRoute === route) m2.scrollTop = scroll;
@@ -121,7 +142,7 @@ export function queueRender() { if (!renderQueued) { renderQueued = true; reques
 
 function layout(route, v, body) {
   const core = G.core; const s = core.state; const inPrev = !!core.cur && !!s;
-  const nav = inPrev ? NAV_P : NAV_G;
+  const nav = (inPrev ? NAV_P : NAV_G).filter(k => !VIEWS[k].perm || G.core.can(VIEWS[k].perm));
   const activeNav = v.parent || route;
   const navHtml = cls => `<nav class="${cls}" aria-label="Navegación">${nav.map(k => `<button type="button" class="nav-i${k === activeNav ? ' on' : ''}" data-a="nav" data-v="${k}" aria-current="${k === activeNav ? 'page' : 'false'}">${icon(VIEWS[k].ic)}<span>${VIEWS[k].t === 'Centro de control' ? 'Panel' : VIEWS[k].t === 'Plano táctico' ? 'Plano' : VIEWS[k].t.replace('Configuración general', 'Ajustes')}</span>${badge(k)}</button>`).join('')}</nav>`;
   const st = inPrev ? s.prev : null;

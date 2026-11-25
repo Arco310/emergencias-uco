@@ -381,3 +381,14 @@ details.retirados{margin-top:1rem}details.retirados summary{cursor:pointer;paddi
 .v-hibrido{background:linear-gradient(90deg,transparent 46%,rgba(255,255,255,.85) 46%,rgba(255,255,255,.85) 52%,transparent 52%),linear-gradient(0deg,transparent 40%,rgba(255,224,138,.9) 40%,rgba(255,224,138,.9) 46%,transparent 46%),linear-gradient(135deg,#3E4F2E,#6B6552)}
 .v-relieve{background:repeating-radial-gradient(circle at 60% 55%,#F3EEDC 0 7px,#C9A36B 7px 8px),#F3EEDC}
 @media (max-width:360px){.vistas{grid-template-columns:1fr}}
+/* 1.4.0 · usuarios del servidor, permisos por módulos y acceso con código */
+.auth-extra{margin-top:.8rem}.auth-extra .btn{min-height:44px}
+.us-row{cursor:pointer;min-height:56px}.us-row:focus-visible{outline:2px solid var(--acc,#C62828);outline-offset:2px}
+.avatar{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--soft);font-weight:700;flex:0 0 36px}
+.us-pend{border-left:4px solid #E65100}
+.perm-mod{border:1px solid var(--line);border-radius:var(--r-s);margin:.4rem 0;padding:.2rem .6rem}
+.perm-mod summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:.5rem}
+.perm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.1rem .8rem;padding:.2rem 0 .5rem}
+.chk.perm{min-height:40px;align-items:center}.chk.perm .chip{font-size:.7rem;margin-left:.25rem}
+.us-alc li{min-height:44px;align-items:center}
+.codigo-act .recovery{font-size:1.6rem;letter-spacing:.12em;text-align:center}

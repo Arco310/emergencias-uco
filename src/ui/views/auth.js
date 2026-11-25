@@ -1,6 +1,6 @@
 // Alta inicial, inicio de sesión, recuperación de acceso y restauración en un dispositivo nuevo.
 import { G, A, F } from '../state.js';
-import { esc, toast, openSheet, closeSheet, pickFile, readText, copyText, fieldsHtml, readForm } from '../dom.js';
+import { esc, toast, openSheet, closeSheet, refreshSheets, pickFile, readText, copyText, fieldsHtml, readForm } from '../dom.js';
 import { icon } from '../icons.js';
 import { APP_NAME, APP_VERSION } from '../../core/defaults.js';
 
@@ -25,6 +25,9 @@ export function renderAuth() {
     return setupView(r);
   }
   if (users === null) { core.repo.listUsersPublic().then(u => { users = u.filter(x => x.activo); G.render(); }); return `<div class="splash">${logo()}<p>Cargando…</p></div>`; }
+  // ¿Hay servidor central en modo servidor? (para ofrecer «Crear una cuenta» y «Tengo un código»)
+  if (!core.centralConsultado && !consultando) { consultando = true; core.consultarCentral().catch(() => null).finally(() => { consultando = false; G.render(); }); }
+  const conPin = users && users.some(u => u.pin);
   return `<div class="auth-box">
     <div class="auth-head">${logo()}<h1>${APP_NAME}</h1><p class="muted">${esc(core.device.nombre)} · v${APP_VERSION}</p></div>
     ${G.preview ? `<p class="note warn">${icon('info')} Vista previa: los datos se guardan solo mientras la página esté abierta.</p>` : ''}
@@ -32,10 +35,11 @@ export function renderAuth() {
       <div class="fld"><label for="f_u">Usuario</label>
         ${users && users.length <= 12 ? `<select id="f_u" name="u" required>${users.map(u => `<option value="${esc(u.usuario)}">${esc(u.nombre)} (${esc(u.usuario)})</option>`).join('')}</select>` : `<input id="f_u" name="u" autocomplete="username" required autocapitalize="none">`}
       </div>
-      <div class="fld"><label for="f_p">Contraseña</label><input id="f_p" name="p" type="password" autocomplete="current-password" required></div>
+      <div class="fld"><label for="f_p">${conPin ? 'Contraseña o PIN' : 'Contraseña'}</label><input id="f_p" name="p" type="password" autocomplete="current-password" required>${conPin ? '<small class="help">Si tu cuenta entra con PIN en este dispositivo, escribe aquí tu PIN.</small>' : ''}</div>
       <button class="btn primary block">${icon('llave')}<span>Entrar</span></button>
     </form>
     <div class="row center gap wrap"><button class="btn ghost sm" data-a="auth.recover">He olvidado la contraseña</button></div>
+    ${enlacesServidor(core.centralRemoto)}
     <p class="muted center small">Funciona sin conexión. Los datos se guardan cifrados en este dispositivo.</p>
   </div>`;
 }
@@ -54,6 +58,7 @@ function centralLoginView(r) {
       <button class="btn primary block">${icon('llave')}<span>Entrar</span></button>
     </form>
     <p class="muted center small">Usa el usuario y la contraseña que te ha dado el administrador. La primera vez se descargan los datos del servidor central; después también funciona sin conexión.</p>
+    ${enlacesServidor(r)}
     <div class="row center gap wrap"><button class="btn ghost sm" data-a="auth.local">Usar este dispositivo sin servidor central</button></div>
   </div>`;
 }
@@ -101,8 +106,82 @@ function recoveryView() {
 }
 
 F['auth.login'] = async form => {
-  await G.core.login(form.u.value, form.p.value);
+  const nu = String(form.u.value || '').trim().toLowerCase().replace(/\s+/g, '.');
+  const u = users && users.find(x => x.usuario === nu);
+  if (u && u.pin) await G.core.loginPin(form.u.value, form.p.value);
+  else await G.core.login(form.u.value, form.p.value);
   users = null; await G.afterLogin();
+};
+
+// ---------- servidor central en modo servidor (1.4.0): solicitud de cuenta y activación con código ----------
+function enlacesServidor(r) {
+  if (!r || !r.org || r.modo !== 'servidor') return '';
+  return `<div class="card pad center auth-extra">
+    <div class="row center gap wrap">
+      ${r.registroAbierto ? `<button type="button" class="btn" data-a="auth.registro">${icon('usuario')}<span>Crear una cuenta</span></button>` : ''}
+      <button type="button" class="btn ghost" data-a="auth.activar">${icon('llave')}<span>Tengo un código de activación</span></button>
+    </div>
+    <p class="muted small">${r.registroAbierto ? 'Las cuentas nuevas quedan pendientes hasta que un administrador las aprueba. ' : ''}El código de activación te lo da un administrador (cuentas sin contraseña o para restablecerla).</p>
+  </div>`;
+}
+A['auth.registro'] = () => openSheet({
+  title: 'Crear una cuenta', size: 's',
+  render: () => `<form data-f="auth.registro">
+    <p class="muted">Tu solicitud quedará <b>pendiente de aprobación</b>. Hasta que un administrador la apruebe y te asigne permisos no podrás entrar.</p>
+    ${fieldsHtml([
+      { name: 'nombre', label: 'Nombre y apellidos', required: true, autocomplete: 'name', maxlength: 80 },
+      { name: 'usuario', label: 'Usuario', required: true, autocomplete: 'username', attrs: 'autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9][A-Za-z0-9._@ \\-]{1,49}"', help: 'Letras sin acentos, números, punto, guion o @ (2 a 50 caracteres).' },
+      { name: 'p1', label: 'Contraseña (mínimo 8 caracteres)', type: 'password', required: true, autocomplete: 'new-password', attrs: 'minlength="8"' },
+      { name: 'p2', label: 'Repite la contraseña', type: 'password', required: true, autocomplete: 'new-password' },
+    ])}
+    <button class="btn primary block">${icon('ok')}<span>Enviar solicitud</span></button></form>`,
+});
+F['auth.registro'] = async form => {
+  const v = readForm(form);
+  if (v.p1 !== v.p2) { toast('Las contraseñas no coinciden', 'error'); return; }
+  const b = form.querySelector('button.primary'); b.disabled = true; b.querySelector('span').textContent = 'Comprobando y enviando…';
+  try {
+    const r = await G.core.registrarse({ usuario: v.usuario, nombre: v.nombre, password: v.p1 });
+    closeSheet();
+    openSheet({ title: 'Solicitud enviada', size: 's', render: () => `<div data-registro-ok><p class="note ok">${icon('ok')} ${esc(r.mensaje || 'Tu cuenta está pendiente de aprobación.')}</p><p class="muted">Cuando un administrador la apruebe, entra con tu usuario y tu contraseña.</p><button type="button" class="btn primary block" data-a="sheet.close">Entendido</button></div>` });
+  } finally { b.disabled = false; b.querySelector('span').textContent = 'Enviar solicitud'; }
+};
+let ACT = null;
+A['auth.activar'] = () => { ACT = { paso: 1 }; openSheet({ title: 'Activar mi cuenta', size: 's', live: true, render: renderActivar, onClose: () => { ACT = null; } }); };
+function renderActivar() {
+  if (!ACT) return '';
+  if (ACT.paso === 1) return `<form data-f="auth.activar1"><p class="muted">Escribe tu usuario y el código que te ha dado el administrador. El código solo sirve una vez y caduca.</p>
+    ${fieldsHtml([
+      { name: 'usuario', label: 'Usuario', required: true, autocomplete: 'username', attrs: 'autocapitalize="none" spellcheck="false"' },
+      { name: 'codigo', label: 'Código de activación', required: true, placeholder: 'XXXX-XXXX-XX', attrs: 'autocomplete="one-time-code" autocapitalize="characters" spellcheck="false"' },
+    ])}<button class="btn primary block">Continuar</button></form>`;
+  const pin = ACT.metodo === 'pin';
+  return `<form data-f="auth.activar2"><p>Hola, <b>${esc(ACT.nombre || ACT.usuario)}</b>.</p>
+    ${pin ? `<p class="muted">Elige un PIN de 6 a 12 cifras. <b>Solo valdrá en este dispositivo</b>: en otro dispositivo necesitarás otro código. Tras 5 PIN erróneos seguidos se retira y hace falta un código nuevo.</p>` : `<p class="muted">${ACT.tipo === 'restablecer' ? 'Elige tu contraseña nueva.' : 'Elige tu contraseña.'} Mínimo 8 caracteres.</p>`}
+    ${fieldsHtml(pin ? [
+      { name: 'p1', label: 'PIN nuevo', type: 'password', required: true, attrs: 'inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="new-password"' },
+      { name: 'p2', label: 'Repite el PIN', type: 'password', required: true, attrs: 'inputmode="numeric" pattern="[0-9]{6,12}" maxlength="12" autocomplete="new-password"' },
+      { name: 'dev', label: 'Nombre de este dispositivo (opcional)', placeholder: 'p. ej. Móvil de Luis' },
+    ] : [
+      { name: 'p1', label: 'Contraseña nueva', type: 'password', required: true, attrs: 'minlength="8" autocomplete="new-password"' },
+      { name: 'p2', label: 'Repite la contraseña', type: 'password', required: true, attrs: 'autocomplete="new-password"' },
+      { name: 'dev', label: 'Nombre de este dispositivo (opcional)' },
+    ])}
+    <button class="btn primary block">${icon('llave')}<span>Activar y entrar</span></button></form>`;
+}
+F['auth.activar1'] = async form => {
+  const v = readForm(form);
+  const r = await G.core.consultarCodigo(v.usuario, v.codigo);
+  ACT = { paso: 2, usuario: v.usuario, codigo: v.codigo, metodo: r.metodo, nombre: r.nombre, tipo: r.tipo }; refreshSheets();
+};
+F['auth.activar2'] = async form => {
+  const v = readForm(form);
+  if (v.p1 !== v.p2) { toast(ACT.metodo === 'pin' ? 'Los PIN no coinciden' : 'Las contraseñas no coinciden', 'error'); return; }
+  const a = ACT;
+  await G.core.activarCuenta({ usuario: a.usuario, codigo: a.codigo, ...(a.metodo === 'pin' ? { pin: v.p1 } : { password: v.p1 }), dispositivo: (v.dev || '').trim() });
+  closeSheet(); ACT = null; setupDone = true; users = null;
+  toast(a.metodo === 'pin' ? 'Cuenta activada: a partir de ahora entra con tu PIN en este dispositivo' : 'Cuenta activada', 'ok', 7000);
+  await G.afterLogin();
 };
 F['auth.setup'] = async form => {
   const v = readForm(form);

@@ -132,6 +132,7 @@ export class Repo {
   async descartarOps(ids) { for (const id of ids) await this.db.del('ops', id); }
   async anotarRechazos(lista) { const r = (await this.getDoc('rechazos', [])).concat(lista).slice(-200); await this.putDoc('rechazos', r); return r; }
   async rechazos() { return this.getDoc('rechazos', []); }
+  async marcarRechazosRevisados(por) { const t = Date.now(); const r = (await this.getDoc('rechazos', [])).map(x => (x.revisado ? x : { ...x, revisado: t, revisadoPor: por || '' })); await this.putDoc('rechazos', r); return r; }
   async refreshSession() { if (!this.session) return null; const u = await this.db.get('users', this.session.user.id); return u ? this._startSession(u) : null; }
   async verifyPassword(password) {
     const u = await this.db.get('users', this.session.user.id);

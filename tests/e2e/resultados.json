@@ -1,29 +1,29 @@
 {
- "fecha": "2026-11-24 20:28:30",
+ "fecha": "2026-11-25 03:24:02",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Tipo de mapa: cambiar la vista desde el plano del preventivo",
+   "prueba": "Migración del espacio al modo servidor desde la aplicación",
    "resultado": "SUPERADA",
-   "detalle": "Mapa → Satélite (PNOA) → Híbrido (PNOA + callejero) → Relieve (MTN) → Híbrido; marcador y posiciones intactos"
+   "detalle": "espacio 1.3.0 → modo servidor con el código del servidor y la contraseña; el preventivo compartido sigue"
   },
   {
-   "prueba": "Tipo de mapa: la elección se conserva",
+   "prueba": "Sesión revocada o caducada: se renueva con la contraseña",
    "resultado": "SUPERADA",
-   "detalle": "tras salir y volver a entrar sigue en «Híbrido»"
+   "detalle": "sesiones de Eva cerradas por el administrador → «Inicia sesión para sincronizar» → contraseña → vuelve a sincronizar"
   },
   {
-   "prueba": "Tipo de mapa: no afecta a otros preventivos",
+   "prueba": "Cambios rechazados por el servidor: visibles y revisables",
    "resultado": "SUPERADA",
-   "detalle": "otro preventivo conserva el mapa estándar"
+   "detalle": "unidad creada sin conexión con un permiso ya retirado: el servidor la rechaza, se deshace, queda en «Cambios rechazados» y se marca como revisada"
   },
   {
-   "prueba": "Tipo de mapa: los planos de imagen siguen funcionando",
+   "prueba": "Sin errores de JavaScript (escenario 11, admin)",
    "resultado": "SUPERADA",
-   "detalle": "plano de imagen: funciona igual y no ofrece vistas de mapa"
+   "detalle": "ninguno"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 9)",
+   "prueba": "Sin errores de JavaScript (escenario 11, Eva)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

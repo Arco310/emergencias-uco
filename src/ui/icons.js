@@ -9,6 +9,7 @@ const P = {
   plano: 'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15',
   mas: 'M5 12h.01M12 12h.01M19 12h.01',
   atras: 'M15 5l-7 7 7 7',
+  derecha: 'M9 5l7 7-7 7',
   mas_add: 'M12 5v14M5 12h14',
   enlace: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   zona: 'M4 7l6-3 9 4-2 11-10 1z',

@@ -16,8 +16,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { crearActualizador } from './actualizador.mjs';
+import { crearModoServidor, cuentaUid } from './espacio-servidor.mjs';
+// Node 18: WebCrypto global (lo usan las funciones de cifrado compartidas con la aplicación)
+if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 /** Versión mínima de la aplicación compatible con este servidor (las anteriores deben actualizarse) */
 const MIN_CLIENTE = '1.1.0';
 /** Versión del formato de los datos del servidor (migraciones al arrancar) */
@@ -204,6 +207,10 @@ function orgSave(o, ...names) {
   const datos = { meta: o.meta, prevs: o.prevs, config: o.config, dispositivos: o.disp, cuentas: o.cuentas };
   for (const n of names) writeAtomic(path.join(o.dir, n + '.json'), JSON.stringify(datos[n]));
 }
+// Espacios en «modo servidor» (1.4.0): cuentas, sesiones, permisos y validación de operaciones
+const MS = crearModoServidor({ DATA, log, writeAtomic, appendDurable, secretoServidor, comprobarCodigo, limiteAcceso, falloAcceso, limpiarFallos: uid => fallosCuenta.delete(uid), orgSave });
+/** Versión mínima de la app: 1.4.0 en cuanto un espacio pasa al modo servidor (las anteriores no pueden escribir en él) */
+function minCliente() { try { for (const d of fs.readdirSync(ORG_DIR)) { const o = orgLoad(d); if (o && o.meta.modo === 'servidor') return '1.4.0'; } } catch { } return MIN_CLIENTE; }
 function orgAuth(req, o) {
   const h = req.headers.authorization || '';
   const tok = h.startsWith('Bearer ') ? h.slice(7) : '';
@@ -220,6 +227,12 @@ async function apiOrg(req, res, url, parts) {
     const dir = path.join(ORG_DIR, b.org); fs.mkdirSync(dir, { recursive: true });
     const o = { dir, meta: { org: b.org, tokenHash: b.tokenHash, nombre: String(b.nombre || '').slice(0, 80), pruebas: !!b.pruebas, creado: Date.now(), seq: 0 }, prevs: {}, config: {}, disp: {}, cuentas: {} };
     orgSave(o, 'meta', 'prevs', 'config', 'dispositivos', 'cuentas'); orgs.set(b.org, o);
+    // App 1.4.0: el espacio nace en modo servidor (el servidor custodia su clave; el creador es el primer administrador)
+    let sesion = null;
+    if (b.modo === 'servidor') {
+      if (typeof b.secret !== 'string' || !b.admin) return send(res, 400, { error: 'Datos no válidos' });
+      sesion = await MS.iniciarEspacio(o, b.secret, b.admin, b.dev);
+    }
     // Espacio principal: el real solo se fija una vez (cambiarlo exige intervención en el propio servidor);
     // el de pruebas se puede sustituir.
     let esPrincipal = false;
@@ -227,8 +240,8 @@ async function apiOrg(req, res, url, parts) {
       const pr = principal(); const slot = o.meta.pruebas ? 'pruebas' : 'produccion';
       if (!pr[slot] || !orgLoad(pr[slot]) || o.meta.pruebas) { pr[slot] = b.org; guardarPrincipal(pr); esPrincipal = true; }
     }
-    log('Espacio central creado', b.org, o.meta.pruebas ? '(pruebas)' : '', esPrincipal ? '(principal)' : '');
-    return send(res, 201, { ok: true, principal: esPrincipal });
+    log('Espacio central creado', b.org, o.meta.pruebas ? '(pruebas)' : '', esPrincipal ? '(principal)' : '', sesion ? '(modo servidor)' : '');
+    return send(res, 201, { ok: true, principal: esPrincipal, ...(sesion ? { sesion, modo: 'servidor' } : {}) });
   }
   const org = parts[3];
   if (!ORG_RE.test(org || '')) return send(res, 400, { error: 'Espacio central no válido' });
@@ -250,9 +263,11 @@ async function apiOrg(req, res, url, parts) {
     log('Espacio central de pruebas borrado', org, n, 'preventivos');
     return send(res, 200, { ok: true, preventivosBorrados: n });
   }
+  const modoServidor = MS.activo(o);
+  if (modoServidor) { const r = await MS.publico(req, res, url, parts, o, { send, readJson }); if (r !== undefined) return r; }
   // Acceso con cuenta (usuario y contraseña) desde un dispositivo nuevo. La contraseña nunca llega aquí:
   // el dispositivo demuestra que la conoce y recibe la clave del espacio envuelta con ella.
-  if (parts[4] === 'acceso' && req.method === 'POST') {
+  if (!modoServidor && parts[4] === 'acceso' && req.method === 'POST') {
     const b = await readJson(req);
     if (!UID_RE.test(b.uid || '')) return send(res, 400, { error: 'Datos no válidos' });
     const c = o.cuentas[b.uid];
@@ -269,9 +284,22 @@ async function apiOrg(req, res, url, parts) {
     fallosCuenta.delete(b.uid);
     return send(res, 200, { wrap: c.wrap, nombre: o.meta.nombre, pruebas: o.meta.pruebas });
   }
-  if (!orgAuth(req, o)) return send(res, 401, { error: 'Credenciales del espacio central no válidas' });
+  // Modo servidor: cada petición con la sesión de un usuario activo. Modo anterior: token del espacio.
+  let quien = null;
+  if (modoServidor) {
+    quien = await MS.autenticar(req, o);
+    if (!quien) return send(res, 401, { error: orgAuth(req, o) ? 'Actualiza la aplicación: este servidor ya exige iniciar sesión con tu usuario' : 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion', modo: 'servidor', minCliente: '1.4.0' });
+    const r = await MS.privado(req, res, url, parts, o, quien, { send, readJson }); if (r !== undefined) return r;
+  } else if (!orgAuth(req, o)) return send(res, 401, { error: 'Credenciales del espacio central no válidas' });
   const what = parts[4];
-  if (!what && req.method === 'GET') return send(res, 200, { org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, creado: o.meta.creado, seq: o.meta.seq, version: VERSION, principal: principal()[o.meta.pruebas ? 'pruebas' : 'produccion'] === org });
+  // Migración 1.3.0 → 1.4.0: un dispositivo del espacio entrega su clave con el código de administración del servidor
+  if (!modoServidor && what === 'admin' && parts[5] === 'migrar' && req.method === 'POST') {
+    const b = await readJson(req);
+    comprobarCodigo(b.codigo);
+    if (typeof b.secret !== 'string') return send(res, 400, { error: 'Datos no válidos' });
+    return send(res, 200, { ok: true, ...(await MS.migrar(o, b.secret, { usuario: b.usuario, dev: b.dev })) });
+  }
+  if (!what && req.method === 'GET') return send(res, 200, { org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, creado: o.meta.creado, seq: o.meta.seq, version: VERSION, principal: principal()[o.meta.pruebas ? 'pruebas' : 'produccion'] === org, modo: modoServidor ? 'servidor' : 'cifrado' });
   // Actualizaciones del servidor: consulta para los dispositivos del espacio; las acciones exigen además
   // el código de administración del servidor (no basta con ser un dispositivo dado de alta)
   if (what === 'admin' && parts[5] === 'actualizaciones') {
@@ -294,6 +322,13 @@ async function apiOrg(req, res, url, parts) {
   }
   // Cuentas: las publica un dispositivo ya dado de alta (al crear un usuario o cambiar su contraseña)
   if (what === 'cuentas' && UID_RE.test(parts[5] || '')) {
+    if (quien) {
+      // Modo servidor: cada usuario cambia solo su propia contraseña; el resto se hace desde la administración
+      if (req.method !== 'PUT') return send(res, 403, { error: 'Las cuentas se gestionan desde la administración de usuarios' });
+      await MS.cambiarContrasena(o, quien, parts[5], await readJson(req));
+      const b = o.cuentas[parts[5]]; if (b) { delete o.cuentas[parts[5]]; orgSave(o, 'cuentas'); }
+      return send(res, 200, { ok: true });
+    }
     if (req.method === 'PUT') {
       const b = await readJson(req);
       if (typeof b.salt !== 'string' || b.salt.length > 64 || !Number.isInteger(b.iter) || b.iter < 100000 || b.iter > 5000000 || !/^[0-9a-f]{64}$/.test(b.verif || '') || typeof b.wrap !== 'string' || b.wrap.length > 4096) return send(res, 400, { error: 'Datos no válidos' });
@@ -306,7 +341,7 @@ async function apiOrg(req, res, url, parts) {
   // Cambios desde una secuencia: registro de preventivos y configuración general
   if (what === 'cambios' && req.method === 'GET') {
     const desde = Math.max(0, Number(url.searchParams.get('desde') || 0));
-    const prevs = Object.entries(o.prevs).filter(([, v]) => v.sq > desde).map(([pid, v]) => ({ pid, w: v.w, sq: v.sq }));
+    const prevs = Object.entries(o.prevs).filter(([pid, v]) => v.sq > desde && (!quien || MS.puedeVerPrev(o, quien.u, pid))).map(([pid, v]) => ({ pid, w: v.w, sq: v.sq }));
     const config = Object.entries(o.config).filter(([, v]) => v.sq > desde).map(([id, v]) => ({ id, v: v.v, c: v.c, borrado: !!v.borrado, sq: v.sq }));
     return send(res, 200, { prevs, config, last: o.meta.seq });
   }
@@ -314,6 +349,7 @@ async function apiOrg(req, res, url, parts) {
     const pid = parts[5]; if (!PID_RE.test(pid)) return send(res, 400, { error: 'Preventivo no válido' });
     const b = await readJson(req);
     if (typeof b.w !== 'string' || b.w.length > 64 * 1024) return send(res, 400, { error: 'Datos no válidos' });
+    if (quien) await MS.validarRegistro(o, quien, pid, b.w);
     const cur = o.prevs[pid];
     if (cur && cur.w === b.w) return send(res, 200, { ok: true, sq: cur.sq });
     o.prevs[pid] = { w: b.w, sq: ++o.meta.seq, t: Date.now() };
@@ -326,11 +362,13 @@ async function apiOrg(req, res, url, parts) {
     if (!ITEM_RE.test(id)) return send(res, 400, { error: 'Elemento no válido' });
     const b = await readJson(req);
     if (!Number.isInteger(b.base) || b.base < 0 || typeof b.c !== 'string' || b.c.length > 256 * 1024) return send(res, 400, { error: 'Datos no válidos' });
+    const datosCfg = quien ? await MS.validarConfig(o, quien, id, b) : null;
     const cur = o.config[id];
     const v = cur ? cur.v : 0;
     if (b.base !== v) return send(res, 409, { error: 'El elemento ha cambiado en otro dispositivo', actual: cur ? { id, v: cur.v, c: cur.c, borrado: !!cur.borrado, sq: cur.sq } : null });
     o.config[id] = { v: v + 1, c: b.c, borrado: !!b.borrado, sq: ++o.meta.seq, t: Date.now() };
     orgSave(o, 'config', 'meta');
+    if (quien) MS.configGuardada(o, id, datosCfg, !!b.borrado);
     return send(res, 200, { ok: true, v: v + 1, sq: o.config[id].sq });
   }
   // Latido de cada dispositivo: versión y última comunicación (panel de administración)
@@ -351,7 +389,7 @@ async function api(req, res, url) {
   // Versiones: la app comprueba aquí si debe actualizarse y si el servidor está actualizándose
   if (parts[2] === 'version' && req.method === 'GET') {
     const e = ACT.estado();
-    return send(res, 200, { ok: true, version: VERSION, minCliente: MIN_CLIENTE, esquema: ESQUEMA, lanzador: e.lanzador, mantenimiento: ACT.mantenimiento, despliegue: { estado: e.despliegue.estado, fecha: e.despliegue.fecha }, disponible: e.actualizable ? e.disponible.version : null, archivos: archivosProtegidos() });
+    return send(res, 200, { ok: true, version: VERSION, minCliente: minCliente(), esquema: ESQUEMA, lanzador: e.lanzador, mantenimiento: ACT.mantenimiento, despliegue: { estado: e.despliegue.estado, fecha: e.despliegue.fecha }, disponible: e.actualizable ? e.disponible.version : null, archivos: archivosProtegidos() });
   }
   // Durante el reinicio controlado de una actualización no se aceptan escrituras (los dispositivos reintentan)
   if (ACT.mantenimiento && req.method !== 'GET') return send(res, 503, { error: 'El servidor se está actualizando: vuelve a intentarlo en un minuto' }, { 'Retry-After': '30' });
@@ -360,12 +398,20 @@ async function api(req, res, url) {
   if (parts[2] === 'central' && req.method === 'GET') {
     const slot = url.searchParams.get('entorno') === 'pruebas' ? 'pruebas' : 'produccion';
     const org = principal()[slot]; const o = org && orgLoad(org);
-    return send(res, 200, o ? { ok: true, org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, version: VERSION } : { ok: true, org: null, version: VERSION });
+    return send(res, 200, o ? { ok: true, org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, version: VERSION, modo: MS.activo(o) ? 'servidor' : 'cifrado', registroAbierto: MS.activo(o) && MS.registroAbierto(o) } : { ok: true, org: null, version: VERSION });
   }
   if (parts[2] !== 'prev') return send(res, 404, { error: 'No encontrado' });
   if (parts.length === 3 && req.method === 'POST') {
     const b = await readJson(req);
     if (!PID_RE.test(b.pid || '') || !/^[0-9a-f]{64}$/.test(b.tokenHash || '')) return send(res, 400, { error: 'Datos no válidos' });
+    // Preventivo de un espacio en modo servidor: lo registra un usuario con sesión y permiso, y el servidor custodia su clave
+    const oReg = b.org && ORG_RE.test(b.org) ? orgLoad(b.org) : null;
+    if (oReg && MS.activo(oReg)) {
+      const q = await MS.autenticar(req, oReg);
+      if (!q) return send(res, 401, { error: 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion' });
+      if (typeof b.secret !== 'string') return send(res, 400, { error: 'Falta la clave del preventivo' });
+      await MS.custodiarPrev(oReg, q, b.pid, b.secret, b.tokenHash);
+    }
     const ex = load(b.pid);
     if (ex) return safeEq(ex.meta.tokenHash, b.tokenHash) ? send(res, 200, { ok: true, existente: true, nextNum: ex.meta.nextNum }) : send(res, 409, { error: 'Ese preventivo ya existe con otra clave' });
     const dir = path.join(DATA, b.pid); fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
@@ -378,7 +424,14 @@ async function api(req, res, url) {
   if (!PID_RE.test(pid || '')) return send(res, 400, { error: 'Preventivo no válido' });
   const p = load(pid);
   if (!p) return send(res, 404, { error: 'Preventivo no registrado en el servidor' });
-  if (!auth(req, p)) return send(res, 401, { error: 'Credenciales no válidas' });
+  // Preventivo de un espacio en modo servidor: sesión de un usuario con acceso (el token del preventivo ya no basta)
+  const orgPrev = MS.orgDePrev(pid); const oPrev = orgPrev ? orgLoad(orgPrev) : null;
+  let quien = null;
+  if (oPrev && MS.activo(oPrev)) {
+    quien = await MS.autenticar(req, oPrev);
+    if (!quien) return send(res, 401, { error: auth(req, p) ? 'Actualiza la aplicación: este servidor ya exige iniciar sesión con tu usuario' : 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion', minCliente: '1.4.0' });
+    if (!MS.puedeVerPrev(oPrev, quien.u, pid)) return send(res, 403, { error: 'No tienes acceso a este preventivo', codigo: 'permiso' });
+  } else if (!auth(req, p)) return send(res, 401, { error: 'Credenciales no válidas' });
   const what = parts[4];
   if (what === 'ops' && req.method === 'POST') {
     const b = await readJson(req);
@@ -387,18 +440,29 @@ async function api(req, res, url) {
     for (const o of b.ops) {
       if (!o || !ID_RE.test(o.id || '') || !ID_RE.test(o.d || '') || typeof o.h !== 'string' || o.h.length > 160 || typeof o.c !== 'string' || o.c.length > 4 * 1024 * 1024) return send(res, 400, { error: 'Operación no válida' });
     }
+    // Modo servidor: identidad, permisos y reglas de cada operación nueva antes de guardarla
+    const validas = new Map(); const aceptadas = [];
+    if (quien) {
+      const nuevas = b.ops.filter(o => !p.ids.has(o.id));
+      const v = await MS.validarOps(oPrev, pid, quien, nuevas, p);
+      nuevas.forEach((o, i) => validas.set(o.id, v[i]));
+    }
     for (const o of b.ops) {
       const ex = p.ids.get(o.id);
       if (ex) { out.push({ id: o.id, sq: ex.sq, num: ex.num ?? null }); continue; } // idempotente
+      const val = validas.get(o.id);
+      if (val && !val.ok) { out.push({ id: o.id, rechazada: true, error: val.error, codigo: val.codigo }); continue; }
       // Si la operación ya tenía número definitivo (reenvío tras recuperar el servidor), se conserva
       const prevNum = Number.isInteger(o.num) && o.num > 0 ? o.num : null;
       const rec = { id: o.id, d: o.d, h: o.h, sq: p.meta.nextSq++, num: prevNum != null ? prevNum : o.nn ? p.meta.nextNum++ : null, c: o.c, r: Date.now() };
       if (prevNum != null && prevNum >= p.meta.nextNum) p.meta.nextNum = prevNum + 1;
       p.ids.set(rec.id, rec); p.ops.push(rec); lines += JSON.stringify(rec) + '\n'; metaChanged = true;
       out.push({ id: rec.id, sq: rec.sq, num: rec.num });
+      if (val && val.ok) aceptadas.push({ ...val.op, sq: rec.sq, num: rec.num });
     }
     if (lines) { appendDurable(path.join(p.dir, 'ops.jsonl'), lines); ACT.escritura(pid); }
     if (metaChanged) writeAtomic(path.join(p.dir, 'meta.json'), JSON.stringify(p.meta));
+    if (quien) MS.aplicar(oPrev, pid, aceptadas);
     return send(res, 200, { res: out, last: p.meta.nextSq - 1 });
   }
   if (what === 'ops' && req.method === 'GET') {
@@ -412,6 +476,7 @@ async function api(req, res, url) {
   if (what === 'blobs' && parts[5] && /^[A-Za-z0-9_-]{8,100}$/.test(parts[5])) {
     const file = path.join(p.dir, 'blobs', parts[5] + '.bin');
     if (req.method === 'PUT') {
+      if (quien) MS.exige(oPrev, quien, ['planos.editar'], pid);
       const body = await readBody(req);
       if (!fs.existsSync(file)) { fs.mkdirSync(path.dirname(file), { recursive: true }); writeAtomic(file, body); }
       return send(res, 200, { ok: true });
@@ -447,7 +512,7 @@ async function handler(req, res) {
     return serveStatic(req, res, url);
   } catch (e) {
     log('Error', e.message);
-    if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'Error interno' });
+    if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'Error interno', ...(e.status && e.codigo ? { codigo: e.codigo } : {}) });
   }
 }
 
@@ -455,7 +520,9 @@ const server = args.cert && args.key
   ? https.createServer({ cert: fs.readFileSync(args.cert), key: fs.readFileSync(args.key) }, handler)
   : http.createServer(handler);
 migrarDatos();
+const indexados = MS.indexar();
 server.listen(PORT, HOST, () => {
+  if (indexados) log('Preventivos de espacios en modo servidor:', indexados);
   // Si no se pueden leer los códigos, el servidor sigue sincronizando los preventivos y lo avisa
   if (archivosProtegidos() !== 'ok') log('AVISO: no se pueden leer los códigos del servidor en', path.dirname(ADMIN_FILE), '— vuelve a ejecutar el instalador en este PC (repara los permisos)');
   log(`Servidor de sincronización UCO ${VERSION} en ${args.cert ? 'https' : 'http'}://${HOST}:${PORT}  datos: ${DATA}${STATIC ? '  app: ' + STATIC : ''}`);

@@ -28,4 +28,4 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Cartografía: datos © colaboradores de OpenStreetMap (ODbL), https://www.openstreetmap.org/copyright. Google Maps Platform, si se configura, según sus condiciones de servicio.
+Cartografía: datos © colaboradores de OpenStreetMap (ODbL), https://www.openstreetmap.org/copyright. Google Maps Platform, si se configura, según sus condiciones de servicio. Vistas satélite, híbrida y de relieve sin clave de Google: © Instituto Geográfico Nacional de España (PNOA, IGN Base y MTN), licencia CC BY 4.0 scne.es.

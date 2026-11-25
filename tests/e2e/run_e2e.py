@@ -1200,6 +1200,194 @@ def scenario_vista_mapa(b):
     check('Sin errores de JavaScript (escenario 9)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
     A.ctx.close()
 
+# ---------------- Escenario 10 (1.4.0): servidor que valida — usuarios, registro, código + PIN y permisos ----------------
+def scenario_modo_servidor(b):
+    print('\n== Escenario 10: usuarios y permisos en el servidor (1.4.0) ==')
+    port = PORT + 7; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-ms-')
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'ms-admin', TABLET, base=url)
+        ev = lambda app, js: app.pg.evaluate('async () => { const c = window.__UCO.core; ' + js + ' }')
+        estado = {}
+        def alta():
+            A.setup('Rosa Admin', 'rosa', 'clave-rosa-1', 'Tablet PC', 'R', codigo=ADMIN_CODE); A.perms(False)
+            assert ev(A, 'return c.modoServidor()') is True, 'espacio en modo servidor'
+            A.nav('sistema'); A.pg.locator('[data-a="nav"][data-v="usuarios"]').first.click(); A.pg.wait_for_selector('[data-a="us.nuevo"]', timeout=15000)
+            A.a('us.nuevo'); f = A.sheet().locator('form[data-f="us.crear"]')
+            f.locator('[name=nombre]').fill('Luis Conductor'); f.locator('[name=usuario]').fill('luis'); f.locator('[name=metodo]').select_option('pin')
+            f.locator('[name=perfil]').select_option('rol_operador'); f.locator('button.primary').click()
+            A.pg.wait_for_selector('.sheet-wrap [data-codigo]', timeout=15000); A.pg.wait_for_timeout(400); A.shot('01-codigo-activacion')
+            estado['codigo'] = A.sheet().locator('[data-codigo]').inner_text().strip()
+            assert re.match(r'^[2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{2}$', estado['codigo']), estado['codigo']
+            A.close_sheets()
+            A.a('us.nuevo'); f = A.sheet().locator('form[data-f="us.crear"]')
+            f.locator('[name=nombre]').fill('Pepe Consulta'); f.locator('[name=usuario]').fill('pepe'); f.locator('[name=pw]').fill('clave-pepe-1'); f.locator('[name=perfil]').select_option('rol_consulta')
+            f.locator('button.primary').click(); A.pg.wait_for_timeout(800)
+            assert A.pg.locator('.us-row', has_text='Pepe Consulta').count() == 1
+            assert 'Invitación pendiente' in A.pg.locator('.us-row', has_text='Luis Conductor').inner_text()
+            A.shot('02-usuarios-servidor')
+            return 'servidor central activado en modo servidor; alta de Luis (código + PIN, código ' + estado['codigo'] + ') y de Pepe (contraseña)'
+        check('Modo servidor: alta de usuarios con y sin contraseña desde la administración', alta)
+        B = App(b, 'ms-luis', PHONE, base=url)
+        def activar():
+            B.goto(); B.pg.wait_for_selector('form[data-f="auth.central"]', timeout=20000)
+            assert B.pg.locator('[data-a="auth.registro"]').count() and B.pg.locator('[data-a="auth.activar"]').count(), 'enlaces en el inicio de sesión'
+            B.shot('03-login-servidor')
+            B.a('auth.activar'); s = B.sheet()
+            s.locator('[name=usuario]').fill('luis'); s.locator('[name=codigo]').fill(estado['codigo'].lower()); s.locator('form[data-f="auth.activar1"] button.primary').click()
+            B.pg.wait_for_selector('.sheet-wrap form[data-f="auth.activar2"]', timeout=15000)
+            s = B.sheet(); assert 'Solo valdrá en este dispositivo' in s.inner_text() or 'solo valdrá en este dispositivo' in s.inner_text().lower()
+            s.locator('[name=p1]').fill('482913'); s.locator('[name=p2]').fill('482913'); s.locator('[name=dev]').fill('Móvil de Luis'); B.shot('04-activar-pin')
+            s.locator('form[data-f="auth.activar2"] button.primary').click(); B.pg.wait_for_selector('.top', timeout=45000)
+            B.pg.wait_for_selector('[data-perm-onboard]', timeout=8000); B.perms(False)  # se abre 700 ms después de entrar
+            assert ev(B, 'return c.user.usuario') == 'luis'
+            B.logout()
+            B.pg.locator('#f_u').select_option('luis') if B.pg.locator('select#f_u').count() else B.pg.fill('#f_u', 'luis')
+            assert 'PIN' in B.pg.locator('label[for=f_p]').inner_text()
+            B.pg.fill('#f_p', '000000'); B.pg.click('form[data-f="auth.login"] button.primary'); B.pg.wait_for_timeout(1500)
+            assert 'PIN incorrecto' in B.toast_text(), B.toast_text()
+            B.pg.fill('#f_p', '482913'); B.pg.click('form[data-f="auth.login"] button.primary'); B.pg.wait_for_selector('.top', timeout=20000)
+            return 'código de un solo uso → PIN propio del dispositivo; entra con el PIN y rechaza uno erróneo'
+        check('Cuenta sin contraseña: activación con código y entrada con PIN', activar)
+        C = App(b, 'ms-registro', PHONE, base=url)
+        def registro():
+            C.goto(); C.pg.wait_for_selector('form[data-f="auth.central"]', timeout=20000)
+            C.a('auth.registro'); s = C.sheet()
+            s.locator('[name=nombre]').fill('Marta Voluntaria'); s.locator('[name=usuario]').fill('marta'); s.locator('[name=p1]').fill('clave-marta-1'); s.locator('[name=p2]').fill('clave-marta-1')
+            s.locator('form[data-f="auth.registro"] button.primary').click(); C.pg.wait_for_selector('.sheet-wrap [data-registro-ok]', timeout=30000)
+            assert 'pendiente de aprobación' in C.sheet().inner_text(); C.shot('05-solicitud-enviada'); C.close_sheets()
+            C.rellenar([('#f_u', 'marta'), ('#f_p', 'clave-marta-1')]); C.pg.click('form[data-f="auth.central"] button.primary'); C.pg.wait_for_timeout(2500)
+            assert 'pendiente de aprobación' in C.toast_text(), C.toast_text()
+            return 'solicitud desde el inicio de sesión; mientras está pendiente no entra'
+        check('Registro desde el inicio de sesión: pendiente de aprobación', registro)
+        def aprobar():
+            A.a('us.recargar'); A.pg.wait_for_selector('.us-pend .us-row', timeout=15000)
+            A.pg.locator('.us-pend .us-row', has_text='Marta Voluntaria').click(); A.pg.wait_for_selector('#us_perfil_ap')
+            A.pg.locator('#us_perfil_ap').select_option('rol_consulta'); A.pg.wait_for_timeout(300); A.shot('06-aprobar')
+            A.a('us.aprobar', A.sheet()); A.pg.wait_for_timeout(1000)
+            assert 'Activo' in A.sheet().inner_text()
+            A.close_sheets()
+            C.rellenar([('#f_u', 'marta'), ('#f_p', 'clave-marta-1')]); C.pg.click('form[data-f="auth.central"] button.primary'); C.pg.wait_for_selector('.top', timeout=45000)
+            C.pg.wait_for_selector('[data-perm-onboard]', timeout=8000); C.perms(False)  # se abre 700 ms después de entrar
+            r = ev(C, "return [c.user.usuario, c.can('unidades.ver'), c.can('avisos.crear'), c.can('usuarios.admin')]")
+            assert r == ['marta', True, False, False], r
+            return 'aprobada con perfil Consulta: entra y solo puede consultar'
+        check('Aprobación por el administrador con perfil', aprobar)
+        def permisos():
+            A.pg.locator('.us-row', has_text='Luis Conductor').click(); A.pg.wait_for_selector('.sheet-wrap .perm-mod')
+            caja = A.sheet().locator('input[data-c="us.perm"][data-k="avisos.crear"]'); assert caja.is_checked()
+            caja.uncheck(); A.pg.wait_for_timeout(400)
+            assert 'quitado' in A.sheet().locator('label.perm', has=A.pg.locator('input[data-k="avisos.crear"]')).inner_text()
+            A.pg.wait_for_timeout(300); A.shot('07-permisos-usuario')
+            A.a('us.guardarPermisos', A.sheet()); A.pg.wait_for_timeout(1000)
+            assert not A.sheet().locator('input[data-c="us.perm"][data-k="avisos.crear"]').is_checked()
+            A.close_sheets()
+            r = ev(B, "await c.central.syncNow(); return [c.can('avisos.crear'), c.can('unidades.crear')]")
+            assert r == [False, True], r
+            # La auditoría del servidor recoge quién cambió qué
+            A.nav('sistema'); A.pg.locator('[data-a="nav"][data-v="auditoria"]').first.click(); A.pg.wait_for_selector('table.tbl', timeout=15000)
+            txt = A.pg.locator('table.tbl').inner_text()
+            for t in ['Permisos modificados', 'Registro aprobado', 'Alta de usuario', 'Cuenta activada en un dispositivo']: assert t in txt, t
+            A.shot('08-auditoria-servidor', True)
+            return 'permiso individual quitado (avisos) → llega al dispositivo de Luis; auditoría con autor y detalle'
+        check('Permisos individuales por usuario y auditoría del servidor', permisos)
+        for app, n in ((A, 'admin'), (B, 'Luis'), (C, 'registro')):
+            check('Sin errores de JavaScript (escenario 10, ' + n + ')', lambda app=app: (_ for _ in ()).throw(Exception('; '.join(app.errors[:5]))) if app.errors else 'ninguno')
+        for app in (A, B, C): app.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
+# ---------------- Escenario 11 (1.4.0): migración desde la app, sesión caducada y cambios rechazados ----------------
+def scenario_migracion_sesion(b):
+    print('\n== Escenario 11: paso al modo servidor desde la app, renovar la sesión y cambios rechazados (1.4.0) ==')
+    port = PORT + 11; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-mig-')
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'mig-admin', TABLET, base=url)
+        ev = lambda app, js: app.pg.evaluate('async () => { const c = window.__UCO.core; ' + js + ' }')
+        estado = {}
+        def a_central(app):
+            if app.pg.locator('[data-a="prev.exit"]').count(): app.a('prev.exit')
+            app.nav('inicio'); app.pg.locator('.central-bar [data-a="nav"][data-v="central"]').first.click(); app.pg.wait_for_timeout(500)
+        def migrar():
+            # Espacio creado como en la 1.3.0 (cifrado de extremo a extremo; el servidor no valida)
+            A.setup('Rosa Admin', 'rosa', 'clave-rosa-1', 'Tablet PC', 'R'); A.perms(False)
+            ev(A, f"await c.centralActivar({{ codigo: '{ADMIN_CODE}', password: 'clave-rosa-1', modo: 'cifrado' }}); return 1")
+            assert ev(A, 'return c.modoServidor()') is False
+            estado['pid'] = ev(A, "const pid = await c.createPrev({ datos: { nombre: 'Carrera popular', modalidad: 'compartida', activar: true }, seed: c.seedFromConfig() }); await c.sync.syncNow(pid); await c.central.syncNow(); return pid")
+            a_central(A); A.pg.wait_for_selector('[data-migracion]', timeout=15000)
+            assert 'Cifrado de extremo a extremo' in A.pg.locator('main').inner_text()
+            f = A.pg.locator('form[data-f="central.migrar"]')
+            f.locator('[name=codigo]').fill(ADMIN_CODE); f.locator('[name=p]').fill('clave-rosa-1'); f.locator('[name=ok]').check()
+            # Un repintado por sincronización no debe desmarcar la casilla (ni borrar lo escrito)
+            A.pg.evaluate('() => window.__UCO.render()'); A.pg.wait_for_timeout(400)
+            f = A.pg.locator('form[data-f="central.migrar"]')
+            assert f.locator('[name=ok]').is_checked(), 'la casilla marcada se pierde al repintar'
+            assert f.locator('[name=codigo]').input_value() == ADMIN_CODE
+            A.pg.wait_for_timeout(300); A.shot('01-migracion')
+            f.locator('button.primary').click()
+            avisos = []
+            for _ in range(60):
+                A.pg.wait_for_timeout(500); t = A.toast_text()
+                if t and t not in avisos: avisos.append(t)
+                if A.pg.evaluate('() => window.__UCO.core.modoServidor()'): break
+            assert A.pg.evaluate('() => window.__UCO.core.modoServidor()'), 'no pasa al modo servidor. Avisos: ' + ' || '.join(avisos)
+            A.pg.wait_for_timeout(1000)
+            assert 'Servidor que valida' in A.pg.locator('main').inner_text()
+            assert A.pg.locator('[data-migracion]').count() == 0, 'la tarjeta de migración desaparece'
+            assert ev(A, f"await c.sync.syncNow('{estado['pid']}'); return c.engine('{estado['pid']}').state.prev.nombre") == 'Carrera popular'
+            A.shot('02-modo-servidor')
+            return 'espacio 1.3.0 → modo servidor con el código del servidor y la contraseña; el preventivo compartido sigue'
+        check('Migración del espacio al modo servidor desde la aplicación', migrar)
+        B = App(b, 'mig-eva', PHONE, base=url)
+        def sesion():
+            estado['eva'] = ev(A, "const r = await c.crearUsuarioServidor({ usuario: 'eva', nombre: 'Eva Operadora', metodo: 'password', password: 'clave-eva-12', perfil: 'rol_operador' }); return r.usuario.id")
+            B.goto(); B.central_login('eva', 'clave-eva-12', 'Móvil de Eva'); B.pg.wait_for_selector('.top', timeout=45000)
+            B.pg.wait_for_selector('[data-perm-onboard]', timeout=8000); B.perms(False)
+            if B.pg.locator('[data-a="prev.exit"]').count(): B.a('prev.exit')
+            B.nav('inicio')
+            for _ in range(30):
+                ev(B, 'await c.central.syncNow(); return 1'); B.pg.wait_for_timeout(500)
+                if B.pg.locator('[data-a="home.openCentral"], [data-a="home.open"]').count(): break
+            B.pg.locator('[data-a="home.openCentral"], [data-a="home.open"]').first.click(); B.pg.wait_for_selector('.kpis', timeout=30000); B.pg.wait_for_timeout(500)
+            ev(A, f"await c.revocarUsuarioServidor('{estado['eva']}'); return 1")  # el administrador cierra sus sesiones
+            ev(B, 'await c.central.syncNow(); return 1'); B.pg.wait_for_timeout(500)
+            assert ev(B, 'return c.centralEstado().st.estado') == 'sesion', ev(B, 'return c.centralEstado().st')
+            if B.pg.locator('[data-a="prev.exit"]').count(): B.a('prev.exit')
+            B.nav('inicio'); assert 'Inicia sesión para sincronizar' in B.pg.locator('.central-bar').inner_text()
+            a_central(B); B.pg.wait_for_selector('form[data-f="central.sesion"]', timeout=15000); B.pg.wait_for_timeout(300); B.shot('03-renovar-sesion')
+            B.pg.locator('form[data-f="central.sesion"] [name=p]').fill('clave-eva-12'); B.pg.locator('form[data-f="central.sesion"] button.primary').click(); B.pg.wait_for_timeout(1500)
+            st = ev(B, 'await c.central.syncNow(); return c.centralEstado().st.estado'); assert st == 'conectado', st
+            return 'sesiones de Eva cerradas por el administrador → «Inicia sesión para sincronizar» → contraseña → vuelve a sincronizar'
+        check('Sesión revocada o caducada: se renueva con la contraseña', sesion)
+        def rechazo():
+            # Eva trabaja sin conexión con permisos antiguos; mientras, el administrador le quita «crear unidades»
+            if B.pg.locator('[data-a="prev.exit"]').count(): B.a('prev.exit')
+            B.nav('inicio'); B.pg.locator('[data-a="home.open"]', has_text='Carrera popular').first.click(); B.pg.wait_for_selector('.kpis'); B.pg.wait_for_timeout(300)
+            B.ctx.set_offline(True); B.pg.wait_for_timeout(300)
+            ev(A, f"await c.cambiarUsuarioServidor('{estado['eva']}', {{ ajustes: {{ mas: [], menos: ['unidades.crear'] }} }}); return 1")
+            B.new_unit('SVB-77', 'Creada sin conexión')
+            assert B.state("return Object.values(s.units).some(u => u.ind === 'SVB-77')"), 'sin conexión se crea en local'
+            B.ctx.set_offline(False); B.pg.wait_for_timeout(300)
+            for _ in range(20):
+                ev(B, f"await c.sync.syncNow('{estado['pid']}'); await c.central.syncNow(); return 1"); B.pg.wait_for_timeout(400)
+                if not B.state("return Object.values(s.units).some(u => u.ind === 'SVB-77')"): break
+            assert not B.state("return Object.values(s.units).some(u => u.ind === 'SVB-77')"), 'el servidor la rechaza y se deshace'
+            a_central(B); B.pg.wait_for_selector('[data-rechazos]', timeout=15000)
+            txt = B.pg.locator('[data-rechazos]').inner_text(); assert 'SVB-77' in txt and 'Carrera popular' in txt, txt
+            B.pg.locator('[data-rechazos]').scroll_into_view_if_needed(); B.pg.wait_for_timeout(300); B.shot('04-cambios-rechazados')
+            B.a('central.rechazosRevisados'); B.pg.wait_for_timeout(1000)
+            assert 'Revisados (1)' in B.pg.locator('[data-rechazos]').inner_text()
+            vista = ev(A, f"await c.sync.syncNow('{estado['pid']}'); return Object.values(c.engine('{estado['pid']}').state.units).some(u => u.ind === 'SVB-77')")
+            assert vista is False, 'a los demás no les llega'
+            return 'unidad creada sin conexión con un permiso ya retirado: el servidor la rechaza, se deshace, queda en «Cambios rechazados» y se marca como revisada'
+        check('Cambios rechazados por el servidor: visibles y revisables', rechazo)
+        for app, n in ((A, 'admin'), (B, 'Eva')):
+            check('Sin errores de JavaScript (escenario 11, ' + n + ')', lambda app=app: (_ for _ in ()).throw(Exception('; '.join(app.errors[:5]))) if app.errors else 'ninguno')
+        for app in (A, B): app.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1218,6 +1406,8 @@ def main():
             if only in ('', '7'): scenario_incidentes(b)
             if only in ('', '8'): scenario_recursos_140(b)
             if only in ('', '9'): scenario_vista_mapa(b)
+            if only in ('', '10'): scenario_modo_servidor(b)
+            if only in ('', '11'): scenario_migracion_sesion(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)
