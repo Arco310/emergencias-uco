@@ -372,12 +372,17 @@ def scenario_shared(browser):
     print('\n== Escenario 2: tablet + móvil con el servidor central ==')
     T = App(browser, 'tablet', TABLET); M = App(browser, 'movil2', PHONE)
     def activar():
-        T.setup('Tomás Jefe', 'tomas', 'secreto2', 'Tablet mando', 'T', codigo=ADMIN_CODE); T.perms(False)
+        # Espacio como el de producción: creado con la 1.3.0 (cifrado de extremo a extremo) y sin pasar al
+        # modo servidor. Comprueba que la 1.4.0 sigue funcionando igual con él. Los espacios nuevos se crean
+        # en modo servidor (escenarios 10 y 11).
+        T.setup('Tomás Jefe', 'tomas', 'secreto2', 'Tablet mando', 'T'); T.perms(False)
+        T.pg.evaluate(f"async () => {{ await window.__UCO.core.centralActivar({{ codigo: '{ADMIN_CODE}', password: 'secreto2', modo: 'cifrado' }}); window.__UCO.render(); }}")
         T.pg.wait_for_selector('.central-bar[data-central-estado]', timeout=20000)
         T.pg.wait_for_function("() => window.__UCO.core.central.status().estado === 'conectado'", timeout=20000)
+        assert T.pg.evaluate('() => window.__UCO.core.modoServidor()') is False
         T.shot('00-central-activado')
-        return 'espacio central activado una sola vez durante el alta inicial; estado conectado'
-    check('Servidor central: activación única con el código del servidor', activar)
+        return 'espacio central como el de la 1.3.0 (sin migrar), activado con el código del servidor; estado conectado'
+    check('Servidor central (espacio 1.3.0 sin migrar): activación con el código del servidor', activar)
     def alta_usuario():
         T.nav('sistema'); T.a('nav', v='usuarios'); T.pg.wait_for_selector('[data-a="users.edit"]'); T.a('users.edit')
         T.fill('nombre', 'María Operadora'); T.fill('usuario', 'maria'); T.fill('rol', 'rol_operador'); T.fill('pw', 'secreto3')
@@ -1291,6 +1296,27 @@ def scenario_modo_servidor(b):
             A.shot('08-auditoria-servidor', True)
             return 'permiso individual quitado (avisos) → llega al dispositivo de Luis; auditoría con autor y detalle'
         check('Permisos individuales por usuario y auditoría del servidor', permisos)
+        def perfiles():
+            A.nav('sistema'); A.pg.locator('[data-a="nav"][data-v="usuarios"]').first.click(); A.pg.wait_for_selector('[data-a="us.tab"]', timeout=15000)
+            A.a('us.tab', v='p'); A.pg.locator('[data-a="pf.editar"].primary').click(); A.pg.wait_for_selector('.sheet-wrap form[data-f="pf.guardar"]')
+            s = A.sheet(); s.locator('[name=nombre]').fill('Logística')
+            s.locator('input[data-c="pf.perm"][data-k="unidades.editar"]').check(); A.pg.wait_for_timeout(300)
+            assert A.sheet().locator('input[data-c="pf.perm"][data-k="unidades.editar"]').is_checked()
+            A.sheet().locator('form[data-f="pf.guardar"] button.primary').click(); A.pg.wait_for_timeout(1000)
+            fila = A.pg.locator('li.cat-row', has_text='Logística'); assert fila.count() == 1, 'perfil creado'
+            fila.locator('[data-a="pf.duplicar"]').click(); A.pg.wait_for_timeout(1000)
+            assert A.pg.locator('li.cat-row', has_text='Logística (copia)').count() == 1, 'perfil duplicado'
+            A.pg.locator('li.cat-row', has_text='Logística (copia)').locator('[data-a="pf.borrar"]').click(); A.dlg_ok(); A.pg.wait_for_timeout(1000)
+            assert A.pg.locator('li.cat-row', has_text='Logística (copia)').count() == 0, 'perfil sin uso eliminado'
+            A.shot('09-perfiles')
+            # Se asigna a Pepe y sus permisos efectivos son los del perfil
+            A.a('us.tab', v='u'); A.pg.locator('.us-row', has_text='Pepe Consulta').click(); A.pg.wait_for_selector('.sheet-wrap .perm-mod')
+            A.sheet().locator('select[data-c="us.perfil"]').select_option(label='Logística'); A.pg.wait_for_timeout(400)
+            A.a('us.guardarPermisos', A.sheet()); A.pg.wait_for_timeout(1000); A.close_sheets()
+            r = ev(A, "const d = await c.usuariosServidor(); const p = d.perfiles.find(x => x.nombre === 'Logística'); const u = d.usuarios.find(x => x.usuario === 'pepe'); return [u.perfil === p.id, p.permisos.includes('unidades.editar')]")
+            assert r == [True, True], r
+            return 'perfil nuevo desde la interfaz, duplicado, borrado el que no se usa y asignado a un usuario'
+        check('Perfiles de permisos: crear, duplicar, eliminar y asignar', perfiles)
         for app, n in ((A, 'admin'), (B, 'Luis'), (C, 'registro')):
             check('Sin errores de JavaScript (escenario 10, ' + n + ')', lambda app=app: (_ for _ in ()).throw(Exception('; '.join(app.errors[:5]))) if app.errors else 'ninguno')
         for app in (A, B, C): app.ctx.close()

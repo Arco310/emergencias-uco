@@ -3,6 +3,33 @@
 Cada versión publica a la vez la aplicación y el servidor central. Los servidores ven la versión nueva en
 Sistema → Actualizaciones y solo se instala cuando un administrador lo decide.
 
+## 1.4.0 (preparada, sin publicar · rama `mejora-1.4.0`)
+
+**Configuración de recursos**
+- Se puede eliminar cualquier tipo de recurso o unidad plantilla, también los iniciales. Antes se ve dónde se usa (unidades plantilla, tipos de aviso, preventivos y unidades) y se elige: reasignar a otro tipo, retirarlo del uso (se conserva para el historial y se puede restaurar) o eliminarlo. Nunca se borran unidades ni registros.
+- Lo eliminado no reaparece al reiniciar el servidor ni al actualizar. «Restaurar configuraciones iniciales» lo recupera cuando se decida.
+- Duplicar tipos de recurso.
+- Los tipos desactivados o retirados ya no se ofrecen al crear unidades ni unidades plantilla. Las unidades que ya existían no cambian.
+
+**Tipo de mapa en cada preventivo**
+- Estándar, satélite, híbrido y relieve, desde el plano. Sin clave: OpenStreetMap e IGN (ortofoto PNOA y mapa topográfico). Con clave de Google Maps Platform: las vistas de Google.
+- Se guarda en el preventivo y llega a los demás dispositivos. No mueve unidades ni avisos. Los planos de imagen no ofrecen satélite.
+
+**Servidor que valida (modo servidor, opcional)**
+- Usuarios y permisos administrados en el servidor central, que comprueba cada operación: lo que alguien no tiene permitido se rechaza aunque manipule la aplicación o llame directamente al servidor.
+- «Crear una cuenta» en el inicio de sesión (se puede cerrar). Las solicitudes quedan pendientes y sin permisos hasta que un administrador las aprueba con un perfil.
+- Cuentas sin contraseña: código de un solo uso (72 h) y PIN propio de cada dispositivo.
+- Estados de cuenta: pendiente, activa, suspendida, desactivada, rechazada, invitación pendiente y activación caducada. Se pueden cerrar todas las sesiones de alguien o retirar el PIN de un dispositivo.
+- Permisos por usuario agrupados por módulo, con perfiles reutilizables (crear, duplicar, eliminar) y ajustes individuales; acceso a todos los preventivos o solo a algunos, con un perfil distinto en cada uno. Nadie puede darse permisos a sí mismo y siempre queda un administrador.
+- Auditoría del servidor (altas, aprobaciones, estados, permisos, códigos, sesiones, migración y operaciones rechazadas), filtrable por usuario.
+- Sistema → Servidor central: modo del espacio, paso al modo servidor explicando sus consecuencias (pide el código de administración del servidor), renovar la sesión caducada y lista de **cambios rechazados** (no desaparecen en silencio; se marcan como revisados).
+
+**Correcciones**
+- Un repintado de la pantalla (por la sincronización) desmarcaba las casillas de los formularios que se estaban rellenando.
+- El campo «Usuario» del registro tenía un patrón de validación que los navegadores actuales consideran inválido.
+
+**Datos y compatibilidad:** la configuración guarda la lista de lo eliminado (migración con copia previa). Mientras el espacio central no pase al modo servidor, la 1.4.0 funciona como la 1.3.0 y convive con dispositivos 1.3.0. Después del paso, todos los dispositivos deben tener la 1.4.0.
+
 ## 1.3.0 (19/11/2026)
 
 **Avisos por código de incidente**

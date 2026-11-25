@@ -1,29 +1,49 @@
 {
- "fecha": "2026-11-25 03:24:02",
+ "fecha": "2026-11-25 03:42:02",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Migración del espacio al modo servidor desde la aplicación",
+   "prueba": "Modo servidor: alta de usuarios con y sin contraseña desde la administración",
    "resultado": "SUPERADA",
-   "detalle": "espacio 1.3.0 → modo servidor con el código del servidor y la contraseña; el preventivo compartido sigue"
+   "detalle": "servidor central activado en modo servidor; alta de Luis (código + PIN, código 4QSM-MCZW-YH) y de Pepe (contraseña)"
   },
   {
-   "prueba": "Sesión revocada o caducada: se renueva con la contraseña",
+   "prueba": "Cuenta sin contraseña: activación con código y entrada con PIN",
    "resultado": "SUPERADA",
-   "detalle": "sesiones de Eva cerradas por el administrador → «Inicia sesión para sincronizar» → contraseña → vuelve a sincronizar"
+   "detalle": "código de un solo uso → PIN propio del dispositivo; entra con el PIN y rechaza uno erróneo"
   },
   {
-   "prueba": "Cambios rechazados por el servidor: visibles y revisables",
+   "prueba": "Registro desde el inicio de sesión: pendiente de aprobación",
    "resultado": "SUPERADA",
-   "detalle": "unidad creada sin conexión con un permiso ya retirado: el servidor la rechaza, se deshace, queda en «Cambios rechazados» y se marca como revisada"
+   "detalle": "solicitud desde el inicio de sesión; mientras está pendiente no entra"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 11, admin)",
+   "prueba": "Aprobación por el administrador con perfil",
+   "resultado": "SUPERADA",
+   "detalle": "aprobada con perfil Consulta: entra y solo puede consultar"
+  },
+  {
+   "prueba": "Permisos individuales por usuario y auditoría del servidor",
+   "resultado": "SUPERADA",
+   "detalle": "permiso individual quitado (avisos) → llega al dispositivo de Luis; auditoría con autor y detalle"
+  },
+  {
+   "prueba": "Perfiles de permisos: crear, duplicar, eliminar y asignar",
+   "resultado": "SUPERADA",
+   "detalle": "perfil nuevo desde la interfaz, duplicado, borrado el que no se usa y asignado a un usuario"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 10, admin)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 11, Eva)",
+   "prueba": "Sin errores de JavaScript (escenario 10, Luis)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 10, registro)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

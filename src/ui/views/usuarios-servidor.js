@@ -78,7 +78,7 @@ function renderFicha() {
     <p>${chipEstado(ev)} <code>${esc(u.usuario)}</code> · ${u.metodo === 'pin' ? 'Sin contraseña (código + PIN)' : 'Con contraseña'} · alta ${u.creado ? fmtDateTime(u.creado) : '—'}${u.creadoPor ? ' por ' + esc(u.creadoPor) : u.origen === 'registro' ? ' (solicitud desde el inicio de sesión)' : ''}${u.aprobado ? ' · aprobada por ' + esc(u.aprobado.por) + ' el ' + fmtDateTime(u.aprobado.t) : ''}</p>
     ${yo ? `<p class="note">${icon('info')} Es tu propia cuenta: tus permisos y tu estado los tiene que cambiar otro administrador.</p>` : ''}
     ${ev === 'pendiente' && !yo ? `<section class="card pad"><h3>Solicitud de cuenta</h3><p class="muted small">Elige el perfil con el que empezará. Podrás ajustar después cada permiso.</p>
-      <div class="row gap wrap"><select id="us_perfil_ap" aria-label="Perfil">${D.perfiles.map(p => `<option value="${attr(p.id)}"${p.id === 'rol_consulta' ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select>${btn('Aprobar', 'us.aprobar', { cls: 'primary', ic: 'ok' })}${btn('Rechazar', 'us.estado', { cls: 'danger-ghost', data: { v: 'rechazado' } })}</div></section>` : ''}
+      <div class="row gap wrap"><select id="us_perfil_ap" aria-label="Perfil" data-c="us.perfilAp">${D.perfiles.map(p => `<option value="${attr(p.id)}"${p.id === (SEL.perfilAp || 'rol_consulta') ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select>${btn('Aprobar', 'us.aprobar', { cls: 'primary', ic: 'ok' })}${btn('Rechazar', 'us.estado', { cls: 'danger-ghost', data: { v: 'rechazado' } })}</div></section>` : ''}
     ${ev !== 'pendiente' && acciones.length && !yo ? `<div class="row gap wrap">${acciones.map(e => btn(ACCION[e], 'us.estado', { cls: e === 'activo' ? 'primary' : e === 'desactivado' || e === 'rechazado' ? 'danger-ghost' : '', data: { v: e } })).join('')}</div>` : ''}
     <h3>Acceso</h3>
     <ul class="ref-list">
@@ -134,7 +134,8 @@ CH['us.prevPerfil'] = el => { SEL.alcance.preventivos[el.dataset.pid] = el.value
 A['us.descartar'] = () => { const u = usuarioSel(); SEL = { id: u.id, perfil: u.perfil || '', ajustes: JSON.parse(JSON.stringify(u.ajustes || { mas: [], menos: [] })), alcance: JSON.parse(JSON.stringify(u.alcance || { tipo: 'todos' })), cambiado: false }; refreshSheets(); };
 async function aplicar(promesa, mensaje) { const r = await promesa; const i = D.usuarios.findIndex(x => x.id === r.usuario.id); if (i >= 0) D.usuarios[i] = r.usuario; else D.usuarios.push(r.usuario); if (SEL) SEL.cambiado = false; toast(mensaje, 'ok'); G.render(); refreshSheets(); if (r.codigo) mostrarCodigo(r.usuario, r.codigo); return r; }
 A['us.guardarPermisos'] = () => aplicar(core().cambiarUsuarioServidor(SEL.id, { perfil: SEL.perfil || null, ajustes: SEL.ajustes, alcance: SEL.alcance }), 'Permisos guardados en el servidor');
-A['us.aprobar'] = () => { const perfil = document.getElementById('us_perfil_ap').value; SEL.perfil = perfil; return aplicar(core().cambiarUsuarioServidor(SEL.id, { estado: 'activo', perfil }), 'Cuenta aprobada'); };
+CH['us.perfilAp'] = el => { SEL.perfilAp = el.value; };
+A['us.aprobar'] = () => { const perfil = SEL.perfilAp || document.getElementById('us_perfil_ap').value; SEL.perfil = perfil; return aplicar(core().cambiarUsuarioServidor(SEL.id, { estado: 'activo', perfil }), 'Cuenta aprobada'); };
 A['us.estado'] = async el => {
   const v = el.dataset.v; const u = usuarioSel();
   const txt = { suspendido: 'No podrá entrar ni sincronizar hasta que se reactive. Sus sesiones se cierran ahora.', desactivado: 'La cuenta deja de funcionar y se cierran sus sesiones. Sus registros se conservan.', rechazado: 'La solicitud se rechaza: no podrá entrar.', activo: 'La cuenta vuelve a funcionar con sus permisos.' }[v];
@@ -196,12 +197,13 @@ A['pf.editar'] = el => {
   openSheet({ title: PF.nuevo ? 'Nuevo perfil' : 'Perfil · ' + p.nombre, size: 'l', live: true, onClose: () => { PF = null; }, render: () => {
     if (!PF) return '';
     const set = new Set(PF.permisos); const admin = PF.id === 'rol_admin'; const mios = core().permisos(null);
-    return `<form data-f="pf.guardar">${fieldsHtml([{ name: 'nombre', label: 'Nombre del perfil', required: true, value: PF.nombre, disabled: admin }])}
+    return `<form data-f="pf.guardar">${fieldsHtml([{ name: 'nombre', label: 'Nombre del perfil', required: true, value: PF.nombre, disabled: admin, attrs: 'data-c="pf.nombre" data-live="1"' }])}
       ${admin ? `<p class="note">${icon('candado')} El perfil Administrador siempre tiene todos los permisos.</p>` : ''}
       ${MODULOS.map(m => { const ps = PERMISOS.filter(x => x[2] === m); return `<details class="perm-mod" open><summary><b>${esc(m)}</b> <span class="muted">${ps.filter(x => set.has(x[0])).length}/${ps.length}</span></summary><div class="perm-grid">${ps.map(([k, l, , ver]) => `<label class="chk perm"><input type="checkbox" data-c="pf.perm" data-k="${k}"${set.has(k) ? ' checked' : ''}${admin || (!set.has(k) && !mios.has(k)) ? ' disabled' : ''}><span>${esc(l)}${ver ? ' <small class="muted">(consulta)</small>' : ''}</span></label>`).join('')}</div></details>`; }).join('')}
       <div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Guardar perfil</button></div></form>`;
   } });
 };
+CH['pf.nombre'] = el => { if (PF) PF.nombre = el.value; };
 CH['pf.perm'] = el => { const s = new Set(PF.permisos); if (el.checked) s.add(el.dataset.k); else s.delete(el.dataset.k); PF.permisos = [...s]; refreshSheets(); };
 async function guardarPerfiles(lista, msg) { D.perfiles = await core().guardarPerfilesServidor(lista); closeSheet(); toast(msg, 'ok'); G.render(); }
 F['pf.guardar'] = async form => {

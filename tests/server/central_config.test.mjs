@@ -21,11 +21,12 @@ async function dispositivo() {
   await c.boot(); c.central.cuentaIter = 100000; c.sync.intervalMs = 999999; c.central.intervalMs = 999999;
   cores.push(c); return c;
 }
-test.before(async () => {
+async function arrancarServidor() {
   proc = spawn(process.execPath, [path.join(ROOT, 'server/server.mjs'), '--port', String(PORT), '--data', DATA, '--host', '127.0.0.1', '--quiet'], { stdio: 'ignore', env: { ...process.env, UCO_CODIGO_ADMIN: ADMIN } });
   for (let i = 0; i < 50; i++) { try { if ((await fetch(SERVER + '/api/v1/salud')).ok) return; } catch { } await new Promise(r => setTimeout(r, 100)); }
   throw new Error('servidor no disponible');
-});
+}
+test.before(arrancarServidor);
 test.after(async () => { for (const c of cores) { c.sync.stopAll(); c.central.stop(); clearInterval(c._bk); } proc.kill('SIGTERM'); await new Promise(r => proc.on('exit', r)); fs.rmSync(DATA, { recursive: true, force: true }); });
 
 let A, B, dron, plt;
@@ -100,6 +101,12 @@ test('1.4.0: una configuración inicial eliminada desaparece en todos los dispos
   assert.ok(!B.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'la baja del espacio se aplica de nuevo');
   await B.central.syncNow(); await A.central.syncNow();
   assert.ok(!A.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'nadie lo republica');
+  // El servidor se reinicia (p. ej. se apaga el PC): la baja sigue guardada en su disco
+  proc.kill('SIGTERM'); await new Promise(r => proc.on('exit', r)); await arrancarServidor();
+  const R2 = await dispositivo(); await R2.accederCentral('coord', 'clave-coord-1');
+  assert.ok(!R2.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'tras reiniciar el servidor sigue eliminado');
+  await A.central.syncNow();
+  assert.ok(!A.tiposRecursoGenerales().some(t => t.id === 'rt_sp_papa'), 'y no reaparece en quien ya lo tenía');
   // Restaurarlo es una decisión explícita que también llega a todos
   await A.restaurarIniciales({ tiposRecurso: ['rt_sp_papa'], plantillasUnidad: ['plt_sp_papa'] });
   await A.central.syncNow(); await B.central.syncNow();
