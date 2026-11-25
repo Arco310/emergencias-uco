@@ -1642,6 +1642,18 @@ def scenario_avisos_mapa(b):
             A.nav('plano'); A.pg.wait_for_timeout(1200); assert mk(f'.mk[data-mk="a"][data-id="{a["id"]}"]') == 1, 'aparece en el plano'
             return 'sin tocar el mapa: coordenadas imposibles rechazadas; punto del plano «Puerta 3» como ubicación (origen «punto»), y el aviso aparece en el plano'
         check('Ubicación sin el mapa: punto del plano y coordenadas validadas', sin_mapa)
+        def direccion():
+            A.nav('avisos'); A.a('a.new'); A.pg.wait_for_selector('.sheet-wrap [data-a="inc.mas"]'); A.a('inc.mas')
+            f = A.sheet().locator('form[data-f="a.save"]'); f.locator('[data-a="a.formLoc"]').click(); A.pg.wait_for_selector('.sheet-wrap #f_loctxt')
+            A.sheet().locator('#f_loctxt').fill('Calle Mayor 10, portal 2'); A.pg.wait_for_timeout(300)
+            A.sheet().locator('form[data-f="loc.save"] button.primary').click(); A.pg.wait_for_timeout(800)
+            f = A.sheet().locator('form[data-f="a.save"]'); assert 'Calle Mayor 10' in f.locator('[data-locsum]').inner_text()
+            f.locator('[name=desc]').fill('Caída en la calle Mayor'); f.locator('button.primary').click(); A.pg.wait_for_timeout(900); A.close_sheets()
+            a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Caída en la calle Mayor')")
+            assert a['loc']['fuente'] == 'direccion' and a['loc']['txt'] == 'Calle Mayor 10, portal 2' and a['loc'].get('lat') is None, a['loc']
+            A.nav('plano'); A.pg.wait_for_timeout(1200)  # las comprobaciones siguientes parten del plano
+            return 'dirección escrita sin coordenadas: origen «dirección» y sin posición inventada'
+        check('Ubicación por texto (dirección escrita)', direccion)
         def teclado():
             # Crear un aviso solo con el teclado desde el plano (sin ratón ni arrastre)
             A.pg.locator('[data-a="plan.avisoMapa"]').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('[data-a="plan.avisoSinMapa"]')
@@ -1832,6 +1844,17 @@ def scenario_plantillas(b):
             A.shot('04-asistente-movil', True); A.close_sheets(); A.pg.set_viewport_size(TABLET['viewport']); A.pg.wait_for_timeout(300)
             return f'sin desplazamiento horizontal ({anchos[0]} px en {anchos[1]} px); filas de unidades de {alto:.0f} px'
         check('Asistente en el móvil', movil)
+        def eliminar_usada():
+            A.pg.locator('.pcard', has_text='Concierto tipo').locator('[data-a="tpl.del"]').click(); A.dlg_ok(); A.pg.wait_for_timeout(600)
+            assert len(tpls()) == 0
+            pid = A.pg.evaluate("() => (window.__UCO.core.summaries || []).find(s => s.nombre === 'Concierto 2').id")
+            A.nav('inicio'); A.a('home.open', id=pid); A.pg.wait_for_selector('.kpis', timeout=15000)
+            st = A.pg.evaluate("() => { const s = window.__UCO.core.state; return { u: Object.keys(s.units).length, o: s.prev.origen.revision } }")
+            assert st['u'] == 2 and st['o'] == 2, st
+            A.nav('mas'); A.a('nav', v='ajustes'); A.pg.wait_for_timeout(400)
+            assert 'Plantilla «Concierto tipo», versión 2' in A.pg.inner_text('main')
+            return 'eliminada la plantilla usada: «Concierto 2» se abre igual, con sus 2 unidades y su origen (versión 2)'
+        check('Eliminar la plantilla no afecta a los preventivos creados', eliminar_usada)
         check('Sin errores de JavaScript (escenario 15)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
         A.ctx.close()
     finally:

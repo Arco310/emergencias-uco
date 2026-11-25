@@ -1,7 +1,657 @@
 {
- "fecha": "2026-11-25 13:17:43",
+ "fecha": "2026-11-25 13:29:15",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
+  {
+   "prueba": "Alta inicial del administrador y clave de recuperación",
+   "resultado": "SUPERADA",
+   "detalle": "clave 0F7C2…"
+  },
+  {
+   "prueba": "Permisos del dispositivo: solicitar todos",
+   "resultado": "SUPERADA",
+   "detalle": "aviso al primer acceso; ubicación y notificaciones concedidas; queda en la auditoría"
+  },
+  {
+   "prueba": "Crear preventivo independiente y activarlo",
+   "resultado": "SUPERADA",
+   "detalle": ""
+  },
+  {
+   "prueba": "Unidades: crear desde el formulario",
+   "resultado": "SUPERADA",
+   "detalle": "3 unidades"
+  },
+  {
+   "prueba": "Unidades: editar y personalizar apariencia",
+   "resultado": "SUPERADA",
+   "detalle": "nombre, forma, icono y tamaño personalizados"
+  },
+  {
+   "prueba": "Color C0: personalizar en C0",
+   "resultado": "SUPERADA",
+   "detalle": "color principal y borde = #AA00AA en C0"
+  },
+  {
+   "prueba": "Avisos: crear, numerar, sugerir y asignar; claves C1-C3",
+   "resultado": "SUPERADA",
+   "detalle": "Nº 1 · AMB-01 C1 → C2 → C3 · aviso en curso"
+  },
+  {
+   "prueba": "Color C0: bloqueo fuera de C0, color de clave y borde C0",
+   "resultado": "SUPERADA",
+   "detalle": "fuera de C0: principal = color de clave C3, borde = C0, edición bloqueada"
+  },
+  {
+   "prueba": "Descansos: bloqueo con aviso activo",
+   "resultado": "SUPERADA",
+   "detalle": "botón de descanso deshabilitado con aviso activo"
+  },
+  {
+   "prueba": "Descansos: temporizador real que se recupera tras recargar",
+   "resultado": "SUPERADA",
+   "detalle": "cuenta atrás 0:59 → tras recargar 0:56; unidad en gris"
+  },
+  {
+   "prueba": "Avisos: finalizar y apartado de finalizados",
+   "resultado": "SUPERADA",
+   "detalle": "aparece en Avisos finalizados; AMB-01 liberada a C0"
+  },
+  {
+   "prueba": "Color C0: recuperación al volver a C0 y persistencia",
+   "resultado": "SUPERADA",
+   "detalle": "al regresar a C0 recupera #AA00AA"
+  },
+  {
+   "prueba": "Descansos: fin automático y recuperación del estado",
+   "resultado": "SUPERADA",
+   "detalle": "fin automático: vuelve a C0 con su color, sin sobrescribir la clave"
+  },
+  {
+   "prueba": "Claves especiales: CESP con motivo",
+   "resultado": "SUPERADA",
+   "detalle": "CESP con motivo del desplegable"
+  },
+  {
+   "prueba": "Plano táctico: importar, colocar unidades y persistencia",
+   "resultado": "SUPERADA",
+   "detalle": "imagen importada; 2 unidades colocadas (coordenadas normalizadas); posiciones persistentes tras recargar"
+  },
+  {
+   "prueba": "Estadísticas: vistas con datos reales",
+   "resultado": "SUPERADA",
+   "detalle": "vistas por preventivo, unidad y aviso"
+  },
+  {
+   "prueba": "Bitácora: registro cronológico",
+   "resultado": "SUPERADA",
+   "detalle": "18 registros con usuario y valores anterior/nuevo"
+  },
+  {
+   "prueba": "Cronología individual de unidad",
+   "resultado": "SUPERADA",
+   "detalle": "10 acontecimientos con duraciones"
+  },
+  {
+   "prueba": "Informes: PDF, JSON y CSV con contenido real",
+   "resultado": "SUPERADA",
+   "detalle": "PDF 11 KB, JSON con 19 operaciones, ZIP con 10 CSV"
+  },
+  {
+   "prueba": "Funcionamiento sin conexión (modo avión)",
+   "resultado": "SUPERADA",
+   "detalle": "modo avión: recarga, sesión, aviso nº 2, descanso, plano e informe PDF sin red"
+  },
+  {
+   "prueba": "Plantillas: crear, aplicar y aislamiento",
+   "resultado": "SUPERADA",
+   "detalle": "preventivo desde plantilla: 3 unidades, plano y colores; 0 avisos; cambios posteriores en la plantilla no le afectan"
+  },
+  {
+   "prueba": "Usuarios, roles y permisos",
+   "resultado": "SUPERADA",
+   "detalle": "Consulta sin acciones operativas; Operador crea avisos pero no edita configuración"
+  },
+  {
+   "prueba": "Cierre del preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "cerrado con advertencias registradas, archivado y en solo lectura"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (móvil)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Servidor central (espacio 1.3.0 sin migrar): activación con el código del servidor",
+   "resultado": "SUPERADA",
+   "detalle": "espacio central como el de la 1.3.0 (sin migrar), activado con el código del servidor; estado conectado"
+  },
+  {
+   "prueba": "Servidor central: alta de usuario",
+   "resultado": "SUPERADA",
+   "detalle": "usuario creado en la tablet; su cuenta queda publicada en el servidor central"
+  },
+  {
+   "prueba": "Servidor central: dispositivo nuevo con usuario y contraseña",
+   "resultado": "SUPERADA",
+   "detalle": "el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza"
+  },
+  {
+   "prueba": "Compartido: crear preventivo sin pedir servidor",
+   "resultado": "SUPERADA",
+   "detalle": "creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central"
+  },
+  {
+   "prueba": "Compartido: el preventivo aparece solo en el otro dispositivo",
+   "resultado": "SUPERADA",
+   "detalle": "aparece solo en el móvil y se abre con un toque, con sus 3 unidades"
+  },
+  {
+   "prueba": "Compartido: avisos simultáneos sin duplicados",
+   "resultado": "SUPERADA",
+   "detalle": "números definitivos únicos 1 y 2 en ambos dispositivos"
+  },
+  {
+   "prueba": "Compartido: desconexión, trabajo local y reconexión",
+   "resultado": "SUPERADA",
+   "detalle": "trabajo sin red (ref. provisional ZV-2, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas; recibido por el servidor 7 s después de registrarse"
+  },
+  {
+   "prueba": "Compartido: resolución de conflictos",
+   "resultado": "SUPERADA",
+   "detalle": "conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador"
+  },
+  {
+   "prueba": "Servidor central: varios preventivos usan el mismo servidor",
+   "resultado": "SUPERADA",
+   "detalle": "2 preventivos compartidos, todos con el servidor central http://127.0.0.1:8650 sin haberlo pedido"
+  },
+  {
+   "prueba": "Tipos de recurso: el tipo nuevo aparece en el otro dispositivo",
+   "resultado": "SUPERADA",
+   "detalle": "tipo «Bicicleta sanitaria» creado en la tablet → disponible en el móvil sin hacer nada"
+  },
+  {
+   "prueba": "Actualizaciones: estado del servidor y de los dispositivos",
+   "resultado": "SUPERADA",
+   "detalle": "Sistema → Actualizaciones muestra el servidor y los 2 dispositivos con su nombre y versión"
+  },
+  {
+   "prueba": "Estado del sistema en el modo anterior (con el código del servidor)",
+   "resultado": "SUPERADA",
+   "detalle": "pide el código de administración (uno erróneo no sirve); servidor, datos, recursos, sincronización con los dos dispositivos activos, copias y alertas; sin secretos"
+  },
+  {
+   "prueba": "Servidor central: caída temporal del servidor sin interrumpir el trabajo",
+   "resultado": "SUPERADA",
+   "detalle": "servidor detenido: se sigue trabajando en local (sin_conexion, 2 pendiente(s)); al volver se envía todo y el otro dispositivo lo recibe"
+  },
+  {
+   "prueba": "Tablet: panel operativo multicolumna",
+   "resultado": "SUPERADA",
+   "detalle": "panel de 3 columnas y navegación lateral"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (multidispositivo)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Android: «Probar» notificaciones muestra un aviso real",
+   "resultado": "SUPERADA",
+   "detalle": "aviso mostrado por el service worker; el constructor prohibido en Android no se usa"
+  },
+  {
+   "prueba": "Android: botón «Probar» de vibración visible",
+   "resultado": "SUPERADA",
+   "detalle": "botón «Probar» visible con la vibración disponible"
+  },
+  {
+   "prueba": "Android: pantalla encendida se recupera al volver a la aplicación",
+   "resultado": "SUPERADA",
+   "detalle": "tras salir y volver 3 veces la pantalla sigue encendida (3 de 3 recuperaciones)"
+  },
+  {
+   "prueba": "Android: importar copias y paquetes sin archivos en gris",
+   "resultado": "SUPERADA",
+   "detalle": "el selector muestra todos los archivos (sin filtro) y uno erróneo se rechaza: «El archivo no es una copia válida»"
+  },
+  {
+   "prueba": "Android: aviso de fin de descanso",
+   "resultado": "SUPERADA",
+   "detalle": "aviso «Fin del descanso: AND-1 Android uno» mostrado por el service worker"
+  },
+  {
+   "prueba": "Unidades plantilla: UPR solo pide el número",
+   "resultado": "SUPERADA",
+   "detalle": "AÑADIR UNIDAD → UPR → «8025»: UPR 8025, vehículo ligero, triángulo azul, C0, pendiente de asignación"
+  },
+  {
+   "prueba": "Sectores: opción OTROS con ubicación personalizada",
+   "resultado": "SUPERADA",
+   "detalle": "OTROS → «Puerta 7» asignado a la unidad, sin crear sectores nuevos"
+  },
+  {
+   "prueba": "Tipos de recurso: crear uno nuevo al crear una unidad",
+   "resultado": "SUPERADA",
+   "detalle": "tipo «Dron» creado desde el formulario de la unidad: guardado en la configuración general y usado por la unidad"
+  },
+  {
+   "prueba": "Configuración → Unidades plantilla",
+   "resultado": "SUPERADA",
+   "detalle": "crear, duplicar y desactivar plantillas desde Configuración → Unidades plantilla"
+  },
+  {
+   "prueba": "Persistencia de tipos y plantillas",
+   "resultado": "SUPERADA",
+   "detalle": "tipo y plantilla siguen disponibles tras recargar la aplicación"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (fase 2)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Cartografía: importar zona desde el buscador de mapas",
+   "resultado": "SUPERADA",
+   "detalle": "búsqueda «Puerta del Sol» → encuadre → plano cartográfico con su extensión geográfica (EPSG:3857, coordenadas WGS84)"
+  },
+  {
+   "prueba": "Plano: arrastrar una unidad pendiente al mapa (coordenadas reales)",
+   "resultado": "SUPERADA",
+   "detalle": "arrastrada desde «pendientes» al plano: lat 40.416938, lon -3.703833"
+  },
+  {
+   "prueba": "Plano: colocar tocando (alternativa táctil)",
+   "resultado": "SUPERADA",
+   "detalle": "tocar la unidad pendiente y luego el plano también la coloca"
+  },
+  {
+   "prueba": "Plano: mover una unidad arrastrándola",
+   "resultado": "SUPERADA",
+   "detalle": "arrastrar mueve la unidad, con respuesta visual; se guarda al soltar"
+  },
+  {
+   "prueba": "Plano: cambiar la clave con doble clic",
+   "resultado": "SUPERADA",
+   "detalle": "doble clic → selector de claves → C6 aplicada con las reglas de siempre y visible en el listado de unidades"
+  },
+  {
+   "prueba": "Plano: devolver una unidad a pendientes de asignación",
+   "resultado": "SUPERADA",
+   "detalle": "arrastrada del plano a «pendientes»: vuelve a quedar pendiente de asignación sin eliminarse"
+  },
+  {
+   "prueba": "Avisos: crear un aviso haciendo clic en el mapa",
+   "resultado": "SUPERADA",
+   "detalle": "clic en el mapa → marcador provisional → «Usar esta ubicación» → «Más datos» → formulario con la ubicación (marcada en el mapa, no GPS) → aviso nº 1 con marcador en el plano"
+  },
+  {
+   "prueba": "Avisos: crear un aviso por zona",
+   "resultado": "SUPERADA",
+   "detalle": "zona de 4 puntos dibujada → código 3.2 → aviso con zona (coordenadas reales) y ubicación en su centro; área visible en el plano; ambos avisos en el listado general"
+  },
+  {
+   "prueba": "Biblioteca de planos predefinidos",
+   "resultado": "SUPERADA",
+   "detalle": "Metropolitano, Sol y Bernabéu incorporados uno tras otro con su encuadre y referencia geográfica; las unidades se conservan"
+  },
+  {
+   "prueba": "Plano: persistencia tras recargar",
+   "resultado": "SUPERADA",
+   "detalle": "plano cartográfico y posiciones conservados tras cerrar y abrir"
+  },
+  {
+   "prueba": "Cartografía: clave de Google Maps Platform en la configuración general",
+   "resultado": "SUPERADA",
+   "detalle": "clave validada, guardada cifrada (proveedor Google Maps), auditada y retirada (vuelve OpenStreetMap)"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (plano de coordinación)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Actualización: aplicación instalada y controlada por el service worker",
+   "resultado": "SUPERADA",
+   "detalle": "versión 1.5.0 con funcionamiento sin conexión activo"
+  },
+  {
+   "prueba": "Actualización: versión nueva detectada, descargada y verificada sin interrumpir la sesión",
+   "resultado": "SUPERADA",
+   "detalle": "aviso «Versión 1.5.1 lista» sin interrumpir el trabajo"
+  },
+  {
+   "prueba": "Actualización: aplicación controlada, datos conservados y auditoría",
+   "resultado": "SUPERADA",
+   "detalle": "recarga controlada → 1.5.1, mismo preventivo y datos; anotado en la auditoría"
+  },
+  {
+   "prueba": "Actualización: comprobación de integridad (SHA-256) de la versión descargada",
+   "resultado": "SUPERADA",
+   "detalle": "la versión con suma SHA-256 incorrecta se rechaza; sigue la 1.5.1"
+  },
+  {
+   "prueba": "Actualización: recuperación ante una versión que no arranca",
+   "resultado": "SUPERADA",
+   "detalle": "pantalla de recuperación → versión anterior (1.5.1) con los datos intactos"
+  },
+  {
+   "prueba": "Actualización: versión corregida tras la recuperación",
+   "resultado": "SUPERADA",
+   "detalle": "versión corregida 1.5.3 aplicada tras la recuperación"
+  },
+  {
+   "prueba": "Actualización: sin sesión abierta se aplica sola",
+   "resultado": "SUPERADA",
+   "detalle": "en la pantalla de acceso se aplica sola (1.5.4)"
+  },
+  {
+   "prueba": "Actualización: sin errores de JavaScript",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Unidades plantilla de SAMUR-PC",
+   "resultado": "SUPERADA",
+   "detalle": "16 plantillas (BASE … VAIS); «31» → ALFA 31 (USVB) y «2» → HALCÓN 2 (moto), en C0"
+  },
+  {
+   "prueba": "Avisos por código de incidente (carpetas)",
+   "resultado": "SUPERADA",
+   "detalle": "Nuevo aviso → carpeta «1. Accidente de Tráfico» → 1.2: aviso Nº 1 creado con ese tipo y abierto para asignar"
+  },
+  {
+   "prueba": "Avisos: buscar el código",
+   "resultado": "SUPERADA",
+   "detalle": "buscar «atropello» → 1.4 → aviso creado"
+  },
+  {
+   "prueba": "Avisos: nuevo aviso con una unidad por código",
+   "resultado": "SUPERADA",
+   "detalle": "ALFA 31 → Nuevo aviso con esta unidad → Enfermedad → 3.1: aviso asignado y la unidad en C1"
+  },
+  {
+   "prueba": "Avisos: formulario completo con el selector de código",
+   "resultado": "SUPERADA",
+   "detalle": "Más datos → campo «Tipo de incidente» → 2.12.1 OVACE con descripción; filtro de avisos agrupado por carpetas"
+  },
+  {
+   "prueba": "Cronología: todas las unidades a la vez",
+   "resultado": "SUPERADA",
+   "detalle": "4 acontecimientos de 2 unidades en un único registro, lo más reciente primero"
+  },
+  {
+   "prueba": "Preventivos anteriores: añadir los códigos",
+   "resultado": "SUPERADA",
+   "detalle": "preventivo creado sin códigos → «Añadir los códigos de incidente» → 123 códigos y aviso 1.1"
+  },
+  {
+   "prueba": "Finalizar el preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "Más → «Finalizar preventivo e informes» → Finalizar preventivo: queda en solo lectura y archivado"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (incidentes)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Activo/inactivo: los tipos desactivados no se ofrecen al crear unidades",
+   "resultado": "SUPERADA",
+   "detalle": "SVB desactivado: no aparece ni su plantilla ni el tipo al crear; SVB-1 lo conserva («desactivado» al editar)"
+  },
+  {
+   "prueba": "Eliminar con referencias: vista previa y reasignación",
+   "resultado": "SUPERADA",
+   "detalle": "vista previa con la plantilla VIRES → reasignada a SVA y tipo eliminado"
+  },
+  {
+   "prueba": "Eliminar una configuración inicial sin referencias y restaurarla",
+   "resultado": "SUPERADA",
+   "detalle": "configuración inicial sin referencias eliminada; no vuelve al recargar; se restaura a petición"
+  },
+  {
+   "prueba": "Retirar del uso y restaurar",
+   "resultado": "SUPERADA",
+   "detalle": "retirado del uso (lista aparte) y restaurado"
+  },
+  {
+   "prueba": "Preventivo: un tipo usado se retira conservando el historial",
+   "resultado": "SUPERADA",
+   "detalle": "en el preventivo: el tipo usado se retira (no se borra del historial) y la unidad lo conserva"
+  },
+  {
+   "prueba": "Eliminar una unidad plantilla ya usada",
+   "resultado": "SUPERADA",
+   "detalle": "plantilla usada eliminada tras ver sus unidades; UPR 77 sigue en el preventivo"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 8)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Tipo de mapa: cambiar la vista desde el plano del preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "Mapa → Satélite (PNOA) → Híbrido (PNOA + callejero) → Relieve (MTN) → Híbrido; marcador y posiciones intactos"
+  },
+  {
+   "prueba": "Tipo de mapa: la elección se conserva",
+   "resultado": "SUPERADA",
+   "detalle": "tras salir y volver a entrar sigue en «Híbrido»"
+  },
+  {
+   "prueba": "Tipo de mapa: no afecta a otros preventivos",
+   "resultado": "SUPERADA",
+   "detalle": "otro preventivo conserva el mapa estándar"
+  },
+  {
+   "prueba": "Tipo de mapa: los planos de imagen siguen funcionando",
+   "resultado": "SUPERADA",
+   "detalle": "plano de imagen: funciona igual y no ofrece vistas de mapa"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 9)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Modo servidor: alta de usuarios con y sin contraseña desde la administración",
+   "resultado": "SUPERADA",
+   "detalle": "servidor central activado en modo servidor; alta de Luis (código + PIN, código EMX2-4EY9-ME) y de Pepe (contraseña)"
+  },
+  {
+   "prueba": "Cuenta sin contraseña: activación con código y entrada con PIN",
+   "resultado": "SUPERADA",
+   "detalle": "código de un solo uso → PIN propio del dispositivo; entra con el PIN y rechaza uno erróneo"
+  },
+  {
+   "prueba": "Registro desde el inicio de sesión: pendiente de aprobación",
+   "resultado": "SUPERADA",
+   "detalle": "solicitud desde el inicio de sesión; mientras está pendiente no entra"
+  },
+  {
+   "prueba": "Aprobación por el administrador con perfil",
+   "resultado": "SUPERADA",
+   "detalle": "aprobada con perfil Consulta: entra y solo puede consultar"
+  },
+  {
+   "prueba": "Permisos individuales por usuario y auditoría del servidor",
+   "resultado": "SUPERADA",
+   "detalle": "permiso individual quitado (avisos) → llega al dispositivo de Luis; auditoría con autor y detalle"
+  },
+  {
+   "prueba": "Perfiles de permisos: crear, duplicar, eliminar y asignar",
+   "resultado": "SUPERADA",
+   "detalle": "perfil nuevo desde la interfaz, duplicado, borrado el que no se usa y asignado a un usuario"
+  },
+  {
+   "prueba": "Estado del sistema (solo administradores)",
+   "resultado": "SUPERADA",
+   "detalle": "la administradora ve el estado (modo servidor, sin pedir código); un operador no tiene la opción"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 10, admin)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 10, Luis)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 10, registro)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Migración del espacio al modo servidor desde la aplicación",
+   "resultado": "SUPERADA",
+   "detalle": "espacio 1.3.0 → modo servidor con el código del servidor y la contraseña; el preventivo compartido sigue"
+  },
+  {
+   "prueba": "Sesión revocada o caducada: se renueva con la contraseña",
+   "resultado": "SUPERADA",
+   "detalle": "sesiones de Eva cerradas por el administrador → «Inicia sesión para sincronizar» → contraseña → vuelve a sincronizar"
+  },
+  {
+   "prueba": "Cambios rechazados por el servidor: visibles y revisables",
+   "resultado": "SUPERADA",
+   "detalle": "unidad creada sin conexión con un permiso ya retirado: el servidor la rechaza, se deshace, queda en «Cambios rechazados» y se marca como revisada"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 11, admin)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 11, Eva)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Capas: unidades, avisos, sectores y puntos con su leyenda",
+   "resultado": "SUPERADA",
+   "detalle": "3 unidades (una con el símbolo de descanso), aviso activo, sector delimitado con su nombre, 2 puntos y leyenda con símbolos"
+  },
+  {
+   "prueba": "Filtros combinados y restablecer (ocultar no es desactivar)",
+   "resultado": "SUPERADA",
+   "detalle": "tipo SVB → 2; + descanso → 1 (SVB-2); los datos no cambian; «Restablecer» vuelve a mostrar las 3"
+  },
+  {
+   "prueba": "Avisos finalizados, sectores y categorías: mostrar u ocultar",
+   "resultado": "SUPERADA",
+   "detalle": "avisos finalizados bajo petición; sectores y categorías se ocultan uno a uno; restablecer"
+  },
+  {
+   "prueba": "Puntos y delimitación de sectores desde el plano",
+   "resultado": "SUPERADA",
+   "detalle": "punto nuevo tocando el plano y sector 2 delimitado con 3 toques; se guardan en el preventivo (bitácora)"
+  },
+  {
+   "prueba": "Ficha contextual sin salir del mapa",
+   "resultado": "SUPERADA",
+   "detalle": "unidad y aviso: ficha dentro del mapa (situación, clave, unidades) con acceso a la ficha completa"
+  },
+  {
+   "prueba": "Preferencias de visualización por preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "filtro guardado tras recargar en ese preventivo; el otro preventivo no se ve afectado"
+  },
+  {
+   "prueba": "Muchos elementos: agrupación y fluidez",
+   "resultado": "SUPERADA",
+   "detalle": "150 unidades: 5 grupos al abrir (2063 ms hasta ver el plano); al tocar un grupo se acerca y aparecen 150 unidades sueltas"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 12)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Aviso desde el mapa: marcar, ajustar sin arrastrar, confirmar y elegir unidades",
+   "resultado": "SUPERADA",
+   "detalle": "botón → toque → marcador provisional (sector 1) ajustado con botones y con el teclado → formulario con ubicación «marcada en el mapa», sector y unidades con su situación; SVB-1 sugerida y elegida, las ocupadas o en descanso no se pueden marcar"
+  },
+  {
+   "prueba": "Ubicación sin el mapa: punto del plano y coordenadas validadas",
+   "resultado": "SUPERADA",
+   "detalle": "sin tocar el mapa: coordenadas imposibles rechazadas; punto del plano «Puerta 3» como ubicación (origen «punto»), y el aviso aparece en el plano"
+  },
+  {
+   "prueba": "Accesibilidad: crear un aviso solo con el teclado",
+   "resultado": "SUPERADA",
+   "detalle": "desde el plano solo con Tab/Intro: «Nuevo aviso en el mapa» → «Sin el mapa» → «Más datos» → descripción → crear"
+  },
+  {
+   "prueba": "Accesibilidad: lista alternativa al mapa",
+   "resultado": "SUPERADA",
+   "detalle": "lista con unidades (situación), avisos, puntos y sectores; «Ver en el plano» con el teclado centra y abre la ficha (con el foco en ella)"
+  },
+  {
+   "prueba": "Accesibilidad: el foco entra en los paneles y vuelve al cerrarlos",
+   "resultado": "SUPERADA",
+   "detalle": "al abrir un panel el foco entra en él; al cerrarlo vuelve al botón que lo abrió"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 13)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Incoherencias: detectadas, clasificadas y agrupadas",
+   "resultado": "SUPERADA",
+   "detalle": "distintivo «Alta» en la barra; agrupadas por regla (2 avisos sin unidad, 2 abiertos demasiado, 1 descanso de 10 h, 1 conflicto) con por qué, consecuencias y qué hacer"
+  },
+  {
+   "prueba": "Revisar, asignar y resolver (con historial, sin tocar datos operativos)",
+   "resultado": "SUPERADA",
+   "detalle": "asignada a Lola y resuelta con nota; pasa a «Revisadas», historial con los dos pasos; unidades y avisos sin cambios"
+  },
+  {
+   "prueba": "Reglas aprobadas: niveles y reglas activas",
+   "resultado": "SUPERADA",
+   "detalle": "nivel cambiado a «Crítica» (sube arriba y en la barra) y una regla desactivada; guardado en el preventivo"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 14)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Plantilla desde un preventivo, eligiendo qué incluir",
+   "resultado": "SUPERADA",
+   "detalle": "desde el preventivo: 10 elementos a elegir (personas previstas desmarcadas); sin puntos por elección; 3 unidades y reglas; ningún aviso"
+  },
+  {
+   "prueba": "Versiones de plantilla",
+   "resultado": "SUPERADA",
+   "detalle": "cambiar la descripción crea la versión 2 y conserva la 1; marcarla como favorita no es otra versión"
+  },
+  {
+   "prueba": "Crear un preventivo con el asistente, revisando lo heredado",
+   "resultado": "SUPERADA",
+   "detalle": "asistente en 7 pasos; sin SVB-2, sin la grada (SVA-1 queda sin sector) y sin plano; resumen previo; el preventivo dice «versión 2» y qué no se heredó"
+  },
+  {
+   "prueba": "Desactivar, restaurar, duplicar y eliminar plantillas",
+   "resultado": "SUPERADA",
+   "detalle": "desactivada: no se ofrece al crear; reactivada; versión 1 restaurada como versión 3; usos con su versión; duplicar y eliminar"
+  },
+  {
+   "prueba": "Asistente en el móvil",
+   "resultado": "SUPERADA",
+   "detalle": "sin desplazamiento horizontal (358 px en 358 px); filas de unidades de 78 px"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (escenario 15)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
   {
    "prueba": "Exportación a Excel (XLSX) abierta con un lector independiente",
    "resultado": "SUPERADA",
@@ -10,7 +660,7 @@
   {
    "prueba": "Informe generado automáticamente al finalizar",
    "resultado": "SUPERADA",
-   "detalle": "al finalizar: versión 1 guardada y registrada (SHA-256 a5c1078ed288…), preventivo cerrado y archivado"
+   "detalle": "al finalizar: versión 1 guardada y registrada (SHA-256 7f8ff1b71a4f…), preventivo cerrado y archivado"
   },
   {
    "prueba": "Descarga de la versión, contenido y comprobación de la huella",

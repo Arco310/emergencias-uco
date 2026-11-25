@@ -1,4 +1,46 @@
-# Informe de pruebas — Evolución integral (versiones 1.3.0 y 1.4.0)
+# Informe de pruebas — Evolución integral (versiones 1.3.0, 1.4.0 y 1.5.0)
+
+## 1.5.0 (25/11/2026, rama `mejora-1.5.0`, sin publicar)
+
+Solo pruebas ejecutadas de verdad, en el entorno de desarrollo: Linux, Node 22, Chromium de Playwright y servidor real en `127.0.0.1`.
+
+| Conjunto | Resultado |
+|---|---|
+| `npm test` (unidad y servidor; incluye el paquete de Windows) | **195/195** |
+| E2E completo, en una sola ejecución (`python3 tests/e2e/run_e2e.py`, escenarios 1–16) | **135/135** |
+| Comprobaciones añadidas después (escenarios 13 y 15, misma compilación) | **7/7** y **7/7** |
+
+**Escenarios nuevos:**
+- **12.** Capas y filtros, sectores, puntos, ficha contextual, preferencias por preventivo y 150 unidades (8 comprobaciones).
+- **13.** Avisos desde el mapa, ubicación sin mapa (punto, coordenadas, dirección escrita), solo con teclado, lista alternativa y foco (7).
+- **14.** Incoherencias: detección, agrupación, revisión, asignación y resolución con su nota, y reglas (4).
+- **15.** Plantillas: elementos, versiones, asistente en tablet y móvil, desactivar, restaurar, duplicar y eliminar (también la plantilla usada) (7).
+- **16.** Informes: Excel abierto con openpyxl, versión 1 al finalizar, huella del PDF descargado, comprobación de un archivo original y otro modificado, versión 2 con motivo y JSON con la huella del registro (5).
+
+**Comprobaciones añadidas a escenarios anteriores:**
+- **2:** horas `rx` y `sy` entre dos dispositivos, «Pendiente de confirmar» sin conexión y estado del sistema en el modo anterior con el código del servidor.
+- **2:** con el servidor detenido, el panel avisa de que el servidor no responde.
+- **10:** estado del sistema en modo servidor; un operador no ve la opción.
+- **1 y 7:** al finalizar se genera el informe antes de archivar.
+- **6:** las versiones simuladas parten de la mínima que exige el servidor.
+
+**Fallos encontrados por las pruebas y corregidos (cada uno con su prueba):**
+1. Los diálogos con un campo de texto devolvían un objeto. Las notas y motivos se guardaban como «[object Object]» (desde la 1.0.0).
+2. En el modo servidor, las peticiones ya atendidas intentaban responder dos veces (desde la 1.4.0).
+3. Los permisos incluidos no se aplicaban en cadena.
+4. El aviso de «cambios después de la versión» saltaba solo por archivar.
+5. El paquete de Windows no incluía el módulo de monitorización (lo detectaron las pruebas del instalador).
+6. El escenario de actualizaciones usaba versiones simuladas por debajo de la mínima nueva del servidor, que es la 1.5.0.
+
+**No probado aquí:**
+- Android real y lectores de pantalla (TalkBack, NVDA);
+- el PC servidor con la 1.5.0;
+- la cartografía real desde el panel de estado;
+- Google con una clave real.
+
+Capturas: `docs/evidencias/1.5.0/`. **Criterios de aceptación uno a uno:** `docs/INFORME-1.5.0.md` §8.
+
+---
 
 ## 1.4.0 (25/11/2026, rama `mejora-1.4.0`, sin publicar)
 
