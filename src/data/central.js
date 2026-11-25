@@ -328,6 +328,11 @@ export class CentralSync {
     const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
     return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/actualizaciones', { token: await this._token(meta) });
   }
+  /** Estado del sistema (1.5.0): solo administradores; en el modo anterior, con el código de administración del servidor */
+  async estadoSistema({ codigo = null } = {}) {
+    const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');
+    return this._req(meta.server, '/org/' + encodeURIComponent(meta.org) + '/admin/estado', { method: 'POST', token: await this._token(meta), body: codigo ? { codigo } : {}, timeout: 20000 });
+  }
   /** Acción sobre las actualizaciones del servidor: exige además el código de administración del servidor */
   async accionActualizaciones(body) {
     const meta = await this.meta(); if (!meta) throw new AppError('El servidor central no está configurado en este dispositivo');

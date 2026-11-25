@@ -456,3 +456,8 @@ fieldset.rev-items{border:0;padding:0;margin:.3rem 0 .5rem;max-height:46vh;overf
 .inf-v{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--line)}
 .inf-v .actions{margin:0}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+/* 1.5.0 · estado del sistema */
+.inc-lista{list-style:none;padding:0;margin:.3rem 0 .6rem}
+.ok-txt{color:#2E7D32;display:flex;align-items:center;gap:.35rem}
+.barra{height:10px;border-radius:6px;background:var(--soft);overflow:hidden;margin:.2rem 0 .4rem}
+.barra span{display:block;height:100%}

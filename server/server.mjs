@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { crearActualizador } from './actualizador.mjs';
+import { crearMonitor } from './monitor.mjs';
 import { crearModoServidor, cuentaUid } from './espacio-servidor.mjs';
 // Node 18: WebCrypto global (lo usan las funciones de cifrado compartidas con la aplicación)
 if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
@@ -126,6 +127,9 @@ const ACT = crearActualizador({
   ...(process.env.UCO_GITHUB_API ? { api: process.env.UCO_GITHUB_API } : {}), ...(process.env.UCO_REPO ? { repo: process.env.UCO_REPO } : {}),
   ...(process.env.UCO_VENTANA_MIN ? { idleMin: Number(process.env.UCO_VENTANA_MIN) } : {}),
 });
+// Monitorización (1.5.0): estado, recursos, sincronización, copias y alertas para la administración
+const MON = crearMonitor({ DATA, BASE: process.env.UCO_BASE_INSTALACION || args.base || null, version: VERSION });
+const cacheEstado = new Map(); // org → estado (10 s): consultar el panel no carga el servidor
 /** Migraciones del formato de datos del servidor: se registran y nunca borran nada */
 function migrarDatos() {
   const f = path.join(DATA, '_servidor', 'esquema.json');
@@ -176,6 +180,9 @@ function send(res, code, obj, headers = {}) {
   const body = typeof obj === 'string' || Buffer.isBuffer(obj) ? obj : JSON.stringify(obj);
   res.writeHead(code, { 'Content-Type': typeof obj === 'object' && !Buffer.isBuffer(obj) ? 'application/json; charset=utf-8' : 'application/octet-stream', 'Cache-Control': 'no-store', ...headers });
   res.end(body);
+  // «Atendida»: el modo servidor devuelve esto para indicar que la petición ya tiene respuesta. Antes devolvía
+  // undefined, la petición seguía por las demás rutas y acababa intentando responder dos veces.
+  return true;
 }
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -300,6 +307,22 @@ async function apiOrg(req, res, url, parts) {
     return send(res, 200, { ok: true, ...(await MS.migrar(o, b.secret, { usuario: b.usuario, dev: b.dev })) });
   }
   if (!what && req.method === 'GET') return send(res, 200, { org, nombre: o.meta.nombre, pruebas: o.meta.pruebas, creado: o.meta.creado, seq: o.meta.seq, version: VERSION, principal: principal()[o.meta.pruebas ? 'pruebas' : 'produccion'] === org, modo: modoServidor ? 'servidor' : 'cifrado' });
+  // Estado del sistema (1.5.0): solo administradores. Modo servidor: permiso «sistema.estado» de la sesión;
+  // modo anterior: además del token del espacio, el código de administración del servidor. Sin secretos.
+  if (what === 'admin' && parts[5] === 'estado' && req.method === 'POST') {
+    const b = await readJson(req);
+    if (quien) MS.exige(o, quien, ['sistema.estado']); else comprobarCodigo(b.codigo);
+    let e = cacheEstado.get(org);
+    if (!e || Date.now() - e.generado > 10000) {
+      const act = ACT.estado();
+      e = MON.estado({ dispositivos: o.disp, actualizaciones: act, codigos: archivosProtegidos(), control: quien ? MS.resumenControl(o) : null });
+      e.espacio = { modo: quien ? 'servidor' : 'anterior', nombre: o.meta.nombre || '', pruebas: !!o.meta.pruebas };
+      e.actualizaciones = { instalada: act.instalada, disponible: act.disponible ? act.disponible.version : null, actualizable: act.actualizable, comprobado: act.comprobado || null, lanzador: !!act.lanzador, despliegue: act.despliegue ? { estado: act.despliegue.estado, fecha: act.despliegue.fecha } : null };
+      cacheEstado.set(org, e);
+    }
+    if (quien) MS.auditarAcceso(o, quien, 'Consulta del estado del sistema'); else ACT.auditar('Consulta del estado del sistema con el código de administración');
+    return send(res, 200, e);
+  }
   // Actualizaciones del servidor: consulta para los dispositivos del espacio; las acciones exigen además
   // el código de administración del servidor (no basta con ser un dispositivo dado de alta)
   if (what === 'admin' && parts[5] === 'actualizaciones') {
@@ -463,6 +486,7 @@ async function api(req, res, url) {
     if (lines) { appendDurable(path.join(p.dir, 'ops.jsonl'), lines); ACT.escritura(pid); }
     if (metaChanged) writeAtomic(path.join(p.dir, 'meta.json'), JSON.stringify(p.meta));
     if (quien) MS.aplicar(oPrev, pid, aceptadas);
+    MON.operaciones(pid, { aceptadas: (lines.match(/\n/g) || []).length, rechazos: out.filter(x => x.rechazada) });
     return send(res, 200, { res: out, last: p.meta.nextSq - 1 });
   }
   if (what === 'ops' && req.method === 'GET') {
@@ -511,7 +535,10 @@ async function handler(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Método no permitido' });
     return serveStatic(req, res, url);
   } catch (e) {
-    log('Error', e.message);
+    // Ruta sin identificadores ni parámetros (pueden llevar datos de la cuenta): solo para localizar el fallo
+    const ruta = req.method + ' ' + String(req.url || '').split('?')[0].split('/').map(x => (/^(org|prev|usr|dev|op|blob|tpl)_/.test(x) || (x.length > 12 && /\d/.test(x)) ? '…' : x)).join('/');
+    log('Error', e.message, '·', ruta);
+    if (!e.status || e.status >= 500) MON.error(ruta, e);
     if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'Error interno', ...(e.status && e.codigo ? { codigo: e.codigo } : {}) });
   }
 }

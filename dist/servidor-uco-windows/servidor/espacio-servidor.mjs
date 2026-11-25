@@ -357,6 +357,9 @@ function unitLabel(u) {
 function avisoLabel(a) {
   return a ? a.num != null ? "N\xBA " + a.num : a.ref ? a.ref + " (prov.)" : "sin n\xFAmero" : "?";
 }
+function liveUnits(s) {
+  return Object.values(s.units).filter((u) => !u.eliminada && u.sit !== "archivada");
+}
 function getUnit(s, id) {
   const u = s.units[id];
   if (!u) throw new Reject("Unidad inexistente");
@@ -1008,7 +1011,8 @@ var PERMISOS = [
   ["conflictos.resolver", "Resolver conflictos de sincronizaci\xF3n", "Administraci\xF3n"],
   ["sync.gestionar", "Gestionar la sincronizaci\xF3n", "Administraci\xF3n"],
   ["central.gestionar", "Configurar el servidor central y dar de alta dispositivos", "Administraci\xF3n"],
-  ["actualizaciones.gestionar", "Gestionar las actualizaciones del servidor central y de la aplicaci\xF3n", "Administraci\xF3n"]
+  ["actualizaciones.gestionar", "Gestionar las actualizaciones del servidor central y de la aplicaci\xF3n", "Administraci\xF3n"],
+  ["sistema.estado", "Consultar el estado t\xE9cnico del servidor y del sistema (monitorizaci\xF3n)", "Administraci\xF3n"]
 ];
 var PERM_KEYS = PERMISOS.map((p) => p[0]);
 var PERM_LABEL = Object.fromEntries(PERMISOS.map((p) => [p[0], p[1]]));
@@ -1026,6 +1030,7 @@ var IMPLICA = {
   "config.editar": ["sectores.gestionar"],
   "exportar": ["informes.generar"],
   "informes.generar": ["informes.ver"],
+  "actualizaciones.gestionar": ["sistema.estado"],
   "usuarios.admin": ["usuarios.crear", "usuarios.editar", "usuarios.aprobar", "usuarios.permisos", "auditoria.ver"]
 };
 var VER = PERMISOS_VER.filter((k) => k !== "auditoria.ver");
@@ -1248,6 +1253,342 @@ function motivoInformeNoValido(x = {}) {
   return null;
 }
 
+// src/core/validaciones.js
+var NIVELES = {
+  info: { nombre: "Informaci\xF3n", orden: 1, color: "#1565C0" },
+  moderada: { nombre: "Moderada", orden: 2, color: "#B26A00" },
+  alta: { nombre: "Alta", orden: 3, color: "#D84315" },
+  critica: { nombre: "Cr\xEDtica", orden: 4, color: "#B71C1C" }
+};
+var MIN = 6e4;
+var uRef = (u) => ({ k: "u", id: u.id, nombre: unitLabel(u) });
+var aRef = (a) => ({ k: "a", id: a.id, nombre: "Aviso " + avisoLabel(a) });
+var pRef = (s) => ({ k: "prev", id: s.prev.id, nombre: s.prev.nombre });
+var activo = (a) => a.estado !== "finalizado" && a.finalizadoEn == null;
+var avisosActivos = (s) => Object.values(s.avisos).filter(activo);
+var unidadesNoEliminadas = (s) => Object.values(s.units).filter((u) => !u.eliminada);
+var avisosDe = (s, u) => avisosActivos(s).filter((a) => a.part.some((p) => p.u === u.id && p.lib == null) || u.aviso === a.id);
+var asigDe = (a, u) => (a.part.find((p) => p.u === u.id && p.lib == null) || {}).asig || a.creado;
+var inicioAviso = (a) => a.t ?? a.creado;
+var REGLAS = [
+  // ---------------- Unidades ----------------
+  {
+    id: "unidad_disponible_con_aviso",
+    grupo: "unidades",
+    nivel: "alta",
+    titulo: "Unidad \xABdisponible\xBB con un aviso activo",
+    porque: "Su clave dice que est\xE1 disponible, pero sigue asignada a un aviso que no ha terminado.",
+    consecuencias: "Puede asignarse a otro aviso o darse por libre mientras todav\xEDa est\xE1 trabajando.",
+    recomendacion: "Confirma con la unidad si sigue en el aviso y cambia su clave o lib\xE9rala del aviso.",
+    detectar: ({ s }) => liveUnits(s).flatMap((u) => {
+      const def = claveDef(s.prev, u.clave);
+      if (!def || def.categoria !== "disponible") return [];
+      return avisosDe(s, u).map((a) => ({ entidad: uRef(u), desde: asigDe(a, u), detalle: `${unitLabel(u)} est\xE1 en ${u.clave} (${def.nombre}) y asignada al aviso ${avisoLabel(a)}` })).slice(0, 1);
+    })
+  },
+  {
+    id: "unidad_inactiva_con_aviso",
+    grupo: "unidades",
+    nivel: "alta",
+    titulo: "Unidad desactivada o archivada asignada a un aviso",
+    porque: "Una unidad fuera de servicio no deber\xEDa figurar trabajando en un aviso activo.",
+    consecuencias: "El aviso puede darse por atendido sin ning\xFAn recurso real.",
+    recomendacion: "Libera la unidad del aviso y asigna otra disponible, o react\xEDvala si en realidad est\xE1 operativa.",
+    detectar: ({ s }) => unidadesNoEliminadas(s).filter((u) => u.sit !== "activa").flatMap((u) => avisosDe(s, u).slice(0, 1).map((a) => ({ entidad: uRef(u), desde: asigDe(a, u), detalle: `${unitLabel(u)} (${u.sit}) figura en el aviso ${avisoLabel(a)}` })))
+  },
+  {
+    id: "unidad_sin_datos",
+    grupo: "unidades",
+    nivel: "info",
+    titulo: "Unidad sin datos m\xEDnimos",
+    porque: "Le falta el indicativo o el tipo de recurso.",
+    consecuencias: "No se puede filtrar, sugerir ni contar bien en las estad\xEDsticas.",
+    recomendacion: "Completa la ficha de la unidad.",
+    detectar: ({ s }) => liveUnits(s).filter((u) => !String(u.ind || "").trim() || !u.tipo).map((u) => ({ entidad: uRef(u), desde: u.creado || null, detalle: [!String(u.ind || "").trim() && "sin indicativo", !u.tipo && "sin tipo de recurso"].filter(Boolean).join(" y ") }))
+  },
+  {
+    id: "referencia_inexistente",
+    grupo: "unidades",
+    nivel: "alta",
+    titulo: "Sector o tipo que ya no existe",
+    porque: "La unidad o el aviso apunta a un sector o tipo que no est\xE1 en los cat\xE1logos del preventivo.",
+    consecuencias: "Puede no aparecer en los filtros, el plano o los informes por sector.",
+    recomendacion: "As\xEDgnale un sector o tipo v\xE1lido desde su ficha.",
+    detectar: ({ s }) => {
+      const sec = new Set((s.prev.cat.sectores || []).map((x) => x.id));
+      const tr = new Set((s.prev.cat.tiposRecurso || []).map((x) => x.id));
+      const ta = new Set((s.prev.cat.tiposAviso || []).map((x) => x.id));
+      const malo = (x, tipos) => [x.sector && x.sector !== SECTOR_OTROS && !sec.has(x.sector) && "sector \xAB" + x.sector + "\xBB", x.tipo && !tipos.has(x.tipo) && "tipo \xAB" + x.tipo + "\xBB"].filter(Boolean);
+      return [...liveUnits(s).map((u) => [uRef(u), malo(u, tr)]), ...avisosActivos(s).map((a) => [aRef(a), malo(a, ta)])].filter(([, m]) => m.length).map(([e, m]) => ({ entidad: e, desde: null, detalle: e.nombre + ": " + m.join(" y ") + " no existe" }));
+    }
+  },
+  {
+    id: "unidad_sin_cambios",
+    grupo: "unidades",
+    nivel: "info",
+    umbral: 180,
+    titulo: "Unidad ocupada sin cambios desde hace mucho",
+    porque: "Lleva mucho tiempo en una clave de trabajo sin ninguna actualizaci\xF3n.",
+    consecuencias: "Su informaci\xF3n puede estar desactualizada.",
+    recomendacion: "Contacta con la unidad y actualiza su clave.",
+    detectar: ({ s, t, umbral }) => s.prev.estado !== "activo" ? [] : liveUnits(s).filter((u) => {
+      const d = claveDef(s.prev, u.clave);
+      return d && d.categoria === "ocupada" && u.claveDesde && t - u.claveDesde >= umbral;
+    }).map((u) => ({ entidad: uRef(u), desde: u.claveDesde, detalle: `${unitLabel(u)} en ${u.clave} desde hace ${Math.round((t - u.claveDesde) / MIN)} min` }))
+  },
+  // ---------------- Avisos ----------------
+  {
+    id: "unidad_en_dos_avisos",
+    grupo: "avisos",
+    nivel: "critica",
+    titulo: "La misma unidad en dos avisos activos",
+    porque: "Una unidad solo puede estar trabajando en un aviso a la vez.",
+    consecuencias: "Uno de los avisos puede quedar sin atender mientras parece cubierto.",
+    recomendacion: "Decide en qu\xE9 aviso est\xE1 realmente y lib\xE9rala del otro; asigna otra unidad si hace falta.",
+    detectar: ({ s }) => liveUnits(s).flatMap((u) => {
+      const l = avisosDe(s, u);
+      return l.length < 2 ? [] : [{ entidad: uRef(u), desde: Math.max(...l.map((a) => asigDe(a, u))), detalle: `${unitLabel(u)} figura a la vez en los avisos ${l.map(avisoLabel).join(" y ")}` }];
+    })
+  },
+  {
+    id: "aviso_sin_unidad",
+    grupo: "avisos",
+    nivel: "moderada",
+    umbral: 15,
+    titulo: "Aviso sin unidad asignada",
+    porque: "El aviso sigue pendiente y nadie lo atiende.",
+    consecuencias: "Retraso en la atenci\xF3n.",
+    recomendacion: "Asigna una unidad (ver\xE1s las sugeridas en el aviso) o final\xEDzalo si ya no procede.",
+    detectar: ({ s, t, umbral }) => avisosActivos(s).filter((a) => a.estado === "pendiente" && !a.part.some((p) => p.lib == null) && t - inicioAviso(a) >= umbral).map((a) => ({ entidad: aRef(a), desde: inicioAviso(a), detalle: `Aviso ${avisoLabel(a)} pendiente desde hace ${Math.round((t - inicioAviso(a)) / MIN)} min` }))
+  },
+  {
+    id: "aviso_abierto_demasiado",
+    grupo: "avisos",
+    nivel: "moderada",
+    umbral: 120,
+    titulo: "Aviso abierto demasiado tiempo",
+    porque: "Supera la duraci\xF3n m\xE1xima establecida para un aviso.",
+    consecuencias: "Puede que se olvidara finalizarlo y las unidades sigan figurando ocupadas.",
+    recomendacion: "Comprueba si sigue en curso; si termin\xF3, final\xEDzalo y libera sus unidades.",
+    detectar: ({ s, t, umbral }) => avisosActivos(s).filter((a) => t - inicioAviso(a) >= umbral).map((a) => ({ entidad: aRef(a), desde: inicioAviso(a), detalle: `Aviso ${avisoLabel(a)} abierto desde hace ${Math.round((t - inicioAviso(a)) / MIN)} min` }))
+  },
+  {
+    id: "aviso_sin_unidades_en_curso",
+    grupo: "avisos",
+    nivel: "alta",
+    titulo: "Aviso asignado o en curso sin unidades",
+    porque: "Su estado indica que alguien lo atiende, pero no tiene ninguna unidad asignada.",
+    consecuencias: "Parece cubierto cuando no lo est\xE1.",
+    recomendacion: "Asigna una unidad o devuelve el aviso a pendiente.",
+    detectar: ({ s }) => avisosActivos(s).filter((a) => ["asignado", "en_curso"].includes(a.estado) && !a.part.some((p) => p.lib == null)).map((a) => ({ entidad: aRef(a), desde: a.enCursoEn || a.asignadoEn || inicioAviso(a), detalle: `Aviso ${avisoLabel(a)} en estado \xAB${a.estado}\xBB sin unidades` }))
+  },
+  {
+    id: "aviso_posible_duplicado",
+    grupo: "avisos",
+    nivel: "info",
+    umbral: 5,
+    titulo: "Posible aviso duplicado",
+    porque: "Hay dos avisos activos del mismo tipo, creados casi a la vez y en el mismo sitio o sector.",
+    consecuencias: "Se pueden enviar recursos dos veces al mismo incidente.",
+    recomendacion: "Revisa ambos; si son el mismo, finaliza uno indicando que est\xE1 duplicado.",
+    detectar: ({ s, umbral }) => {
+      const l = avisosActivos(s).filter((a) => a.tipo).sort((a, b) => a.creado - b.creado);
+      const out = [];
+      for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
+        const a = l[i];
+        const b = l[j];
+        if (a.tipo !== b.tipo || b.creado - a.creado > umbral) continue;
+        const cerca = a.sector && a.sector === b.sector || a.plan && b.plan && Math.hypot(a.plan.x - b.plan.x, a.plan.y - b.plan.y) < 0.03;
+        if (cerca) out.push({ entidad: aRef(b), desde: b.creado, detalle: `Aviso ${avisoLabel(b)} parecido al ${avisoLabel(a)} (mismo tipo, mismo lugar, ${Math.round((b.creado - a.creado) / 1e3)} s despu\xE9s)` });
+      }
+      return out;
+    }
+  },
+  {
+    id: "aviso_incompleto",
+    grupo: "avisos",
+    nivel: "info",
+    umbral: 10,
+    titulo: "Aviso sin ubicaci\xF3n",
+    porque: "No tiene ubicaci\xF3n, posici\xF3n en el plano ni sector.",
+    consecuencias: "Las unidades pueden no saber ad\xF3nde ir y no se puede sugerir la m\xE1s cercana.",
+    recomendacion: "A\xF1ade la ubicaci\xF3n, el sector o sit\xFAalo en el plano.",
+    detectar: ({ s, t, umbral }) => avisosActivos(s).filter((a) => !a.plan && !a.zona && !a.sector && !(a.loc && (a.loc.txt || a.loc.lat != null)) && t - inicioAviso(a) >= umbral).map((a) => ({ entidad: aRef(a), desde: inicioAviso(a), detalle: `Aviso ${avisoLabel(a)} sin ubicaci\xF3n ni sector` }))
+  },
+  // ---------------- Descansos ----------------
+  {
+    id: "descanso_con_aviso",
+    grupo: "descansos",
+    nivel: "critica",
+    titulo: "Unidad en descanso con un aviso activo",
+    porque: "Una unidad con un aviso activo no puede estar descansando.",
+    consecuencias: "El aviso puede quedar sin atender o la unidad trabajar sin descanso real.",
+    recomendacion: "Decide si la unidad sigue en el aviso (finaliza el descanso) o descansa (lib\xE9rala y asigna otra).",
+    detectar: ({ s, t }) => liveUnits(s).filter((u) => isResting(u, t)).flatMap((u) => avisosDe(s, u).slice(0, 1).map((a) => ({ entidad: uRef(u), desde: Math.max(u.descanso.ini, asigDe(a, u)), detalle: `${unitLabel(u)} descansa desde las ${hora(u.descanso.ini)} y est\xE1 en el aviso ${avisoLabel(a)}` })))
+  },
+  {
+    id: "descanso_duracion",
+    grupo: "descansos",
+    nivel: "info",
+    titulo: "Descanso con una duraci\xF3n incoherente",
+    porque: "La duraci\xF3n no es razonable (nula, negativa o muy superior a lo habitual).",
+    consecuencias: "La unidad puede quedar fuera de servicio sin que nadie lo note, y las estad\xEDsticas salen mal.",
+    recomendacion: "Revisa el descanso y final\xEDzalo si ya termin\xF3.",
+    detectar: ({ s, t }) => liveUnits(s).filter((u) => {
+      const d = u.descanso;
+      if (!d) return false;
+      const max = Math.max(180, 3 * (s.prev.cfg && s.prev.cfg.descansoMin || 30));
+      return isResting(u, t) && !(d.dur > 0 && d.dur <= max) || d.fin != null && d.fin < d.ini;
+    }).map((u) => ({ entidad: uRef(u), desde: u.descanso.ini, detalle: `${unitLabel(u)}: descanso de ${u.descanso.dur} min` }))
+  },
+  {
+    id: "descanso_y_clave",
+    grupo: "descansos",
+    nivel: "moderada",
+    titulo: "Cambio de clave durante el descanso",
+    porque: "La unidad cambi\xF3 de clave mientras figuraba descansando.",
+    consecuencias: "No queda claro si estaba descansando o trabajando.",
+    recomendacion: "Comprueba qu\xE9 pas\xF3 y finaliza el descanso si la unidad volvi\xF3 al servicio.",
+    detectar: ({ s, t }) => liveUnits(s).filter((u) => isResting(u, t) && (u.hc || []).some((h) => h.t > u.descanso.ini && !h.auto)).map((u) => ({ entidad: uRef(u), desde: u.descanso.ini, detalle: `${unitLabel(u)} pas\xF3 a ${u.clave} durante el descanso` }))
+  },
+  // ---------------- Preventivo ----------------
+  {
+    id: "finalizado_con_pendientes",
+    grupo: "preventivo",
+    nivel: "alta",
+    titulo: "Preventivo finalizado con asuntos abiertos",
+    porque: "Est\xE1 finalizado, pero quedan avisos activos, unidades ocupadas o en descanso, o cambios sin enviar.",
+    consecuencias: "El informe final y las estad\xEDsticas pueden no reflejar lo que realmente pas\xF3.",
+    recomendacion: "Re\xE1brelo para cerrar lo pendiente o anota en las observaciones por qu\xE9 se finaliz\xF3 as\xED.",
+    detectar: ({ s, t, sync }) => {
+      if (s.prev.estado !== "cerrado") return [];
+      const av = avisosActivos(s).length;
+      const des = liveUnits(s).filter((u) => isResting(u, t)).length;
+      const pend = sync.pendientes && sync.pendientes.n || 0;
+      return av || des || pend ? [{ entidad: pRef(s), desde: s.prev.cerradoEn || null, detalle: [av && av + " aviso(s) activo(s)", des && des + " unidad(es) en descanso", pend && pend + " cambio(s) sin enviar"].filter(Boolean).join(", ") }] : [];
+    }
+  },
+  {
+    id: "sector_no_valido",
+    grupo: "preventivo",
+    nivel: "moderada",
+    titulo: "Sectores mal configurados",
+    porque: "Hay sectores con el mismo nombre o con una delimitaci\xF3n de menos de 3 puntos.",
+    consecuencias: "Las unidades y avisos pueden asignarse al sector equivocado.",
+    recomendacion: "Revisa los sectores del preventivo.",
+    detectar: ({ s }) => {
+      const l = s.prev.cat.sectores || [];
+      const nombres = l.map((x) => String(x.nombre || "").trim().toLowerCase());
+      const mal = l.filter((x, i) => !nombres[i] || nombres.indexOf(nombres[i]) !== i || x.zona && !(x.zona.pts && x.zona.pts.length >= 3));
+      return mal.length ? [{ entidad: pRef(s), desde: null, detalle: mal.map((x) => x.nombre || x.id).join(", ") }] : [];
+    }
+  },
+  {
+    id: "ubicaciones_duplicadas",
+    grupo: "preventivo",
+    nivel: "info",
+    titulo: "Puntos del plano repetidos",
+    porque: "Hay puntos con el mismo nombre o en el mismo sitio.",
+    consecuencias: "Puede elegirse el punto equivocado al ubicar un aviso.",
+    recomendacion: "Quita o renombra los repetidos.",
+    detectar: ({ s }) => {
+      const l = s.prev.cat.puntos || [];
+      const rep = /* @__PURE__ */ new Set();
+      for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) {
+        const a = l[i];
+        const b = l[j];
+        if (String(a.nombre).trim().toLowerCase() === String(b.nombre).trim().toLowerCase() || a.pos && b.pos && Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y) < 2e-3) {
+          rep.add(a.nombre);
+          rep.add(b.nombre);
+        }
+      }
+      return rep.size ? [{ entidad: pRef(s), desde: null, detalle: [...rep].join(", ") }] : [];
+    }
+  },
+  // ---------------- Sincronización (datos del dispositivo) ----------------
+  {
+    id: "rechazos_sin_revisar",
+    grupo: "sincronizacion",
+    nivel: "alta",
+    titulo: "Cambios rechazados por el servidor sin revisar",
+    porque: "El servidor no acept\xF3 cambios hechos en este dispositivo (p. ej. sin conexi\xF3n con permisos o datos ya caducados).",
+    consecuencias: "Lo que se hizo no consta para los dem\xE1s.",
+    recomendacion: "Rev\xEDsalos en Sistema \u2192 Servidor central y vuelve a hacer lo que siga haciendo falta.",
+    detectar: ({ s, sync }) => {
+      const l = (sync.rechazos || []).filter((r) => !r.revisado);
+      return l.length ? [{ entidad: pRef(s), desde: Math.min(...l.map((r) => r.t || 0)) || null, detalle: l.length + " cambio(s): " + l.slice(0, 3).map((r) => (r.que || r.k) + " \u2014 " + r.error).join("; ") }] : [];
+    }
+  },
+  {
+    id: "conflicto_pendiente",
+    grupo: "sincronizacion",
+    nivel: "alta",
+    titulo: "Cambios simult\xE1neos por resolver",
+    porque: "Dos dispositivos cambiaron lo mismo a la vez y hay que elegir qu\xE9 versi\xF3n se conserva.",
+    consecuencias: "Mientras tanto, cada dispositivo puede estar viendo un dato distinto.",
+    recomendacion: "Resu\xE9lvelos en el aviso de conflictos del preventivo.",
+    detectar: ({ s }) => {
+      const l = Object.values(s.conflicts || {}).filter((c) => c.estado === "pendiente");
+      return l.length ? [{ entidad: pRef(s), desde: Math.min(...l.map((c) => c.t || 0)) || null, detalle: l.length + " conflicto(s) pendiente(s)" }] : [];
+    }
+  },
+  {
+    id: "cambios_sin_enviar",
+    grupo: "sincronizacion",
+    nivel: "moderada",
+    umbral: 10,
+    titulo: "Cambios de este dispositivo sin enviar",
+    porque: "Hay cambios guardados aqu\xED que todav\xEDa no han llegado al servidor.",
+    consecuencias: "Los dem\xE1s dispositivos no los ven; el estado local y el confirmado son distintos.",
+    recomendacion: "Comprueba la conexi\xF3n; se enviar\xE1n solos al volver.",
+    detectar: ({ s, t, sync, umbral }) => {
+      const p = sync.pendientes;
+      return p && p.n > 0 && p.desde && t - p.desde >= umbral ? [{ entidad: pRef(s), desde: p.desde, detalle: p.n + " cambio(s) pendientes desde hace " + Math.round((t - p.desde) / MIN) + " min" }] : [];
+    }
+  },
+  {
+    id: "sin_sincronizar",
+    grupo: "sincronizacion",
+    nivel: "moderada",
+    umbral: 15,
+    titulo: "Datos sin sincronizar desde hace tiempo",
+    porque: "Este dispositivo no se comunica con el servidor desde hace un rato.",
+    consecuencias: "Lo que ves puede estar desactualizado respecto a los dem\xE1s.",
+    recomendacion: "Comprueba la conexi\xF3n y el estado del servidor central.",
+    detectar: ({ s, t, sync, umbral }) => sync.compartido && sync.ultimoSync && t - sync.ultimoSync >= umbral ? [{ entidad: pRef(s), desde: sync.ultimoSync, detalle: "\xDAltima sincronizaci\xF3n hace " + Math.round((t - sync.ultimoSync) / MIN) + " min" }] : []
+  }
+];
+function hora(t) {
+  const d = new Date(t);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+function detectarIncoherencias(s, { t = Date.now(), sync = {} } = {}) {
+  if (!s || !s.prev) return [];
+  const cfg = s.prev.cfg && s.prev.cfg.reglas || {};
+  const out = [];
+  const vistos = /* @__PURE__ */ new Set();
+  for (const r of REGLAS) {
+    const c = cfg[r.id] || {};
+    if (c.activa === false) continue;
+    const umbral = c.umbral != null ? c.umbral : r.umbral;
+    let hs;
+    try {
+      hs = r.detectar({ s, t, sync: sync || {}, umbral: umbral != null ? umbral * MIN : null }) || [];
+    } catch {
+      hs = [];
+    }
+    for (const h of hs) {
+      const id = r.id + ":" + h.entidad.k + ":" + h.entidad.id;
+      if (vistos.has(id)) continue;
+      vistos.add(id);
+      const firma = id + "|" + (h.desde || 0);
+      const rev = s.revisiones && s.revisiones[id];
+      out.push({ id, regla: r.id, grupo: r.grupo, nivel: NIVELES[c.nivel] ? c.nivel : r.nivel, titulo: r.titulo, porque: r.porque, consecuencias: r.consecuencias, recomendacion: r.recomendacion, entidad: h.entidad, desde: h.desde || null, detalle: h.detalle, firma, revision: rev && rev.firma === firma ? rev : null });
+    }
+  }
+  return out.sort((a, b) => NIVELES[b.nivel].orden - NIVELES[a.nivel].orden || (a.desde || 0) - (b.desde || 0));
+}
+
 // src/core/crypto.js
 var subtle = () => globalThis.crypto.subtle;
 async function importAes(raw, extractable = true) {
@@ -1378,7 +1719,7 @@ function crearModoServidor(deps) {
     } catch {
     }
   }
-  const activo = (o) => !!(o && o.meta && o.meta.modo === "servidor");
+  const activo2 = (o) => !!(o && o.meta && o.meta.modo === "servidor");
   const rd = (o, n, def) => {
     try {
       return JSON.parse(fs.readFileSync(path.join(o.dir, n), "utf8"));
@@ -2015,7 +2356,7 @@ function crearModoServidor(deps) {
     return nuevaSesion(o, u, dev);
   }
   async function migrar(o, secretB64, { usuario = "", dev = "" } = {}) {
-    if (activo(o)) throw err(409, "El espacio central ya est\xE1 en modo servidor");
+    if (activo2(o)) throw err(409, "El espacio central ya est\xE1 en modo servidor");
     const k = await orgKeys(unb64(secretB64));
     if (k.tokenHash !== o.meta.tokenHash) throw err(403, "La clave no corresponde a este espacio central");
     const copia = path.join(DATA, "_servidor", "copias", o.meta.org + "-" + (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-"));
@@ -2101,7 +2442,26 @@ function crearModoServidor(deps) {
     auditar(o, quien, "Cambio de contrase\xF1a", quien.u.usuario, "", "Las dem\xE1s sesiones siguen abiertas; los otros dispositivos piden la nueva contrase\xF1a");
   }
   const registroAbierto = (o) => o.ms ? !!o.ms.ajustes.registroAbierto : rd(o, "ajustes.json", {}).registroAbierto !== false;
-  return { registroAbierto, activo, preparar, autenticar, publico, privado, exige, validarConfig, configGuardada, validarRegistro, puedeVerPrev, validarOps, aplicar, iniciarEspacio, migrar, indexar, custodiarPrev, cambiarContrasena, orgDePrev: (pid) => pidOrg.get(pid) || null };
+  function resumenControl(o) {
+    const t = Date.now();
+    const out = [];
+    for (const [pid, e] of o.ms && o.ms.motores || []) {
+      const s = e.state;
+      if (!s || !s.prev) continue;
+      const pend = Object.values(s.conflicts || {}).filter((c) => c.estado === "pendiente");
+      let inc = [];
+      try {
+        inc = detectarIncoherencias(s, { t });
+      } catch {
+      }
+      const porNivel = {};
+      for (const h of inc) if (!h.revision || h.revision.estado === "abierta") porNivel[h.nivel] = (porNivel[h.nivel] || 0) + 1;
+      out.push({ pid, nombre: s.prev.nombre, estado: s.prev.estado, conflictos: pend.length, conflictoMasAntiguo: pend.length ? Math.min(...pend.map((c) => c.t || t)) : null, incoherencias: porNivel });
+    }
+    return out;
+  }
+  const auditarAcceso = (o, quien, accion) => auditar(o, quien, accion);
+  return { resumenControl, auditarAcceso, registroAbierto, activo: activo2, preparar, autenticar, publico, privado, exige, validarConfig, configGuardada, validarRegistro, puedeVerPrev, validarOps, aplicar, iniciarEspacio, migrar, indexar, custodiarPrev, cambiarContrasena, orgDePrev: (pid) => pidOrg.get(pid) || null };
 }
 export {
   crearModoServidor,

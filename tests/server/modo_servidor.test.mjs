@@ -184,6 +184,19 @@ test('tipo de recurso inactivo: el servidor rechaza la unidad nueva aunque el di
   assert.ok(!ok.res[0].rechazada, 'con un tipo activo sí');
 });
 
+test('estado del sistema (1.5.0): solo con el permiso «sistema.estado»; sin secretos; la consulta queda auditada', async () => {
+  const no = await api('/org/' + ORG + '/admin/estado', { method: 'POST', token: opeSes, body: {} });
+  assert.equal(no.status, 403); assert.equal(no.codigo, 'permiso');
+  const e = await api('/org/' + ORG + '/admin/estado', { method: 'POST', token: admin, body: {} });
+  assert.equal(e.status, 200); assert.equal(e.espacio.modo, 'servidor');
+  const c = e.sincronizacion.control.find(x => x.pid === PID); assert.ok(c, 'preventivos cargados en el servidor con sus conflictos e incoherencias');
+  assert.ok(e.sincronizacion.recibidas > 0 && e.sincronizacion.rechazadas > 0, 'cuenta operaciones aceptadas y rechazadas');
+  assert.deepEqual(e.servidor.errores, [], 'ninguna petición atendida sigue ejecutándose ni intenta responder dos veces');
+  const txt = JSON.stringify(e); for (const x of [admin, opeSes, ADMIN, b64(secret)]) assert.ok(!txt.includes(x), 'sin secretos');
+  const aud = await api('/org/' + ORG + '/admin/auditoria', { token: admin });
+  assert.ok(aud.registros.some(r => r.accion === 'Consulta del estado del sistema' && r.actor.usuario === 'jefa'));
+});
+
 test('alcance por preventivo y suspensión inmediata', async () => {
   const r = await api('/org/' + ORG + '/admin/usuarios', { method: 'POST', token: admin, body: { usuario: 'eva', nombre: 'Eva', perfil: 'rol_operador', pw: await pw('clave-eva-11'), alcance: { tipo: 'seleccion', preventivos: { otro_prev_1: null } } } });
   assert.equal(r.status, 201); assert.equal(r.usuario.estado, 'activo');

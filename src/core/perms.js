@@ -67,6 +67,7 @@ export const PERMISOS = [
   ['sync.gestionar', 'Gestionar la sincronización', 'Administración'],
   ['central.gestionar', 'Configurar el servidor central y dar de alta dispositivos', 'Administración'],
   ['actualizaciones.gestionar', 'Gestionar las actualizaciones del servidor central y de la aplicación', 'Administración'],
+  ['sistema.estado', 'Consultar el estado técnico del servidor y del sistema (monitorización)', 'Administración'],
 ];
 export const PERM_KEYS = PERMISOS.map(p => p[0]);
 export const PERM_LABEL = Object.fromEntries(PERMISOS.map(p => [p[0], p[1]]));
@@ -85,6 +86,7 @@ export const IMPLICA = {
   'config.editar': ['sectores.gestionar'],
   'exportar': ['informes.generar'],
   'informes.generar': ['informes.ver'],
+  'actualizaciones.gestionar': ['sistema.estado'],
   'usuarios.admin': ['usuarios.crear', 'usuarios.editar', 'usuarios.aprobar', 'usuarios.permisos', 'auditoria.ver'],
 };
 const VER = PERMISOS_VER.filter(k => k !== 'auditoria.ver');

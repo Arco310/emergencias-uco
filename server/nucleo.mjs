@@ -4,5 +4,6 @@ export { Engine, applyOp, lazyCopy } from '../src/core/engine.js';
 export { permisosEfectivos, permisosOp, comprobarCambioUsuario, defaultRoles, normalizarPerfil, estadoUsuario, accesoPreventivo, PERM_KEYS, PERM_LABEL } from '../src/core/perms.js';
 export { motivoTipoNoDisponible } from '../src/core/recursos.js';
 export { motivoContenidoNoValido } from '../src/core/ubicacion.js';
+export { detectarIncoherencias } from '../src/core/validaciones.js';
 export { orgKeys, prevKeys, open, seal } from '../src/core/crypto.js';
 export { unb64, b64 } from '../src/core/util.js';

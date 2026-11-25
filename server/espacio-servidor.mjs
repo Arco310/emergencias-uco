@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Engine, applyOp, lazyCopy, permisosEfectivos, permisosOp, comprobarCambioUsuario, defaultRoles, normalizarPerfil, estadoUsuario, accesoPreventivo, PERM_KEYS, PERM_LABEL, motivoTipoNoDisponible, motivoContenidoNoValido, orgKeys, prevKeys, open, seal, unb64 } from './nucleo.mjs';
+import { detectarIncoherencias, Engine, applyOp, lazyCopy, permisosEfectivos, permisosOp, comprobarCambioUsuario, defaultRoles, normalizarPerfil, estadoUsuario, accesoPreventivo, PERM_KEYS, PERM_LABEL, motivoTipoNoDisponible, motivoContenidoNoValido, orgKeys, prevKeys, open, seal, unb64 } from './nucleo.mjs';
 
 const SESION_MS = 90 * 24 * 3600e3;      // una sesión caduca a los 90 días sin usarse
 const CODIGO_MS = Number(process.env.UCO_CODIGO_MS) || 72 * 3600e3; // un código de activación o restablecimiento caduca a las 72 h
@@ -556,5 +556,18 @@ export function crearModoServidor(deps) {
 
   /** ¿Admite el espacio solicitudes de cuenta? (dato público para mostrar «Crear una cuenta») */
   const registroAbierto = o => (o.ms ? !!o.ms.ajustes.registroAbierto : rd(o, 'ajustes.json', {}).registroAbierto !== false);
-  return { registroAbierto, activo, preparar, autenticar, publico, privado, exige, validarConfig, configGuardada, validarRegistro, puedeVerPrev, validarOps, aplicar, iniciarEspacio, migrar, indexar, custodiarPrev, cambiarContrasena, orgDePrev: pid => pidOrg.get(pid) || null };
+  /** Monitorización (1.5.0): conflictos pendientes e incoherencias de los preventivos que el servidor tiene cargados */
+  function resumenControl(o) {
+    const t = Date.now(); const out = [];
+    for (const [pid, e] of (o.ms && o.ms.motores) || []) {
+      const s = e.state; if (!s || !s.prev) continue;
+      const pend = Object.values(s.conflicts || {}).filter(c => c.estado === 'pendiente');
+      let inc = []; try { inc = detectarIncoherencias(s, { t }); } catch { }
+      const porNivel = {}; for (const h of inc) if (!h.revision || h.revision.estado === 'abierta') porNivel[h.nivel] = (porNivel[h.nivel] || 0) + 1;
+      out.push({ pid, nombre: s.prev.nombre, estado: s.prev.estado, conflictos: pend.length, conflictoMasAntiguo: pend.length ? Math.min(...pend.map(c => c.t || t)) : null, incoherencias: porNivel });
+    }
+    return out;
+  }
+  const auditarAcceso = (o, quien, accion) => auditar(o, quien, accion);
+  return { resumenControl, auditarAcceso, registroAbierto, activo, preparar, autenticar, publico, privado, exige, validarConfig, configGuardada, validarRegistro, puedeVerPrev, validarOps, aplicar, iniciarEspacio, migrar, indexar, custodiarPrev, cambiarContrasena, orgDePrev: pid => pidOrg.get(pid) || null };
 }

@@ -501,8 +501,25 @@ def scenario_shared(browser):
         T.shot('05-actualizaciones')
         return 'Sistema → Actualizaciones muestra el servidor y los 2 dispositivos con su nombre y versión'
     check('Actualizaciones: estado del servidor y de los dispositivos', dispositivos_panel)
+    def estado_anterior():
+        # 1.5.0: en el modo anterior el estado técnico exige además el código de administración del servidor
+        T.pg.evaluate('() => window.__UCO.go("estado")'); T.pg.wait_for_selector('form[data-f="est.codigo"]', timeout=20000)
+        T.pg.locator('form[data-f="est.codigo"] [name=codigo]').fill('AAAAA-BBBBB-CCCCC-DDDDD'); T.pg.locator('form[data-f="est.codigo"] button.primary').click(); T.pg.wait_for_timeout(1500)
+        assert T.pg.locator('form[data-f="est.codigo"]').count() == 1 and 'incorrecto' in T.pg.inner_text('main'), 'código erróneo: se sigue pidiendo'
+        T.pg.locator('form[data-f="est.codigo"] [name=codigo]').fill(ADMIN_CODE); T.pg.locator('form[data-f="est.codigo"] button.primary').click()
+        T.pg.wait_for_selector('section.card h2:has-text("Datos y almacenamiento")', timeout=20000)
+        txt = T.pg.inner_text('main')
+        for t in ['Alertas', 'Servidor', 'Datos y almacenamiento', 'Recursos del equipo', 'Sincronización', 'Copias de seguridad', 'Este dispositivo', 'Servicios externos']: assert t in txt, t
+        assert 'modo anterior' in txt and 'Tablet mando' in txt and 'Móvil sector 2' in txt, txt[:800]
+        assert ADMIN_CODE not in txt, 'el código no se muestra'
+        T.shot('05-estado-sistema', True)
+        return 'pide el código de administración (uno erróneo no sirve); servidor, datos, recursos, sincronización con los dos dispositivos activos, copias y alertas; sin secretos'
+    check('Estado del sistema en el modo anterior (con el código del servidor)', estado_anterior)
     def caida_servidor():
         SRV['p'].terminate(); SRV['p'].wait(10)
+        # 1.5.0: el panel de estado avisa de que el servidor no responde
+        T.pg.evaluate('() => window.__UCO.go("estado")'); T.a('est.cargar')
+        T.pg.wait_for_function("() => document.querySelector('main').innerText.includes('El servidor central no responde')", timeout=40000)
         T.nav('avisos'); T.a('a.new'); T.a('inc.mas'); T.fill('desc', 'Con el servidor caído'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(500); T.close_sheets()
         a1 = T.unit_id('A1'); T.open_unit('A1'); T.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); T.pg.wait_for_timeout(400); T.close_sheets()
         T.pg.evaluate('() => window.__UCO.core.sync.syncNow(window.__UCO.core.cur)'); T.pg.wait_for_timeout(800)
@@ -1328,6 +1345,17 @@ def scenario_modo_servidor(b):
             assert r == [True, True], r
             return 'perfil nuevo desde la interfaz, duplicado, borrado el que no se usa y asignado a un usuario'
         check('Perfiles de permisos: crear, duplicar, eliminar y asignar', perfiles)
+        def estado_servidor():
+            A.nav('sistema'); A.pg.locator('[data-a="nav"][data-v="estado"]').first.click()
+            A.pg.wait_for_selector('section.card h2:has-text("Datos y almacenamiento")', timeout=20000)
+            txt = A.pg.inner_text('main')
+            for t in ['Alertas', 'Servidor', 'Datos y almacenamiento', 'Recursos del equipo', 'Sincronización', 'Copias de seguridad', 'Este dispositivo', 'Servicios externos']: assert t in txt, t
+            assert 'modo servidor' in txt and 'Tablet PC' in txt and 'Preventivos cargados en el servidor' in txt, txt[:800]
+            B.nav('sistema'); B.pg.wait_for_timeout(400)
+            assert B.pg.locator('[data-a="nav"][data-v="estado"]').count() == 0, 'un operador no ve el estado del sistema'
+            A.shot('03-estado-sistema', True)
+            return 'la administradora ve el estado (modo servidor, sin pedir código); un operador no tiene la opción'
+        check('Estado del sistema (solo administradores)', estado_servidor)
         for app, n in ((A, 'admin'), (B, 'Luis'), (C, 'registro')):
             check('Sin errores de JavaScript (escenario 10, ' + n + ')', lambda app=app: (_ for _ in ()).throw(Exception('; '.join(app.errors[:5]))) if app.errors else 'ninguno')
         for app in (A, B, C): app.ctx.close()

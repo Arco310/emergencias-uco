@@ -692,6 +692,19 @@ export class AppCore {
   /** La aplicación se acaba de actualizar (o de volver a la versión anterior): se anota al iniciar sesión */
   registrarActualizacion(info) { this._actualizada = info; }
   async actualizacionesServidor() { return this.central.adminActualizaciones(); }
+  /** Monitorización (1.5.0): estado técnico del servidor central (solo con el permiso «sistema.estado») */
+  async estadoSistema({ codigo = null } = {}) {
+    if (!this.can('sistema.estado')) throw new AppError('No tienes permiso para consultar el estado del sistema', 'permiso');
+    return this.central.estadoSistema({ codigo });
+  }
+  /** Lo que sabe este dispositivo: versión, conexión, almacenamiento, copias locales y cambios sin enviar */
+  async estadoDispositivo() {
+    let almacen = null; try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); almacen = { usado: e.usage || 0, cuota: e.quota || 0 }; } } catch { }
+    const copias = await this.repo.listBackups().catch(() => []);
+    const pendientes = [];
+    for (const s of this.summaries || []) if (s.modalidad === 'compartida') { const n = await this.repo.countPending(s.id).catch(() => 0); if (n) pendientes.push({ nombre: s.nombre, n }); }
+    return { online: navigator.onLine !== false, almacen, ultimaCopia: copias[0] || null, copias: copias.length, pendientes, central: this.central.status() };
+  }
   async dispositivosCentral() { return this.central.dispositivos(); }
   /** Acciones sobre el servidor central: permiso de la aplicación y, en el servidor, su código de administración */
   async accionActualizacionServidor(accion, { codigo = '', forzar = false } = {}) {

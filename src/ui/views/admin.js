@@ -483,6 +483,7 @@ export function renderSystemMenu() {
     ${tile('usuario', core().modoServidor() ? 'Usuarios y permisos' : 'Usuarios y roles', 'nav', { v: 'usuarios' }, core().modoServidor() ? 'En el servidor central' : '')}
     ${tile('archivar', 'Copias de seguridad', 'nav', { v: 'copias' })}
     ${can('auditoria.ver') ? tile('bitacora', 'Auditoría del sistema', 'nav', { v: 'auditoria' }) : ''}
+    ${can('sistema.estado') ? tile('grafico', 'Estado del sistema', 'nav', { v: 'estado' }, 'Servidor, datos, sincronización y copias') : ''}
     ${tile('descargar', 'Actualizaciones', 'nav', { v: 'actualizaciones' }, core().bloqueoSync ? 'Actualización necesaria' : estadoApp().lista ? 'Versión ' + (estadoApp().lista.version || 'nueva') + ' lista' : 'Versión ' + APP_VERSION)}
     ${tile('escudo', 'Permisos del dispositivo', 'nav', { v: 'permisos' })}
     ${tile('llave', 'Mi cuenta', 'nav', { v: 'cuenta' })}

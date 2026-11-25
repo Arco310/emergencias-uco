@@ -16,6 +16,7 @@ import * as analysis from './views/analysis.js';
 import { renderIncoherencias, insigniaIncoherencias } from './views/incoherencias.js';
 import * as admin from './views/admin.js';
 import * as actualizaciones from './views/actualizaciones.js';
+import { renderEstado } from './views/sistema.js';
 import { iniciarActualizaciones, arranqueOk, estadoApp } from './actualizacion.js';
 
 /* global __PREVIEW__ */
@@ -37,6 +38,7 @@ const VIEWS = {
   acerca: { t: 'Acerca de', ic: 'info', scope: 'g', r: admin.renderAbout, parent: 'sistema' },
   central: { t: 'Servidor central', ic: 'sync', scope: 'g', r: admin.renderCentral, parent: 'sistema' },
   actualizaciones: { t: 'Actualizaciones', ic: 'descargar', scope: 'g', r: actualizaciones.renderActualizaciones, parent: 'sistema' },
+  estado: { t: 'Estado del sistema', ic: 'grafico', scope: 'g', r: renderEstado, parent: 'sistema', perm: 'sistema.estado' },
   // Dentro de un preventivo
   panel: { t: 'Centro de control', ic: 'panel', scope: 'p', r: ops.renderPanel },
   unidades: { t: 'Unidades', ic: 'unidades', scope: 'p', r: ops.renderUnits, perm: 'unidades.ver' },

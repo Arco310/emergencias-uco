@@ -102,7 +102,7 @@ const { zipStore } = await import('./src/core/zip.js');
 const PW = path.join(DIST, 'servidor-uco-windows');
 fs.cpSync(path.join(ROOT, 'servidor-windows'), PW, { recursive: true });
 fs.mkdirSync(path.join(PW, 'servidor'), { recursive: true });
-for (const f of ['server.mjs', 'actualizador.mjs', 'lanzador.mjs']) fs.copyFileSync(path.join(ROOT, 'server', f), path.join(PW, 'servidor', f));
+for (const f of ['server.mjs', 'actualizador.mjs', 'lanzador.mjs', 'monitor.mjs']) fs.copyFileSync(path.join(ROOT, 'server', f), path.join(PW, 'servidor', f));
 // Modo servidor (1.4.0): se empaqueta en un solo archivo con la lógica compartida con la app (permisos, motor, cifrado)
 await esbuild.build({ entryPoints: [path.join(ROOT, 'server/espacio-servidor.mjs')], bundle: true, format: 'esm', platform: 'node', target: 'node18', outfile: path.join(PW, 'servidor', 'espacio-servidor.mjs'), logLevel: 'error', legalComments: 'none', banner: { js: '// Gestor de Emergencias UCO · modo servidor (generado por build.mjs a partir de server/espacio-servidor.mjs y src/core)' } });
 fs.cpSync(APP, path.join(PW, 'app'), { recursive: true });
