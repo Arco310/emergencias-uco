@@ -1,11 +1,11 @@
 {
- "fecha": "2026-11-25 13:29:15",
+ "fecha": "2026-11-25 19:35:31",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
    "prueba": "Alta inicial del administrador y clave de recuperación",
    "resultado": "SUPERADA",
-   "detalle": "clave 0F7C2…"
+   "detalle": "clave JVZQ8…"
   },
   {
    "prueba": "Permisos del dispositivo: solicitar todos",
@@ -155,7 +155,7 @@
   {
    "prueba": "Compartido: desconexión, trabajo local y reconexión",
    "resultado": "SUPERADA",
-   "detalle": "trabajo sin red (ref. provisional ZV-2, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas; recibido por el servidor 7 s después de registrarse"
+   "detalle": "trabajo sin red (ref. provisional HJ-2, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas; recibido por el servidor 7 s después de registrarse"
   },
   {
    "prueba": "Compartido: resolución de conflictos",
@@ -460,7 +460,7 @@
   {
    "prueba": "Modo servidor: alta de usuarios con y sin contraseña desde la administración",
    "resultado": "SUPERADA",
-   "detalle": "servidor central activado en modo servidor; alta de Luis (código + PIN, código EMX2-4EY9-ME) y de Pepe (contraseña)"
+   "detalle": "servidor central activado en modo servidor; alta de Luis (código + PIN, código DCVB-6XKF-DK) y de Pepe (contraseña)"
   },
   {
    "prueba": "Cuenta sin contraseña: activación con código y entrada con PIN",
@@ -535,7 +535,7 @@
   {
    "prueba": "Capas: unidades, avisos, sectores y puntos con su leyenda",
    "resultado": "SUPERADA",
-   "detalle": "3 unidades (una con el símbolo de descanso), aviso activo, sector delimitado con su nombre, 2 puntos y leyenda con símbolos"
+   "detalle": "3 unidades (una con el símbolo de descanso), aviso activo con su código de incidente, sector delimitado con su nombre, 2 puntos y leyenda con símbolos"
   },
   {
    "prueba": "Filtros combinados y restablecer (ocultar no es desactivar)",
@@ -558,6 +558,11 @@
    "detalle": "unidad y aviso: ficha dentro del mapa (situación, clave, unidades) con acceso a la ficha completa"
   },
   {
+   "prueba": "Ficha del aviso en el mapa: historial y acciones según permisos",
+   "resultado": "SUPERADA",
+   "detalle": "historial reciente (2 líneas) y acciones en la ficha; sin permisos no aparecen; asignar abre las sugerencias y finalizar actualiza la ficha sin salir del plano"
+  },
+  {
    "prueba": "Preferencias de visualización por preventivo",
    "resultado": "SUPERADA",
    "detalle": "filtro guardado tras recargar en ese preventivo; el otro preventivo no se ve afectado"
@@ -565,7 +570,7 @@
   {
    "prueba": "Muchos elementos: agrupación y fluidez",
    "resultado": "SUPERADA",
-   "detalle": "150 unidades: 5 grupos al abrir (2063 ms hasta ver el plano); al tocar un grupo se acerca y aparecen 150 unidades sueltas"
+   "detalle": "150 unidades: 5 grupos al abrir (2061 ms hasta ver el plano); al tocar un grupo se acerca y aparecen 150 unidades sueltas"
   },
   {
    "prueba": "Sin errores de JavaScript (escenario 12)",
@@ -581,6 +586,11 @@
    "prueba": "Ubicación sin el mapa: punto del plano y coordenadas validadas",
    "resultado": "SUPERADA",
    "detalle": "sin tocar el mapa: coordenadas imposibles rechazadas; punto del plano «Puerta 3» como ubicación (origen «punto»), y el aviso aparece en el plano"
+  },
+  {
+   "prueba": "Ubicación por texto (dirección escrita)",
+   "resultado": "SUPERADA",
+   "detalle": "dirección escrita sin coordenadas: origen «dirección» y sin posición inventada"
   },
   {
    "prueba": "Accesibilidad: crear un aviso solo con el teclado",
@@ -648,6 +658,11 @@
    "detalle": "sin desplazamiento horizontal (358 px en 358 px); filas de unidades de 78 px"
   },
   {
+   "prueba": "Eliminar la plantilla no afecta a los preventivos creados",
+   "resultado": "SUPERADA",
+   "detalle": "eliminada la plantilla usada: «Concierto 2» se abre igual, con sus 2 unidades y su origen (versión 2)"
+  },
+  {
    "prueba": "Sin errores de JavaScript (escenario 15)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
@@ -660,7 +675,7 @@
   {
    "prueba": "Informe generado automáticamente al finalizar",
    "resultado": "SUPERADA",
-   "detalle": "al finalizar: versión 1 guardada y registrada (SHA-256 7f8ff1b71a4f…), preventivo cerrado y archivado"
+   "detalle": "al finalizar: versión 1 guardada y registrada (SHA-256 7ba4516b43bf…), preventivo cerrado y archivado"
   },
   {
    "prueba": "Descarga de la versión, contenido y comprobación de la huella",
@@ -673,7 +688,92 @@
    "detalle": "versión 2 con motivo; la 1 se conserva con su huella; unidades y avisos intactos; todo en la bitácora"
   },
   {
+   "prueba": "Plantilla desde un preventivo finalizado",
+   "resultado": "SUPERADA",
+   "detalle": "plantilla «Carrera tipo» desde el preventivo cerrado y archivado: 3 unidades y 4 sectores, sin avisos; el origen no cambia (24 operaciones)"
+  },
+  {
    "prueba": "Sin errores de JavaScript (escenario 16)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Móvil 320 px (reorganización: equivale a ampliar al 400 %): pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste",
+   "resultado": "SUPERADA",
+   "detalle": "14 pantallas a 320 px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (Móvil 320 px (reorganización: equivale a ampliar al 400 %))",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Móvil 390 px: pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste",
+   "resultado": "SUPERADA",
+   "detalle": "14 pantallas a 390 px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA"
+  },
+  {
+   "prueba": "Móvil 390 px: aviso desde el mapa de principio a fin",
+   "resultado": "SUPERADA",
+   "detalle": "marcar en el mapa, ajustar con botones, confirmar con Intro, elegir una unidad libre y crear; ficha con historial y acciones"
+  },
+  {
+   "prueba": "Móvil 390 px: revisar una incoherencia y descargar el informe",
+   "resultado": "SUPERADA",
+   "detalle": "incoherencia marcada como revisada con su nota; informe PDF provisional y Excel descargados"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (Móvil 390 px)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Tablet 1280 px: pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste",
+   "resultado": "SUPERADA",
+   "detalle": "14 pantallas a 1280 px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (Tablet 1280 px)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Escritorio 1920 px con ratón: pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste",
+   "resultado": "SUPERADA",
+   "detalle": "14 pantallas a 1920 px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA"
+  },
+  {
+   "prueba": "Escritorio 1920 px con ratón: aviso desde el mapa de principio a fin",
+   "resultado": "SUPERADA",
+   "detalle": "marcar en el mapa, ajustar con botones, confirmar con Intro, elegir una unidad libre y crear; ficha con historial y acciones"
+  },
+  {
+   "prueba": "Escritorio 1920 px con ratón: revisar una incoherencia y descargar el informe",
+   "resultado": "SUPERADA",
+   "detalle": "incoherencia marcada como revisada con su nota; informe PDF provisional y Excel descargados"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (Escritorio 1920 px con ratón)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Tema oscuro en el móvil: pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste",
+   "resultado": "SUPERADA",
+   "detalle": "14 pantallas a 390 px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (Tema oscuro en el móvil)",
+   "resultado": "SUPERADA",
+   "detalle": "ninguno"
+  },
+  {
+   "prueba": "Tema oscuro en la tablet: pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste",
+   "resultado": "SUPERADA",
+   "detalle": "14 pantallas a 1280 px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (Tema oscuro en la tablet)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

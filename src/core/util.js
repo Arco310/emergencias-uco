@@ -140,9 +140,11 @@ export function relLuminance(hexColor) {
   return 0.2126 * lin(parseInt(v.slice(0, 2), 16)) + 0.7152 * lin(parseInt(v.slice(2, 4), 16)) + 0.0722 * lin(parseInt(v.slice(4, 6), 16));
 }
 export function contrastRatio(a, b) { const x = relLuminance(a), y = relLuminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
-/** Texto legible (negro o blanco) sobre un fondo: el de mayor contraste WCAG */
+/** Texto legible (negro o blanco) sobre un fondo: el de mayor contraste WCAG. Con negro puro el mejor de los dos
+ *  alcanza siempre 4,58:1 (WCAG AA) sea cual sea el color que configure el usuario; con #111111 había colores
+ *  intermedios que se quedaban en 4,35:1. */
 export function contrastText(hexColor) {
-  return contrastRatio(hexColor, '#111111') >= contrastRatio(hexColor, '#FFFFFF') ? '#111111' : '#FFFFFF';
+  return contrastRatio(hexColor, '#000000') >= contrastRatio(hexColor, '#FFFFFF') ? '#000000' : '#FFFFFF';
 }
 export function isHexColor(s) { return /^#[0-9a-fA-F]{6}$/.test(String(s || '')); }
 

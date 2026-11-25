@@ -1,5 +1,57 @@
 # Informe de pruebas — Evolución integral (versiones 1.3.0, 1.4.0 y 1.5.0)
 
+## 1.5.0 — revisión final contra los textos (25/11/2026, tarde)
+
+Repetido todo sobre la compilación final, en el mismo entorno (Linux, Node 22, Chromium de Playwright y servidor real en `127.0.0.1`):
+
+| Conjunto | Resultado |
+|---|---|
+| `npm test` (unidad y servidor; incluye el paquete de Windows) | **201/201** (6 nuevas) |
+| E2E completo en una sola ejecución (`python3 tests/e2e/run_e2e.py`, escenarios 1–17) | **155/155** |
+| Comprobaciones de calidad (`python3 tests/checks/comprobaciones.py`) | **12/12** (no funcionaba desde la 1.3.0; corregido) |
+
+**Pruebas nuevas:**
+- **`tests/unit/accesibilidad.test.mjs` (3):**
+  - el texto negro o blanco sobre cualquier color configurable alcanza 4,5:1 (barrido de 5.832 colores);
+  - las etiquetas de colores son legibles en los temas claro y oscuro con todos los colores de partida;
+  - los colores del tema oscuro (estados, botón principal, cifras del panel) son legibles.
+  - Se vio fallar antes de corregir.
+- **`tests/server/actualizador_arranque.test.mjs` (3):**
+  - una versión recién instalada consulta las versiones publicadas al arrancar;
+  - reiniciar la misma versión no consulta;
+  - la instancia de prueba de una versión tampoco.
+  - Se vio fallar antes de corregir.
+- **Escenario E2E 17 (16 comprobaciones).** Recorre 14 pantallas en 6 configuraciones: móvil a 320 y 390 px, tablet a 1280 px, escritorio a 1920 px con ratón, y tema oscuro en el móvil y en la tablet.
+  - La auditoría `tests/e2e/auditoria_a11y.js` comprueba:
+    - que nada se sale del ancho y que no hay palabras partidas;
+    - objetivos de al menos 24 px;
+    - nombres accesibles (árbol de accesibilidad del navegador);
+    - contraste del texto.
+  - Se comprobó con una página de prueba que detecta cada tipo de problema.
+  - En el móvil y el escritorio, además: aviso desde el mapa de principio a fin, revisión de una incoherencia y descarga del PDF y del Excel.
+- **Escenario 12:**
+  - ficha del aviso en el mapa con historial y acciones según permisos;
+  - código de incidente en el marcador.
+  - Se vio fallar antes de corregir.
+- **Escenario 16:** plantilla desde un preventivo finalizado (cerrado y archivado), desde la pantalla, sin cambiar el origen.
+
+**Fallos encontrados y corregidos en esta revisión:**
+1. Etiquetas de colores con poco contraste: 2,15:1 en la barra superior y 3,99:1 en los códigos de incidente.
+2. Tema oscuro:
+   - botones principales a 3,49:1;
+   - cifras del panel a 1,74:1;
+   - colores de estado ilegibles.
+3. Texto sobre colores intermedios a 4,35:1 (texto #111 en lugar de negro).
+4. A 320 px, el estado del sistema mostraba sus valores letra a letra. Se vio en las capturas y se añadió a la auditoría la comprobación de palabras partidas.
+5. `tests/checks/comprobaciones.py` no funcionaba desde la 1.3.0: el aviso empieza por el código de incidente.
+6. Tras instalar una versión nueva, el servidor no volvía a consultar las versiones publicadas hasta 6 h después (pendiente desde la 1.3.0).
+
+**No probado aquí** (igual que antes):
+- Android real y lectores de pantalla (TalkBack, NVDA);
+- el PC servidor con la 1.5.0;
+- la descarga desde GitHub Releases real (no hay ninguna versión publicada);
+- Google con una clave real.
+
 ## 1.5.0 (25/11/2026, rama `mejora-1.5.0`, sin publicar)
 
 Solo pruebas ejecutadas de verdad, en el entorno de desarrollo: Linux, Node 22, Chromium de Playwright y servidor real en `127.0.0.1`.

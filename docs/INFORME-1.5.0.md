@@ -7,17 +7,45 @@
 - novedades: `docs/CAMBIOS.md`;
 - detalle de cada parte: `docs/UCO_*.md`.
 
+## Revisión final contra los 6 textos (25/11/2026, tarde)
+Se comprobó, punto por punto y contra el código, todo lo pedido en los seis textos:
+- el «Prompt maestro»;
+- el apartado 18;
+- la «Evolución integral»;
+- los códigos de SAMUR-PC (los 11 grupos y 123 códigos coinciden con el texto);
+- la «Mejora funcional y técnica» (1.4.0);
+- esta «Ampliación» (1.5.0).
+
+Faltaba esto, y se ha completado:
+
+| Faltaba | Hecho |
+|---|---|
+| Documentación general sin actualizar desde la 1.0–1.3 (manual, documentación técnica, README, guía de alojamiento, seguimiento). Contradecía el código: por ejemplo, el manual decía que había que pegar la dirección del servidor | Actualizada a la 1.5.0, comprobando cada nombre de pantalla y botón en el código |
+| Pantallas de la 1.5.0 sin probar en el móvil ni en el escritorio (FASE 4), salvo el asistente | Escenario E2E 17: 14 pantallas en el móvil (320 y 390 px), la tablet, el escritorio y el tema oscuro, con auditoría automática y recorridos completos en el móvil y el escritorio |
+| Ficha del aviso en el mapa sin historial ni acciones (§6) | Historial reciente y «Asignar unidad», «Finalizar» y «Editar» según los permisos |
+| Distinguir avisos por tipo en el mapa (§1) sin depender del color | Código de incidente en la etiqueta del marcador |
+| Plantilla desde un preventivo finalizado sin prueba desde la pantalla (§3) | Escenario 16 |
+| Pendiente desde la 1.3.0: el servidor recién actualizado no volvía a consultar las versiones publicadas hasta 6 h después | Consulta al arrancar una versión nueva (sin consultas de más al reiniciar la misma) |
+| Contraste y reorganización (§7) | Etiquetas, tema oscuro y texto sobre colores configurables corregidos. A 320 px, el estado del sistema ya no parte los valores letra a letra |
+| La comprobación de calidad (`tests/checks/comprobaciones.py`) no funcionaba desde la 1.3.0 | Corregida: 12/12 |
+
+**Sigue dependiendo de ti:**
+- publicar (no se ha desplegado nada);
+- la primera versión en GitHub Releases;
+- la clave de Google;
+- la prueba en un Android físico y con un lector de pantalla.
+
 ## 1. Resumen
 
 | Apartado del encargo | Estado |
 |---|---|
-| §1 Capas y filtros del mapa | **Hecho.** Capas, filtros combinables, leyenda, agrupación, sectores delimitados, puntos de interés y apoyo, ficha contextual y lista alternativa |
+| §1 Capas y filtros del mapa | **Hecho.** Capas, filtros combinables, leyenda, agrupación, sectores delimitados, puntos de interés y apoyo, ficha contextual, lista alternativa y código de incidente en el marcador |
 | §2 Informes al finalizar | **Hecho.** Versión 1 al finalizar, versiones con motivo y huella SHA-256, registro de accesos, horas verificables, PDF ampliado, Excel, CSV y JSON |
 | §3 Plantillas de preventivo | **Hecho.** Elementos a incluir, versiones, restaurar, desactivar, asistente en 7 pasos, permisos de crear, modificar y usar |
 | §4 Monitorización del servidor | **Hecho.** Panel para administradores con alertas e historial, sin secretos, y auditoría de cada consulta |
 | §5 Incoherencias operativas | **Hecho.** 21 reglas, 4 niveles ajustables, revisión, asignación y resolución con historial; nunca cambia datos |
-| §6 Avisos desde el mapa | **Hecho.** Marcador provisional ajustable, ubicación con origen y hora validada en el servidor, unidades con su situación y sugerencias. **Sin prioridad** (decisión tuya) |
-| §7 Accesibilidad (WCAG 2.2 AA como referencia) | **Parcial y declarado:** lo implementado y comprobado está en `UCO_ACCESIBILIDAD.md`. **No se declara conformidad completa** (falta la auditoría manual con lectores de pantalla) |
+| §6 Avisos desde el mapa | **Hecho.** Marcador provisional ajustable, ubicación con origen y hora validada en el servidor, unidades con su situación y sugerencias, y ficha en el mapa con historial y acciones. **Sin prioridad** (decisión tuya) |
+| §7 Accesibilidad (WCAG 2.2 AA como referencia) | **Parcial y declarado.** Lo implementado y comprobado está en `UCO_ACCESIBILIDAD.md`. Incluye la auditoría automática en móvil, tablet, escritorio y tema oscuro (escenario 17). **No se declara conformidad completa:** falta la revisión manual con lectores de pantalla |
 | §8 Técnica, seguridad, rendimiento, sin conexión, documentación | **Hecho.** Ver §5 a §8 de este informe |
 
 ## 2. Problemas encontrados al probar y corregidos
@@ -49,6 +77,7 @@
 - pruebas `tests/unit/{capas,informes,plantillas_versiones,ubicacion,validaciones,xlsx}.test.mjs` y `tests/server/monitor.test.mjs`;
 - generadores E2E `tests/e2e/generar_{capas,incoherencias,plantillas,informes}.mjs`;
 - documentos `docs/UCO_{MAPAS_CAPAS,AVISOS,VALIDACIONES_OPERATIVAS,PLANTILLAS_PREVENTIVOS,INFORMES,MONITORIZACION,ACCESIBILIDAD}.md` y este informe.
+- revisión final: `tests/unit/accesibilidad.test.mjs`, `tests/server/actualizador_arranque.test.mjs` y `tests/e2e/auditoria_a11y.js`.
 
 **Modificados:**
 - `server/{server,espacio-servidor,nucleo}.mjs`;
@@ -59,6 +88,10 @@
 - `build.mjs`;
 - pruebas `tests/e2e/run_e2e.py`, `tests/server/{modo_servidor,servidor}.test.mjs` y `tests/unit/permisos.test.mjs`;
 - `docs/{CAMBIOS,DISENO-1.5.0}.md`.
+- Revisión final:
+  - `server/actualizador.mjs`, `src/core/util.js` (`contrastText`), `src/ui/styles.css` y `src/ui/views/plano.js`;
+  - `servidor-windows/LEEME.txt`, `tests/e2e/run_e2e.py` y `tests/checks/comprobaciones.py`;
+  - `README.md` y `docs/{MANUAL_USUARIO,DOCUMENTACION_TECNICA,GUIA_ALOJAMIENTO,IMPLEMENTATION_STATUS,INFORME_FINAL,TESTING_REPORT,CAMBIOS,UCO_ACCESIBILIDAD,UCO_AVISOS,UCO_MAPAS_CAPAS}.md`.
 
 ## 5. Datos y compatibilidad (sin migraciones destructivas)
 - **Preventivos.** Todo lo nuevo es opcional, y los preventivos anteriores se abren igual:
@@ -102,7 +135,12 @@
 - **Necesitan Internet:** mapas cartográficos que no se hayan cargado antes (solo se ven las teselas guardadas), buscar direcciones y la comprobación de cartografía.
 
 ## 8. Pruebas
-**Unitarias y de servidor (`npm test`): 195/195.** Hay 46 pruebas nuevas respecto a la 1.4.0, que tenía 149.
+**Resultado final, tras la revisión (misma compilación):**
+- `npm test`: **201/201**.
+- Navegador, escenarios 1–17 en una sola ejecución: **155/155**.
+- `tests/checks/comprobaciones.py`: **12/12**.
+
+**Entrega del mediodía:** `npm test` 195/195, con 46 pruebas nuevas respecto a la 1.4.0, que tenía 149.
 
 **Navegador (`tests/e2e/run_e2e.py`, 16 escenarios):**
 - Regresión completa sobre la compilación final: **135/135** (escenarios 1–16, en una sola ejecución).
@@ -116,6 +154,7 @@
 | 15 | Plantillas (7, con eliminar la plantilla usada) |
 | 16 | Informes |
 | 2 y 10 | Estado del sistema (comprobaciones añadidas) |
+| 17 | Móvil (320 y 390 px), tablet, escritorio y tema oscuro: 14 pantallas con auditoría automática y recorridos completos (revisión final) |
 
 - Las comprobaciones añadidas al final (dirección escrita y eliminar la plantilla usada) se ejecutaron aparte sobre la misma compilación: **13: 7/7** y **15: 7/7**.
 - Validadores independientes: Excel abierto con openpyxl y PDF leído con pypdf.
@@ -129,7 +168,7 @@
 | 2 | Filtros combinados | `capas` 5, 7; E2E 12 (filtros combinados y restablecer) |
 | 3 | Ocultar una unidad no cambia su estado | `capas` 5; E2E 12 («ocultar no es desactivar») |
 | 4 | Avisos bien representados | `capas` 6; E2E 12–13 |
-| 5 | Al seleccionar un marcador se ve su información | E2E 12 (ficha contextual sin salir del mapa) |
+| 5 | Al seleccionar un marcador se ve su información | E2E 12 (ficha contextual sin salir del mapa; ficha del aviso con historial y acciones según permisos) |
 | 6 | Mapa con muchos elementos | `capas` 8; E2E 12 (150 unidades) |
 | 7 | Preferencias por preventivo | E2E 12 |
 | 8 | Informe generado al finalizar | E2E 16 (versión 1 al finalizar); E2E 1 y 7 (finalizar) |
@@ -139,7 +178,7 @@
 | 12 | Generar no modifica los datos | `informes` 1; E2E 16 (unidades y avisos idénticos) |
 | 13 | Permisos de consulta y exportación | `informes` 2; `modo_servidor` 5 (el servidor valida el registro) |
 | 14 | Correcciones versionadas | E2E 16 (versión 2 con motivo, la 1 se conserva); `informes` 1, 6–7 |
-| 15 | Plantilla desde un preventivo | E2E 15; E2E 1 |
+| 15 | Plantilla desde un preventivo | E2E 15; E2E 1; E2E 16 (desde un preventivo finalizado) |
 | 16 | Preventivo a partir de ella | E2E 15 (asistente); `plantillas_versiones` 6, 8 |
 | 17 | No comparten estados operativos | `sync_y_datos` (plantillas: copia independiente); `plantillas_versiones` 2; E2E 1 |
 | 18 | No se copian avisos ni historiales | E2E 15 (ningún aviso en la plantilla ni en el nuevo preventivo); `sync_y_datos` |
@@ -163,12 +202,12 @@
 | 36 | Sector o punto de interés | E2E 13 (sector propuesto por la delimitación; punto «Puerta 3») |
 | 37 | Pendientes offline no confirmados | E2E 2 («Pendiente de confirmar» hasta la confirmación) |
 | 38 | Sin depender del ratón ni del arrastre | E2E 13 (solo teclado; flechas en pantalla y del teclado) |
-| 39 | Formularios con teclado y lector de pantalla | E2E 13 (teclado, nombres accesibles, foco). **Sin probar con lectores reales** |
-| 40 | Alternativas que no dependen solo del color | `capas` 9 (símbolos en la leyenda); E2E 12–13 (lista alternativa) |
+| 39 | Formularios con teclado y lector de pantalla | E2E 13 (teclado, nombres accesibles, foco); E2E 17 (nombres accesibles de todos los controles en 14 pantallas, según el árbol de accesibilidad del navegador). **Sin probar con lectores reales** |
+| 40 | Alternativas que no dependen solo del color | `capas` 9 (símbolos en la leyenda); E2E 12–13 (lista alternativa; código de incidente en el marcador); `accesibilidad` 1–3 y E2E 17 (contraste) |
 | 41–47 | Regresión: unidades, avisos, descansos, planos, bitácora, permisos y sincronización sin pérdidas ni duplicados | Regresión E2E 1–16 y `npm test` (convergencia, numeración, conflictos y reenvío) |
 
 ## 9. Pendiente y riesgos
-- **Accesibilidad.** Falta la auditoría manual con TalkBack o NVDA para poder declarar conformidad con WCAG 2.2 AA.
+- **Accesibilidad.** Falta la auditoría manual con TalkBack o NVDA para poder declarar conformidad con WCAG 2.2 AA. Lo automatizable se comprueba en cada ejecución (escenario 17).
 - **Monitorización en el modo anterior.** El servidor no puede leer los preventivos: no muestra sus conflictos ni sus incoherencias, que sí se ven dentro de cada preventivo. En el modo servidor solo se resumen los preventivos cargados desde el último arranque.
 - **PDF de cada versión del informe.** Solo está en el dispositivo que la generó y en sus copias. Los demás ven el registro con su huella y pueden generar otra versión.
 - **Plantillas.** Siguen siendo de cada dispositivo, como en la 1.4.0. No se sincronizan con el servidor central.
@@ -176,6 +215,7 @@
 - **No probado aquí:**
   - Android real y lectores de pantalla;
   - el PC servidor real con la 1.5.0 (sí el paquete para Windows en simulación);
+  - la descarga desde GitHub Releases real: todavía no hay ninguna versión publicada;
   - la cartografía real desde el panel, que en las pruebas no tiene Internet;
   - Google con una clave real.
 

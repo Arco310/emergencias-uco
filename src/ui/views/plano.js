@@ -7,7 +7,7 @@
 import { G, A, F, CH, filt } from '../state.js';
 import { esc, attr, toast, confirmDlg, btn, empty, pickFile, readBytes, closeSheet, openSheet, refreshSheets, fieldsHtml, readForm } from '../dom.js';
 import { icon, unitSvg, SIZE_PX } from '../icons.js';
-import { now, uid } from '../../core/util.js';
+import { now, uid, fmtTime } from '../../core/util.js';
 import { liveUnits, unitLabel, unitSituation, SITUACION_LABEL, sectorNombre, activeParts } from '../../core/engine.js';
 import { normalizarFiltros, filtrosActivos, filtrarUnidades, filtrarAvisos, sectoresVisibles, puntosVisibles, leyenda, agrupar, categoriasPunto, centroide, DISPONIBILIDAD, simboloDisponibilidad, GRUPOS_PUNTO, sectorDePunto } from '../../core/capas.js';
 import { unitVisual, effectiveVis } from '../../core/visual.js';
@@ -17,8 +17,8 @@ import { openUnit, openAviso, avisoNumber, nuevoAvisoEn } from './ops.js';
 import { L, crearMapa, capaBase, aLatLngBounds, NOMBRE_PROVEEDOR, proveedor } from '../mapa.js';
 import { VISTAS_MAPA, VISTA_DEFECTO, nombreVista } from '../../core/mapas.js';
 import { abrirSelectorMapa, abrirBiblioteca, incorporarAlPreventivo } from './cartografia.js';
-import { etiquetaTipoAviso } from '../../core/incidentes.js';
-import { AVISO_ESTADO } from '../../core/timeline.js';
+import { etiquetaTipoAviso, tipoAvisoDef, etiquetaTipo } from '../../core/incidentes.js';
+import { AVISO_ESTADO, avisoHistory } from '../../core/timeline.js';
 
 const urls = new Map(); const loading = new Set();
 const S = () => G.core.state;
@@ -254,7 +254,9 @@ function sincronizar() {
     const fin = a.estado === 'finalizado'; const pos = posAviso(a);
     if (pos && !agrupados.has('a:' + a.id)) {
       av.add(a.id);
-      const html = `<div class="mk av est-${a.estado}${fin ? ' fin' : ''}${a.num == null && a.ref ? ' prov' : ''}${f.sel && f.sel.id === a.id ? ' sel' : ''}" data-mk="a" data-id="${a.id}" title="Aviso ${attr(avisoNumber(a))}${fin ? ' (finalizado)' : ''}"><span class="mk-av">${fin ? '✓' : '!'}</span><span class="mk-l">${esc(avisoNumber(a))}</span></div>`;
+      // El código de incidente acompaña al número: los avisos se distinguen por su tipo sin depender del color
+      const ta = tipoAvisoDef(p.cat.tiposAviso, a.tipo); const cod = ta && ta.codigo ? ta.codigo : '';
+      const html = `<div class="mk av est-${a.estado}${fin ? ' fin' : ''}${a.num == null && a.ref ? ' prov' : ''}${f.sel && f.sel.id === a.id ? ' sel' : ''}" data-mk="a" data-id="${a.id}" title="Aviso ${attr(avisoNumber(a))}${ta ? ' · ' + attr(etiquetaTipo(ta)) : ''}${fin ? ' (finalizado)' : ''}"><span class="mk-av">${fin ? '✓' : '!'}</span><span class="mk-l">${esc(avisoNumber(a))}${cod ? ' · ' + esc(cod) : ''}</span></div>`;
       let m = M.a.get(a.id); const sig = html + JSON.stringify(pos);
       if (!m) { m = L.marker(aLatLng(pos), { icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: false, zIndexOffset: fin ? 100 : 500 }); m.on('click', () => seleccionar('a', a.id)); m.addTo(M.map); M.a.set(a.id, m); }
       else if (m._sig !== sig) { m.setLatLng(aLatLng(pos)); m.setIcon(L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15] })); }
@@ -518,7 +520,7 @@ function seleccionar(k, id) { const f = filt('plano'); f.sel = { k, id }; G.rend
 function tarjetaMapa() {
   const f = filt('plano'); if (!f.sel) return '';
   const s = S(); const p = P(); const t = now(); const { k, id } = f.sel;
-  let cab = '', det = [], acc = '';
+  let cab = '', det = [], acc = '', extra = '';
   if (k === 'u') {
     const u = s.units[id]; if (!u) return ''; const sit = unitSituation(s, u, t); const a = u.aviso && s.avisos[u.aviso];
     cab = unitLabel(u);
@@ -529,7 +531,14 @@ function tarjetaMapa() {
     const part = activeParts(a).map(x => s.units[x.u]).filter(Boolean).map(unitLabel);
     cab = 'Aviso ' + avisoNumber(a);
     det = [esc(etiquetaTipoAviso(p.cat.tiposAviso, a.tipo) || a.desc || ''), esc(AVISO_ESTADO[a.estado] || a.estado), a.num == null && a.ref ? '<b>Pendiente de confirmar por el servidor</b>' : '', part.length ? 'Unidades: ' + esc(part.join(', ')) : 'Sin unidades', a.loc && a.loc.txt ? esc(a.loc.txt) : ''];
-    acc = btn('Abrir aviso', 'plan.selAbrir', { cls: 'primary sm' });
+    // 1.5.0 §6: historial reciente y acciones permitidas en la propia ficha (el historial completo, en «Abrir aviso»)
+    const hist = avisoHistory(G.core.engine(), a.id).slice(-2);
+    extra = hist.length ? `<ul class="tl mini" aria-label="Historial reciente del aviso">${hist.map(e => `<li><time>${fmtTime(e.t)}</time><span>${esc(e.texto)}</span></li>`).join('')}</ul>` : '';
+    const abierto = a.estado !== 'finalizado'; const enCurso = operativo() && !P().archivado;
+    acc = btn('Abrir aviso', 'plan.selAbrir', { cls: 'primary sm', title: 'Ficha completa con todo el historial' })
+      + (enCurso && abierto && can('avisos.asignar') ? btn('Asignar unidad', 'plan.selAsignar', { cls: 'sm' }) : '')
+      + (enCurso && abierto && can('avisos.finalizar') ? btn('Finalizar', 'a.finish', { cls: 'sm', data: { id: a.id } }) : '')
+      + (editable() && can('avisos.editar') ? btn('Editar', 'a.edit', { cls: 'sm ghost', data: { id: a.id } }) : '');
   } else if (k === 's') {
     const sec = (p.cat.sectores || []).find(x => x.id === id); if (!sec) return '';
     const us = liveUnits(s).filter(u => u.sector === id); const av = Object.values(s.avisos).filter(a => a.sector === id && a.estado !== 'finalizado');
@@ -541,10 +550,12 @@ function tarjetaMapa() {
     cab = pt.nombre; det = [esc(c.nombre || ''), esc(GRUPOS_PUNTO[c.grupo] || ''), esc(pt.desc || '')];
     acc = editable() && can('planos.editar') ? btn('Editar', 'plan.puntoEditar', { cls: 'sm', data: { id } }) + btn('Quitar', 'plan.puntoQuitar', { cls: 'sm danger-ghost', data: { id } }) : '';
   }
-  return `<div class="map-card" role="region" aria-live="polite" aria-label="${attr(cab)}" data-map-card="${k}"><div class="grow"><b>${esc(cab)}</b><div class="small">${det.filter(Boolean).join(' · ')}</div></div><div class="row gap-s wrap">${acc}${btn('', 'plan.selCerrar', { cls: 'icon ghost', ic: 'cerrar', title: 'Cerrar' })}</div></div>`;
+  return `<div class="map-card" role="region" aria-live="polite" aria-label="${attr(cab)}" data-map-card="${k}"><div class="grow"><b>${esc(cab)}</b><div class="small">${det.filter(Boolean).join(' · ')}</div>${extra}</div><div class="row gap-s wrap">${acc}${btn('', 'plan.selCerrar', { cls: 'icon ghost', ic: 'cerrar', title: 'Cerrar' })}</div></div>`;
 }
 A['plan.selCerrar'] = () => { filt('plano').sel = null; G.render(); };
 A['plan.selAbrir'] = () => { const sel = filt('plano').sel; if (!sel) return; if (sel.k === 'u') openUnit(sel.id); else if (sel.k === 'a') openAviso(sel.id); };
+/** Asignar desde la ficha del mapa: abre el aviso con las unidades sugeridas (decide el coordinador) */
+A['plan.selAsignar'] = () => { const sel = filt('plano').sel; if (!sel || sel.k !== 'a') return; filt('aviso').sug = sel.id; openAviso(sel.id); };
 A['plan.selClave'] = () => { const sel = filt('plano').sel; if (sel) selectorClave(sel.id); };
 
 // ---------- leyenda ----------

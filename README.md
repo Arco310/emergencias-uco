@@ -1,44 +1,65 @@
 # Gestor de Emergencias UCO
 
-Aplicación para gestionar preventivos y operaciones de emergencia desde teléfonos y tablets Android: unidades totalmente configurables, claves operativas C0–C6 y CESP, color C0 individual, avisos con numeración correlativa, descansos, plano táctico, mapa real, ubicaciones, bitácora, cronologías, estadísticas, informes PDF/JSON/CSV, plantillas, usuarios y permisos, copias de seguridad y sincronización entre varios dispositivos.
+Aplicación para coordinar preventivos y operaciones de emergencia desde teléfonos, tablets y ordenadores.
+- **Operativa:** unidades configurables, claves C0–C6 y CESP con color C0 individual, avisos por código de incidente con numeración correlativa y descansos.
+- **Mapa:** plano de coordinación con capas, filtros y avisos desde el mapa.
+- **Control:** detección de incoherencias, bitácora, cronologías, estadísticas e informes verificables (PDF, Excel, CSV y JSON).
+- **Configuración y equipo:** plantillas con versiones, usuarios y permisos por módulo, copias de seguridad, y sincronización entre dispositivos a través de un servidor central propio.
 
-- **Funciona sin conexión** (modo avión): todos los datos se guardan cifrados en el propio dispositivo.
-- **Se usa desde el navegador** (URL) y **se instala como aplicación** (PWA) en Android, sin tienda ni APK.
-- **Sin servicios de pago**: mapas de Google sin clave de API, búsqueda de coordenadas de OpenStreetMap y servidor de sincronización propio incluido.
+Las características:
+- **Funciona sin conexión** (modo avión): los datos se guardan cifrados en el propio dispositivo y se sincronizan al volver la red.
+- **Se usa desde el navegador** (URL) y **se instala como aplicación** (PWA) en Android, sin tienda ni APK. Se actualiza sola.
+- **Sin servicios de pago obligatorios:** OpenStreetMap e IGN sin clave, y servidor central propio en un PC con Windows. Google Maps Platform es opcional, con clave.
 
 **Aplicación publicada:** https://arco310.github.io/emergencias-uco/ (ábrela en Chrome para Android y elige *Instalar aplicación*).
+**Versión en desarrollo:** 1.5.0 en la rama `mejora-1.5.0`, sin publicar. Las novedades están en [docs/CAMBIOS.md](docs/CAMBIOS.md).
 
-## Contenido del paquete
+## Contenido
 
 | Carpeta | Contenido |
 |---|---|
-| `dist/app/` | **Aplicación lista para publicar** (subir tal cual a un alojamiento HTTPS). |
-| `dist/preview.html` | Vista previa de un solo archivo (sin modo sin conexión ni guardado fiable). |
-| `server/server.mjs` | Servidor de sincronización (Node.js 18+, sin dependencias). También puede servir la aplicación. |
-| `dist/servidor-uco-windows.zip` | **Servidor de sincronización para un PC con Windows**: instalador de doble clic con dirección HTTPS fija gratuita (Tailscale Funnel) y arranque automático. Ver `LEEME.txt` dentro del ZIP. |
-| `servidor-windows/` | Código del instalador para Windows. |
-| `src/` | Código fuente: `core/` (lógica de negocio), `data/` (almacenamiento cifrado y sincronización), `app/` (núcleo), `ui/` (interfaz). |
-| `tests/` | Pruebas automáticas: unidad, servidor e integración (incluido el instalador para Windows, simulado), aceptación en navegador (Playwright), comprobaciones en vivo y rendimiento (`tests/perf/`). |
-| `docs/` | Guía de alojamiento, manual de usuario, documentación técnica e informe de pruebas. |
+| `src/` | Código fuente: `core/` (lógica de negocio), `data/` (almacenamiento cifrado, sincronización y espacio central), `app/` (núcleo), `ui/` (interfaz). |
+| `server/` | Servidor central (Node.js 18+, sin dependencias): sincronización, espacio central, modo servidor, actualizador y estado del sistema. |
+| `servidor-windows/` | Instalador para Windows (dirección HTTPS fija con Tailscale Funnel y arranque automático). |
+| `dist/` | Compilado: `app/` (aplicación), `servidor-uco-windows.zip` (servidor para Windows) y `preview.html`. |
+| `tests/` | Pruebas: `unit/` y `server/` (node:test), `e2e/` (navegador, 17 escenarios), `checks/` (calidad y pruebas en vivo) y `perf/` (rendimiento). |
+| `tools/` | `publicar-version.mjs`: publica una versión (app y servidor). |
+| `docs/` | Manual, documentación técnica, guía de alojamiento, informes de entrega y de pruebas. |
 
-## Puesta en marcha rápida
+## Puesta en marcha
 
-1. **Probar en local** (necesita Node.js 18 o superior):
+1. **Probar en local** (Node.js 18 o superior):
    ```bash
+   node build.mjs
    node server/server.mjs --static dist/app --data ./datos-servidor --port 8443
    ```
-   Abre `http://localhost:8443` en Chrome. (Para usarlo desde un móvil hace falta HTTPS: ver la guía.)
-2. **Publicar para uso real**: sigue [docs/GUIA_ALOJAMIENTO.md](docs/GUIA_ALOJAMIENTO.md) (GitHub Pages o Netlify gratis, o tu propio servidor).
-3. **Primer uso**: crea el administrador y guarda la clave de recuperación. Consulta [docs/MANUAL_USUARIO.md](docs/MANUAL_USUARIO.md).
+   Abre `http://localhost:8443` en Chrome. Para usarlo desde un móvil hace falta HTTPS: ver la guía.
+2. **Servidor central en un PC con Windows:** `dist/servidor-uco-windows.zip` → `instalar-servidor.bat`. Instrucciones en [docs/GUIA_ALOJAMIENTO.md](docs/GUIA_ALOJAMIENTO.md).
+3. **Primer uso:** consulta [docs/MANUAL_USUARIO.md](docs/MANUAL_USUARIO.md).
 
-## Desarrollo
+## Desarrollo y pruebas
 
 ```bash
-npm install            # instala esbuild (solo para compilar)
-node build.mjs         # genera dist/app y dist/preview.html
-npm test               # pruebas de unidad, servidor e integración (node:test)
-pip install playwright && python3 tests/e2e/run_e2e.py   # pruebas en navegador
+npm install                              # esbuild (solo para compilar)
+node build.mjs                           # genera dist/
+npm test                                 # unidad y servidor (node:test)
+python3 tests/e2e/run_e2e.py             # navegador (requiere Playwright y Chrome); un escenario: run_e2e.py 17
+python3 tests/checks/comprobaciones.py   # calidad: PWA, accesibilidad, contraste, secretos, CSP, HTTPS
 ```
 
-Documentación técnica (arquitectura, esquema de datos, sincronización, seguridad, copias y recuperación): [docs/DOCUMENTACION_TECNICA.md](docs/DOCUMENTACION_TECNICA.md).
-Resultados de las pruebas: [docs/INFORME_PRUEBAS.md](docs/INFORME_PRUEBAS.md).
+## Documentación
+- [Manual de usuario](docs/MANUAL_USUARIO.md)
+- [Documentación técnica](docs/DOCUMENTACION_TECNICA.md): arquitectura, datos, sincronización, seguridad, copias y API.
+- [Guía de alojamiento e instalación](docs/GUIA_ALOJAMIENTO.md)
+- [Novedades por versión](docs/CAMBIOS.md)
+- Informes de entrega: [1.4.0](docs/INFORME-1.4.0.md), [1.5.0](docs/INFORME-1.5.0.md) e [informe final 1.0.3 → 1.3.0](docs/INFORME_FINAL.md).
+- [Informe de pruebas](docs/TESTING_REPORT.md)
+- [Estado de la implementación y seguimiento](docs/IMPLEMENTATION_STATUS.md)
+- Partes de la 1.5.0:
+  - [mapas y capas](docs/UCO_MAPAS_CAPAS.md);
+  - [avisos](docs/UCO_AVISOS.md);
+  - [informes](docs/UCO_INFORMES.md);
+  - [plantillas](docs/UCO_PLANTILLAS_PREVENTIVOS.md);
+  - [monitorización](docs/UCO_MONITORIZACION.md);
+  - [validaciones operativas](docs/UCO_VALIDACIONES_OPERATIVAS.md);
+  - [accesibilidad](docs/UCO_ACCESIBILIDAD.md).

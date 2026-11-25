@@ -50,10 +50,12 @@ Código: `src/ui/views/plano.js` (flujo en el mapa), `src/ui/views/ops.js` (form
 - Lleva el distintivo «Pendiente de confirmar» hasta que el servidor lo confirma y le da su número definitivo. No se presenta como aviso confirmado.
 
 ## Ficha contextual
-- Al tocar un aviso en el mapa se abre su ficha, con:
+- Al tocar un aviso en el mapa se abre su ficha, dentro del propio mapa, con:
   - datos principales, ubicación, unidades y estado;
-  - acciones según los permisos.
-- El historial completo está en la ficha del aviso y en la bitácora.
+  - su historial reciente (los dos últimos movimientos);
+  - acciones según los permisos: **Asignar unidad** (abre el aviso con las unidades sugeridas), **Finalizar** (pide confirmación y nota de cierre) y **Editar**. Sin el permiso correspondiente, la acción no aparece y el servidor la rechazaría igualmente.
+- «Abrir aviso» da la ficha completa, con todo el historial; también se ve en la bitácora.
+- Prueba: escenario E2E 12 («Ficha del aviso en el mapa: historial y acciones según permisos») y escenario 17 en el móvil y el escritorio.
 
 ## Decisiones
 - **Sin campo de prioridad:** lo decidiste así. Los tipos de aviso siguen siendo los códigos de incidente.

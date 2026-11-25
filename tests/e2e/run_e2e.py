@@ -1180,7 +1180,7 @@ def scenario_vista_mapa(b):
     A = App(b, 'vista', PHONE); rutas_cartografia(A.ctx); rutas_ign(A.ctx)
     A.setup('Pablo Jefe', 'pablo', 'secreto9', 'Tablet PMA', 'P'); A.perms(False)
     ev = lambda js: A.pg.evaluate('() => { const c = window.__UCO.core; ' + js + ' }')
-    teselas = lambda: A.pg.locator('.coord-map img.leaflet-tile').evaluate_all('ts => [...new Set(ts.map(t => (t.src.match(/wmts\/([a-z-]+)/) || [null, new URL(t.src).hostname])[1]))].sort()')
+    teselas = lambda: A.pg.locator('.coord-map img.leaflet-tile').evaluate_all(r'ts => [...new Set(ts.map(t => (t.src.match(/wmts\/([a-z-]+)/) || [null, new URL(t.src).hostname])[1]))].sort()')
     def importar_zona():
         A.nav('plano'); A.a('plan.google'); s = A.sheet(); s.locator('#carto-map .leaflet-tile').first.wait_for(timeout=15000)
         s.locator('form[data-f="carto.buscar"] [name=q]').fill('Puerta del Sol Madrid'); s.locator('form[data-f="carto.buscar"] button').click(); A.pg.wait_for_timeout(1800)
@@ -1485,8 +1485,11 @@ def scenario_capas(b):
             assert 'Sector 1' in ' '.join(A.pg.locator('.sec-label').all_inner_texts())
             ley = A.pg.locator('.legend').inner_text()
             for t in ['En descanso', 'Fuera de servicio', 'Aviso activo', 'Accesos y salidas', 'Hospital']: assert t in ley, t
+            # Los avisos se distinguen por su tipo sin depender del color: el código de incidente va en la etiqueta
+            m_av = A.pg.locator('.coord-map .mk[data-mk="a"]').first
+            assert '1.1' in m_av.locator('.mk-l').inner_text() and '1.1 · Accidente sin especificar' in (m_av.get_attribute('title') or ''), (m_av.inner_text(), m_av.get_attribute('title'))
             A.shot('01-capas')
-            return '3 unidades (una con el símbolo de descanso), aviso activo, sector delimitado con su nombre, 2 puntos y leyenda con símbolos'
+            return '3 unidades (una con el símbolo de descanso), aviso activo con su código de incidente, sector delimitado con su nombre, 2 puntos y leyenda con símbolos'
         check('Capas: unidades, avisos, sectores y puntos con su leyenda', capas)
         def filtros():
             A.a('plan.capas'); A.pg.wait_for_selector('.sheet-wrap .chips-f')
@@ -1543,6 +1546,36 @@ def scenario_capas(b):
             tocar(0.5, 0.06); assert A.pg.locator('.map-card').count() == 0, 'tocar fuera la cierra'  # la ficha ocupa la esquina inferior derecha
             return 'unidad y aviso: ficha dentro del mapa (situación, clave, unidades) con acceso a la ficha completa'
         check('Ficha contextual sin salir del mapa', ficha)
+        def ficha_aviso():
+            # 1.5.0 §6: la ficha del aviso en el mapa lleva su historial reciente y las acciones permitidas
+            aid = A.state("return Object.values(s.avisos).find(a => a.estado !== 'finalizado' && a.part.some(p => p.lib == null)).id")
+            card = lambda: A.pg.locator('.map-card[data-map-card="a"]')
+            def abrir_ficha():
+                A.pg.locator(f'.coord-map .mk[data-mk="a"][data-id="{aid}"]').click(); A.pg.wait_for_selector('.map-card[data-map-card="a"]', timeout=5000)
+            abrir_ficha()
+            hist = card().locator('.tl.mini li').all_inner_texts(); assert 1 <= len(hist) <= 2 and any('Asignada' in h or 'Estado' in h for h in hist), hist
+            for a_ in ['plan.selAbrir', 'plan.selAsignar', 'a.finish', 'a.edit']: assert card().locator(f'[data-a="{a_}"]').count() == 1, a_
+            # Sin permiso para asignar, finalizar ni editar, la ficha no ofrece esas acciones
+            A.pg.evaluate("() => { const c = window.__UCO.core; c._canPrueba = c.can; c.can = p => !['avisos.asignar', 'avisos.finalizar', 'avisos.editar'].includes(p) && c._canPrueba.call(c, p); window.__UCO.render(); }")
+            A.pg.wait_for_timeout(300)
+            sin = [a_ for a_ in ['plan.selAsignar', 'a.finish', 'a.edit'] if card().locator(f'[data-a="{a_}"]').count()]
+            A.pg.evaluate("() => { const c = window.__UCO.core; c.can = c._canPrueba; delete c._canPrueba; window.__UCO.render(); }"); A.pg.wait_for_timeout(300)
+            assert not sin and card().locator('[data-a="plan.selAbrir"]').count() == 1, sin
+            # Asignar: abre el aviso con las unidades sugeridas, sin salir del plano
+            A.a('plan.selAsignar', scope=card()); A.pg.wait_for_selector('.sheet-wrap .sug', timeout=5000)
+            assert A.pg.locator('.coord-map').count() == 1; A.close_sheets()
+            # Finalizar desde la ficha: pide confirmación y la ficha se actualiza
+            if not card().count(): abrir_ficha()
+            A.a('a.finish', scope=card()); A.pg.wait_for_selector('.sheet-wrap form[data-f="dlg.submit"]')
+            A.sheet().locator('textarea').first.fill('Atendido en el lugar'); A.dlg_ok()
+            A.pg.wait_for_function(f"() => window.__UCO.core.state.avisos['{aid}'].estado === 'finalizado'", timeout=10000)
+            A.pg.wait_for_timeout(300)
+            if not card().count(): abrir_ficha()
+            t = card().inner_text(); assert 'Finalizado' in t and card().locator('[data-a="a.finish"]').count() == 0 and card().locator('[data-a="plan.selAsignar"]').count() == 0, t
+            assert A.state(f"return s.avisos['{aid}'].cierre.nota") == 'Atendido en el lugar'
+            A.shot('06-ficha-aviso'); A.a('plan.selCerrar')
+            return f'historial reciente ({len(hist)} líneas) y acciones en la ficha; sin permisos no aparecen; asignar abre las sugerencias y finalizar actualiza la ficha sin salir del plano'
+        check('Ficha del aviso en el mapa: historial y acciones según permisos', ficha_aviso)
         def preferencias():
             A.a('plan.capas'); A.sheet().locator('[data-a="plan.filtro"][data-campo="tipos"][data-v="rt_sva"]').click(); A.pg.wait_for_timeout(400); A.close_sheets()
             assert mk('.mk[data-mk="u"]') == 1
@@ -1937,8 +1970,121 @@ def scenario_informes(b):
             A.shot('02-bitacora', True)
             return 'versión 2 con motivo; la 1 se conserva con su huella; unidades y avisos intactos; todo en la bitácora'
         check('Nueva versión con motivo, conservando la anterior', nueva)
+        def plantilla_finalizado():
+            # 1.5.0 §3: plantilla desde un preventivo finalizado (cerrado y archivado), desde la pantalla
+            n_ops = A.pg.evaluate("async () => (await window.__UCO.core.repo.loadOps('prev_inf')).length")
+            A.nav('mas'); A.a('tpl.fromPrev'); A.pg.wait_for_selector('.sheet-wrap form[data-f="dlg.submit"]')
+            A.sheet().locator('input[name=nombre]').fill('Carrera tipo'); A.dlg_ok(); A.pg.wait_for_timeout(800)
+            t = A.pg.evaluate("async () => (await window.__UCO.core.repo.listTemplates()).map(t => ({ nombre: t.nombre, origen: t.origen, unidades: t.contenido.unidades.length, sectores: t.contenido.cat.sectores.length, json: JSON.stringify(t.contenido) }))")
+            assert len(t) == 1 and t[0]['nombre'] == 'Carrera tipo' and t[0]['origen']['estado'] == 'cerrado' and t[0]['unidades'] > 0, [{k: v for k, v in x.items() if k != 'json'} for x in t]
+            assert 'Mareo en meta' not in t[0]['json'], 'ni avisos ni historiales'
+            assert A.state("return JSON.stringify([s.units, s.avisos])") == A.antes, 'el preventivo de origen no cambia'
+            assert A.pg.evaluate("async () => (await window.__UCO.core.repo.loadOps('prev_inf')).length") == n_ops, 'crear la plantilla no añade operaciones al preventivo finalizado'
+            assert A.state("return s.prev.estado + '/' + !!s.prev.archivado") == 'cerrado/true'
+            return f"plantilla «Carrera tipo» desde el preventivo cerrado y archivado: {t[0]['unidades']} unidades y {t[0]['sectores']} sectores, sin avisos; el origen no cambia ({n_ops} operaciones)"
+        check('Plantilla desde un preventivo finalizado', plantilla_finalizado)
         check('Sin errores de JavaScript (escenario 16)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
         A.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
+# ---------------- Escenario 17 (1.5.0): móvil, tablet y escritorio; accesibilidad automática ----------------
+AUDITORIA_JS = os.path.join(ROOT, 'tests', 'e2e', 'auditoria_a11y.js')
+ROLES_CONTROL = ('button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'switch', 'slider', 'spinbutton', 'searchbox', 'menuitem', 'tab')
+def controles_sin_nombre(pg, dentro='body'):
+    """Controles visibles sin nombre accesible, según el árbol de accesibilidad del propio navegador"""
+    out = []
+    for l in pg.locator(dentro).first.aria_snapshot().splitlines():
+        m = re.match(r'\s*- (\w+)(.*)$', l)
+        if m and m.group(1) in ROLES_CONTROL and not m.group(2).strip().startswith('"'): out.append(l.strip()[:80])
+    return out
+
+def scenario_dispositivos(b):
+    print('\n== Escenario 17: pantallas de la 1.5.0 en móvil, tablet y escritorio; accesibilidad automática (WCAG 2.2 AA como referencia) ==')
+    port = PORT + 17; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-disp-')
+    gen = {}
+    for g in ['capas', 'incoherencias', 'informes']:
+        salida = os.path.join(data, g + '.json'); subprocess.run(['node', f'tests/e2e/generar_{g}.mjs', salida], cwd=ROOT, check=True); gen.update(json.load(open(salida)))
+    aud = open(AUDITORIA_JS, encoding='utf-8').read()
+    srv = start_server(data, port)
+    TAMANOS = [  # (título, clave, contexto, con recorridos funcionales)
+        ('Móvil 320 px (reorganización: equivale a ampliar al 400 %)', '320', dict(viewport={'width': 320, 'height': 640}, is_mobile=True, has_touch=True, device_scale_factor=2), False),
+        ('Móvil 390 px', '390', PHONE, True),
+        ('Tablet 1280 px', '1280', TABLET, False),
+        ('Escritorio 1920 px con ratón', '1920', dict(viewport={'width': 1920, 'height': 1080}), True),
+        ('Tema oscuro en el móvil', '390-oscuro', dict(PHONE, color_scheme='dark'), False),
+        ('Tema oscuro en la tablet', '1280-oscuro', dict(TABLET, color_scheme='dark'), False),
+    ]
+    try:
+        for titulo, clave, opts, recorridos in TAMANOS:
+            A = App(b, 'disp-' + clave, opts, base=url)
+            def abrir(pid, ruta):
+                A.pg.evaluate(f"async () => {{ await window.__UCO.core.openPrev('{pid}'); window.__UCO.go('{ruta}'); }}"); A.pg.wait_for_timeout(700)
+            def pantallas():
+                A.setup('Ana Coordinadora', 'ana', 'clave-ana-1', 'Dispositivo ' + clave, 'D'); A.perms(False)
+                for pid in ['prev_capas', 'prev_inc', 'prev_inf']:
+                    ops = gen[pid]; nmax = max([o.get('num') or 0 for o in ops])
+                    A.pg.evaluate("async ([pid, ops, n]) => { const c = window.__UCO.core; await c.repo.appendOps(pid, ops); await c.repo.maxCounter(pid, n); await c._summary(pid); }", [pid, ops, nmax])
+                problemas = []; vistas = []
+                def audita(nombre, dentro=None):
+                    A.pg.wait_for_timeout(400)
+                    r = A.pg.evaluate(aud, {'dentro': dentro} if dentro else {})
+                    for k, et in [('desbordan', 'se sale del ancho'), ('partidas', 'texto roto'), ('pequenos', 'objetivo menor de 24 px'), ('contraste', 'contraste bajo')]:
+                        problemas.extend(f'{nombre}: {et}: {x}' for x in r[k])
+                    problemas.extend(f'{nombre}: sin nombre accesible: {x}' for x in controles_sin_nombre(A.pg, dentro or 'body'))
+                    vistas.append(nombre)
+                A.pg.evaluate("() => window.__UCO.go('home')"); A.pg.wait_for_timeout(500); audita('inicio')
+                A.pg.evaluate("() => window.__UCO.go('plantillas')"); A.pg.wait_for_timeout(500); audita('plantillas')
+                A.pg.evaluate("() => window.__UCO.go('home')"); A.pg.wait_for_timeout(300)
+                A.a('home.new'); A.pg.wait_for_selector('.sheet-wrap form[data-f="home.create"]'); audita('asistente de creación', '.sheet-wrap'); A.close_sheets()
+                for ruta in ['panel', 'unidades', 'avisos', 'bitacora']: abrir('prev_capas', ruta); audita(ruta)
+                abrir('prev_capas', 'plano'); A.pg.wait_for_selector('.coord-map .leaflet-marker-icon', timeout=20000); A.pg.wait_for_timeout(800); audita('plano')
+                A.a('plan.capas'); A.pg.wait_for_selector('.sheet-wrap'); audita('capas y filtros', '.sheet-wrap'); A.close_sheets()
+                A.a('plan.lista'); A.pg.wait_for_selector('.sheet-wrap'); audita('lista del plano', '.sheet-wrap'); A.close_sheets()
+                aid = A.state("return Object.values(s.avisos).find(a => a.estado !== 'finalizado').id")
+                A.pg.locator(f'.coord-map .mk[data-mk="a"][data-id="{aid}"]').first.click(); A.pg.wait_for_selector('.map-card', timeout=5000); audita('ficha del aviso', '.map-card'); A.a('plan.selCerrar')
+                abrir('prev_inc', 'incoherencias'); audita('incoherencias')
+                abrir('prev_inf', 'cierre'); audita('cierre e informes')
+                A.pg.evaluate("() => window.__UCO.go('estado')"); A.pg.wait_for_selector('main h2', timeout=10000); A.pg.wait_for_timeout(1200); audita('estado del sistema')
+                A.shot('estado-del-sistema')
+                assert not problemas, f'{len(problemas)}: ' + ' | '.join(problemas[:6])
+                ancho = A.pg.evaluate('() => document.documentElement.clientWidth')
+                return f'{len(vistas)} pantallas a {ancho} px: nada se sale del ancho ni se parte el texto, objetivos de al menos 24 px, todos los controles con nombre accesible y contraste del texto AA'
+            check(f'{titulo}: pantallas sin desbordes, con nombres accesibles, objetivos táctiles y contraste', pantallas)
+            if recorridos:
+                def aviso_mapa():
+                    abrir('prev_capas', 'plano'); A.pg.wait_for_selector('.coord-map .leaflet-marker-icon', timeout=20000); A.pg.wait_for_timeout(800)
+                    A.a('plan.avisoMapa'); A.pg.wait_for_selector('[data-a="plan.avisoSinMapa"]')
+                    bb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(bb['x'] + bb['width'] * 0.35, bb['y'] + bb['height'] * 0.4); A.pg.wait_for_timeout(500)
+                    A.pg.wait_for_selector('[data-ajuste]'); ini = A.pg.locator('[data-prov-pos]').inner_text()
+                    A.a('plan.mover', d='n'); assert A.pg.locator('[data-prov-pos]').inner_text() != ini, 'se ajusta con los botones'
+                    A.pg.locator('[data-ajuste]').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('.sheet-wrap [data-a="inc.mas"]'); A.a('inc.mas')
+                    f = A.sheet().locator('form[data-f="a.save"]'); f.locator('[name=desc]').fill('Aviso de prueba ' + clave)
+                    A.pg.wait_for_selector('.sheet-wrap [data-unidades-aviso] .u-asig')
+                    libre = A.sheet().locator('.u-asig:has(input:not([disabled]))').first; libre.locator('input').check()
+                    f.locator('button.primary').click(); A.pg.wait_for_timeout(900); A.close_sheets()
+                    a = A.pg.evaluate(f"() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Aviso de prueba {clave}')")
+                    assert a and a['loc']['fuente'] == 'mapa' and a['plan'] and any(p['lib'] is None for p in a['part']), a
+                    A.pg.locator(f'.coord-map .mk[data-mk="a"][data-id="{a["id"]}"]').first.click(); A.pg.wait_for_selector('.map-card[data-map-card="a"]', timeout=5000)
+                    card = A.pg.locator('.map-card'); assert card.locator('.tl.mini li').count() >= 1 and card.locator('[data-a="a.finish"]').count() == 1
+                    A.shot('aviso-desde-el-mapa'); A.a('plan.selCerrar')
+                    return 'marcar en el mapa, ajustar con botones, confirmar con Intro, elegir una unidad libre y crear; ficha con historial y acciones'
+                check(f'{titulo}: aviso desde el mapa de principio a fin', aviso_mapa)
+                def revisar_e_informe():
+                    abrir('prev_inc', 'incoherencias'); n0 = A.state("return Object.keys(s.revisiones || {}).length")
+                    A.pg.locator('[data-a="inc.marcar"][data-v="revisada"]').first.click(); A.pg.wait_for_selector('.sheet-wrap form[data-f="dlg.submit"]')
+                    A.sheet().locator('input, textarea').first.fill('Revisado desde ' + clave); A.dlg_ok(); A.pg.wait_for_timeout(900)
+                    rv = A.state("return Object.values(s.revisiones || {}).map(r => [r.estado, r.nota])")
+                    assert len(rv) == n0 + 1 and ['revisada', 'Revisado desde ' + clave] in rv, rv
+                    abrir('prev_inf', 'cierre')
+                    with A.pg.expect_download() as dl: A.a('rep.do', k='pdf')
+                    assert open(dl.value.path(), 'rb').read()[:4] == b'%PDF'
+                    with A.pg.expect_download() as dl: A.a('rep.do', k='xlsx')
+                    assert open(dl.value.path(), 'rb').read()[:2] == b'PK'
+                    return 'incoherencia marcada como revisada con su nota; informe PDF provisional y Excel descargados'
+                check(f'{titulo}: revisar una incoherencia y descargar el informe', revisar_e_informe)
+            check(f'Sin errores de JavaScript ({titulo})', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+            A.ctx.close()
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)
 
@@ -1967,6 +2113,7 @@ def main():
             if only in ('', '14'): scenario_incoherencias(b)
             if only in ('', '15'): scenario_plantillas(b)
             if only in ('', '16'): scenario_informes(b)
+            if only in ('', '17'): scenario_dispositivos(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

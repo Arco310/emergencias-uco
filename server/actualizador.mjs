@@ -58,7 +58,7 @@ const libre = () => new Promise((res, rej) => { const s = net.createServer(); s.
  * DATA: carpeta de datos; BASE: carpeta de la instalación (contiene servidor/, app/, copias/);
  * version: versión en marcha; lanzador: true si lo arrancó lanzador.mjs (necesario para activar).
  */
-export function crearActualizador({ DATA, BASE, version, lanzador = false, log = () => { }, fetchImpl = fetch, api = 'https://api.github.com', repo = REPO_OFICIAL, salir = code => process.exit(code), idleMin = 30, periodico = true }) {
+export function crearActualizador({ DATA, BASE, version, lanzador = false, log = () => { }, fetchImpl = fetch, api = 'https://api.github.com', repo = REPO_OFICIAL, salir = code => process.exit(code), idleMin = 30, periodico = true, esperaInicial = 10000 }) {
   const F_EST = path.join(DATA, '_servidor', 'actualizaciones.json');
   const F_DEP = path.join(DATA, '_servidor', 'despliegue.json');
   const LOG = path.join(DATA, '_servidor', 'despliegues.log');
@@ -90,10 +90,10 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
       const zip = v && (j.assets || []).find(a => a.name === nombrePaquete(v) && deOrigen(a));
       const sumas = (j.assets || []).find(a => a.name === 'SHA256SUMS.txt' && deOrigen(a));
       est.disponible = v && zip && sumas ? { version: v, publicada: j.published_at || null, notas: String(j.body || '').slice(0, 4000), url: zip.browser_download_url, tam: zip.size || null, digest: zip.digest || null, sumas: sumas.browser_download_url, enlace: j.html_url || null } : null;
-      est.comprobado = Date.now(); est.sinVersiones = false; est.error = v && (!zip || !sumas) ? 'La versión ' + v + ' no incluye el paquete del servidor o su lista de sumas' : null;
+      est.comprobado = Date.now(); est.versionComprobada = version; est.sinVersiones = false; est.error = v && (!zip || !sumas) ? 'La versión ' + v + ' no incluye el paquete del servidor o su lista de sumas' : null;
       persistir();
     } catch (e) {
-      est.comprobado = Date.now();
+      est.comprobado = Date.now(); est.versionComprobada = version;
       // El repositorio todavía no tiene ninguna versión publicada: no es un error
       if (e.status === 404) { est.disponible = null; est.error = null; est.sinVersiones = true; }
       else { est.error = e.message; registro('Error al comprobar:', e.message); }
@@ -224,11 +224,16 @@ export function crearActualizador({ DATA, BASE, version, lanzador = false, log =
     if (Date.now() - ultimaComp > 6 * 3600000) { ultimaComp = Date.now(); comprobar(); }
     if (est.programada && est.programada.modo === 'ventana' && inactivo()) activar();
   }, 60000) : null; if (reloj) reloj.unref();
+  // Versión recién instalada: lo guardado lo consultó la versión anterior. Se vuelve a consultar al arrancar
+  // (una sola vez) en lugar de esperar a la siguiente comprobación periódica. Reiniciar la misma versión no consulta.
+  const inicial = periodico && est.comprobado && est.versionComprobada !== version
+    ? setTimeout(() => { ultimaComp = Date.now(); comprobar(); }, esperaInicial) : null;
+  if (inicial && inicial.unref) inicial.unref();
   return {
     comprobar, preparar, programar, cancelar, revertir, estado, activar,
     auditar: texto => registro(texto),
     get mantenimiento() { return mantenimiento; },
     escritura(pid) { act.ultimaEscritura = Date.now(); act.escrituras++; if (pid) act.preventivos.set(pid, Date.now()); },
-    detener() { if (reloj) clearInterval(reloj); },
+    detener() { if (reloj) clearInterval(reloj); if (inicial) clearTimeout(inicial); },
   };
 }

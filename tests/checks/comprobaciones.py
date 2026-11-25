@@ -56,7 +56,8 @@ def main():
             A = E.App(b, 'chk', E.PHONE)
             A.setup('Ana', 'ana', 'secreto1', 'Móvil', 'M1'); A.perms(False)
             A.new_prev('Comprobación'); A.new_unit('U1', 'Uno', 'rt_svb', 'sec_1')
-            A.nav('avisos'); A.a('a.new'); A.fill('desc', 'Prueba'); A.sheet().locator('form[data-f="a.save"] button.primary').click(); A.pg.wait_for_timeout(500); A.close_sheets()
+            # Desde la 1.3.0 el aviso empieza por el código de incidente: «Más opciones» abre el formulario completo
+            A.nav('avisos'); A.a('a.new'); A.pg.wait_for_selector('.sheet-wrap [data-a="inc.mas"]'); A.a('inc.mas'); A.fill('desc', 'Prueba'); A.sheet().locator('form[data-f="a.save"] button.primary').click(); A.pg.wait_for_timeout(500); A.close_sheets()
             pantallas = {}
             for r in ['panel', 'unidades', 'avisos', 'plano', 'mas']:
                 A.nav(r); A.pg.wait_for_timeout(300); pantallas[r] = A.pg.evaluate(A11Y_JS)
@@ -82,7 +83,7 @@ def main():
         claves = re.findall(r"codigo: '([^']+)', nombre: '([^']+)'.*?color: '(#[0-9A-Fa-f]{6})'", txt)
         bad = []
         for code, nom, col in claves:
-            cr = max(contrast(col, '#111111'), contrast(col, '#FFFFFF'))
+            cr = max(contrast(col, '#000000'), contrast(col, '#FFFFFF'))
             if cr < 4.5: bad.append(f'{code} {cr:.1f}')
         res('Contraste del texto sobre el color de cada clave (WCAG AA ≥ 4,5)', not bad, 'por debajo: ' + ', '.join(bad) if bad else f'{len(claves)} claves correctas')
         # 4. Secretos en lo publicado

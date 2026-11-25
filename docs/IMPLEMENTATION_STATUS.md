@@ -1,9 +1,21 @@
-# Estado de la implementación — Evolución integral (pliego «Prompt maestro» + apartado 18)
+# Estado de la implementación y seguimiento
 
-Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo desde otra sesión.
-Última actualización: 19/11/2026 (versión 1.3.0).
+Documento vivo (apartado 18.10): se actualiza al cerrar cada tarea y permite retomar el trabajo desde otra sesión.
+Cubre los textos del proyecto:
+- «Prompt maestro» (1.0);
+- «Evolución integral» y apartado 18 (1.1.0–1.3.0);
+- códigos de incidente de SAMUR-PC (1.3.0);
+- «Mejora funcional y técnica» (1.4.0);
+- «Ampliación de funcionalidades» (1.5.0).
 
-## 1. Auditoría técnica del proyecto existente (versión 1.0.3)
+**Última actualización:** 25/11/2026.
+- Versión en desarrollo: **1.5.0**, en la rama `mejora-1.5.0`. Incluye la 1.4.0. Está subida a GitHub y **sin publicar**.
+- En producción (GitHub Pages y PC servidor): **1.3.0**.
+- Informes de entrega: `INFORME_FINAL.md` (1.0.3 → 1.3.0), `INFORME-1.4.0.md` e `INFORME-1.5.0.md`. Pruebas: `TESTING_REPORT.md`.
+
+## 1. Auditoría técnica del proyecto de partida (versión 1.0.3)
+
+Es el punto de partida de la evolución. La situación actual está en la documentación técnica y en los apartados siguientes.
 
 | Área | Situación real comprobada |
 |---|---|
@@ -41,6 +53,16 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | D9 | **Migraciones de datos locales** (`src/data/migraciones.js`): copia de seguridad cifrada previa (se guardan 5), migraciones idempotentes y compatibles hacia atrás, el esquema solo avanza si terminan bien. | Requisito 8.3 (migraciones) y 15.6 (copias previas). |
 | D10 | **Versión mínima de la app** que admite el servidor (`/api/v1/version`): si la app es anterior, deja de sincronizar con ese servidor (los cambios se guardan y se envían al actualizar) y lo avisa. | Compatibilidad entre versiones sin corromper datos. |
 | D12 | **Códigos de incidente como tipos de aviso** (1.3.0, petición del 19/11): cada código de SAMUR-PC es un elemento del catálogo «Tipos de aviso» con `codigo`, `grupo` (carpeta) y, en los códigos de cierre, `padre`; identificadores estables (`inc_1_2`). Se elige por carpetas y al tocar el código se crea el aviso. Los preventivos ya creados reciben los códigos con un botón explícito («Añadir los códigos de incidente»), no con una migración automática ni código a código al usarlos: cambiar el catálogo de un preventivo compartido desde varios dispositivos a la vez generaría conflictos. Los nombres se muestran con el código en todas partes y, si un catálogo no tuviera un código, se resuelve con el catálogo por defecto. Tipos de unidad y unidades plantilla de SAMUR-PC añadidos a los valores por defecto; la migración de datos 3 los añade (solo lo que falta) a los dispositivos en uso. | Los avisos siguen guardando un identificador de tipo (motor, estadísticas, compatibilidades e informes no cambian) y la versión anterior sigue pudiendo leer los datos. |
+| D13 | **Modo servidor opcional** (1.4.0, decisión del 24/11: «que el servidor lea los datos»). El servidor custodia las claves del espacio y valida identidad, acceso al preventivo, permisos y reglas de cada operación; lo rechazado no se guarda y el dispositivo lo deshace. Un espacio que no se migra funciona como en la 1.3.0. | Resuelve la cuestión estructural del §6 (validación en el servidor). |
+| D14 | **Cuentas sin contraseña: código de un solo uso (72 h) + PIN del dispositivo** (1.4.0, decisión del 24/11). Registro desde el inicio de sesión con prueba de trabajo y aprobación. | Sin correo electrónico disponible; seguro y verificable en el servidor. |
+| D15 | **Permisos por módulos** (consulta y modificación), perfiles reutilizables, ajustes individuales y alcance por preventivo; implicaciones en cadena (1.5.0). | Requisito de permisos granulares sin roles rígidos. |
+| D16 | **Mapas IGN sin clave** (ortofoto PNOA y topográfico) además de OpenStreetMap; Google solo con clave (1.4.0, decisión del 24/11). | Satélite y relieve gratis; sin gastos externos. |
+| D17 | **Avisos sin campo de prioridad** (1.5.0, decisión del 25/11). Los tipos siguen siendo los códigos de incidente. | Decisión del usuario. |
+| D18 | **Horas verificables:** el servidor devuelve la hora de recepción (`rx`) y cada dispositivo guarda la de sincronización (`sy`), fuera del contenido cifrado (1.5.0). | El informe distingue la hora declarada, la recibida y la sincronizada. |
+| D19 | **Informes con versiones y huella SHA-256**, registro de quién genera, consulta o exporta (`informe.reg`), y Excel propio sin librerías (1.5.0). | Informe verificable y conservación de versiones. |
+| D20 | **Incoherencias que solo detectan y proponen** (21 reglas, 4 niveles ajustables); nunca cambian datos (1.5.0). | Requisito: las decisiones operativas son del usuario autorizado. |
+| D21 | **Accesibilidad y seguridad con referencias verificables** (WCAG 2.2 AA y OWASP ASVS 5.0.0). No se declara conformidad completa sin la revisión con lectores de pantalla. | Requisito del encargo 1.5.0. |
+| D22 | **Sin despliegue sin autorización:** las versiones 1.4.0 y 1.5.0 quedan preparadas en sus ramas, subidas y sin publicar (decisión del 25/11). | Decisión del usuario. |
 | D11 | Publicación con `tools/publicar-version.mjs`: comprueba que app y servidor tienen la misma versión, compila, verifica el paquete y publica la versión en GitHub (sobre el commit ya subido) y la app en GitHub Pages. Notas en `docs/CAMBIOS.md`. La versión en GitHub Releases la lanza una persona desde GitHub (Actions → «Publicar versión»), que ejecuta las pruebas y la misma herramienta. | Proceso repetible y verificable; esta sesión no puede crear versiones en GitHub (restricción de la plataforma), y es razonable que publicar quede en manos de una persona. |
 
 ## 3. Fases
@@ -54,6 +76,9 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | 5. Web, PWA y actualizaciones | Terminada | App (D8–D10) y servidor (D7, D7b, D11); panel Sistema → Actualizaciones. Versión 1.2.1 en GitHub Pages y en el servidor. |
 | 1.3.0. Códigos de incidente, unidades SAMUR-PC, cronología conjunta y finalizar | Terminada (D12) | Nuevo aviso por carpetas → código; 16 tipos y plantillas SAMUR-PC; cronología «Todas las unidades»; «Finalizar preventivo e informes». Pruebas en `tests/unit/incidentes_samur.test.mjs` y escenario 7 de navegador. |
 | 6. Validación integral | Terminada | Los 25 escenarios de aceptación con pruebas automáticas y la prueba en vivo con el servidor real en el entorno CLAUDE_TEST: 10/10 (ver `docs/TESTING_REPORT.md`). |
+| 1.4.0. Recursos, tipo de mapa, cuentas y permisos | Terminada, **sin publicar** | Eliminar configuraciones base con referencias, tipos inactivos rechazados también en el servidor, tipo de mapa por preventivo, registro, cuentas sin contraseña, permisos granulares y modo servidor. 149/149 y 104/104 (`INFORME-1.4.0.md`). |
+| 1.5.0. Mapas, avisos, incoherencias, plantillas, informes y monitorización | Terminada, **sin publicar** | Las 7 partes del encargo y los 47 criterios de aceptación (`INFORME-1.5.0.md`). |
+| Revisión final contra los 6 textos (25/11) | Terminada | Se completó lo que faltaba (§7 de `INFORME-1.5.0.md`): documentación general, pruebas en móvil, tablet, escritorio y tema oscuro con auditoría automática de accesibilidad, ficha del aviso en el mapa con historial y acciones, consulta de versiones al arrancar el servidor y la comprobación de calidad que dejó de funcionar en la 1.3.0. |
 
 ## 4. Bloqueos que requieren intervención humana
 
@@ -65,6 +90,10 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | Instalar el servidor con el lanzador en el PC servidor (una sola vez) | **Resuelto** (18/11 17:52): 1.2.1 instalada con el instalador; el aviso de permisos de Windows (UAC) se aprobó en el PC. Las siguientes versiones se instalan desde la app. |
 | Activar el espacio central real (una vez, con el código de administración) | **Resuelto**: activado por el usuario (comprobado el 19/11 en `/api/v1/central`). |
 | Instalar la 1.3.0 en el PC servidor | **Resuelto** (19/11 11:49): instalador ejecutado en el PC (el 19/11 de madrugada la pantalla estaba bloqueada). `/api/v1/version`: 1.3.0, `archivos: ok`; prueba en vivo 10/10. |
+| **Publicar la 1.4.0 y la 1.5.0** (fusionar en `main`, «Publicar versión», instalar en el servidor) | **Pendiente de tu autorización** (decisión del 25/11: no desplegar). Pasos en `INFORME-1.5.0.md` §10. |
+| **Primera versión en GitHub Releases** | Ninguna publicada todavía: el workflow «Publicar versión» no se ha ejecutado nunca. Hasta entonces, la actualización del servidor desde GitHub real no se ha podido probar (sí con una API local con el mismo formato). |
+| Pasar el espacio real al modo servidor | Decisión del administrador después de publicar la 1.4.0 o posterior (*Sistema → Servidor central*). |
+| Revisión con lectores de pantalla (TalkBack, NVDA) y prueba en un Android físico | Requieren una persona y el dispositivo: no se pueden automatizar aquí. |
 
 ## 5. Errores detectados y corregidos (esta evolución)
 
@@ -87,8 +116,16 @@ Documento vivo: se actualiza al cerrar cada tarea. Permite retomar el trabajo de
 | La lista de dispositivos mostraba «Dispositivo» para un dispositivo recién dado de alta | El primer latido salía antes de guardar el nombre y no se repetía hasta pasado un minuto | El latido se repite en cuanto cambian el nombre o la versión |
 | La prueba en vivo daba por fallido el servidor 1.2.1 | Comprobaba versiones escritas a mano (1.2.0) | Lee las versiones esperadas del código del repositorio; comprueba también `archivos` y la consulta a GitHub |
 | Fallo intermitente de las pruebas de navegador al dar de alta un dispositivo (escenario 6 en una ejecución completa; antes, una vez el 3) | La pantalla de acceso se repinta por un evento poco después de cargar (registrado: hasta ~2 s); la aplicación conserva lo escrito, pero el valor que Playwright escribe de golpe puede caer en el campo que se está sustituyendo. No afecta a quien teclea | Las pruebas comprueban que cada campo conserva su valor y lo vuelven a escribir si hace falta (`rellenar` en `tests/e2e/run_e2e.py`) |
+| 1.4.0: los tipos iniciales eliminados reaparecían al arrancar y los inactivos se seguían ofreciendo | `anadirQueFaltan` y selectores sin criterio común | Lista de eliminados respetada por la inicialización y criterio único en `recursos.js`; el servidor rechaza tipos inactivos |
+| 1.4.0: el repintado desmarcaba casillas, el `pattern` del usuario era inválido, el editor de perfiles borraba el nombre y `syncNow` volvía antes de terminar | Repintados y validaciones del navegador | Corregidos con su prueba (`INFORME-1.4.0.md` §2) |
+| 1.5.0: notas y motivos de los diálogos guardados como «[object Object]» (desde la 1.0.0, **también en producción**) | El campo del diálogo contaba como formulario con varios campos | Corregido; prueba de regresión en el escenario 14. Los textos ya guardados así no se pueden recuperar |
+| 1.5.0: respuestas dobles en el modo servidor; permisos incluidos de un solo nivel; aviso de «cambios» por archivar; módulo de monitorización ausente del paquete de Windows | Ver `INFORME-1.5.0.md` §2 | Corregidos con su prueba |
+| Revisión final: etiquetas de colores con poco contraste (2,2:1 en la barra superior; hasta 2,4:1 en el tema oscuro), botones principales y cifras del panel ilegibles en el tema oscuro, y texto sobre colores intermedios en 4,35:1 | El texto de las etiquetas llevaba el 75 % del color; el tema oscuro no tenía colores de estado propios; el texto oscuro era #111 en lugar de negro | Mezcla al 50 %, colores de estado y del panel para el tema oscuro, y texto negro puro (siempre ≥ 4,58:1). Pruebas `accesibilidad.test.mjs` y escenario 17 |
+| Revisión final: a 320 px, el estado del sistema mostraba sus valores letra a letra (y partía palabras a 390 px) | Listas de datos (`dl.kv`) con la etiqueta a su ancho máximo y el valor en el resto | Etiqueta encima del valor por debajo de 480 px. Se vio en las capturas y la auditoría comprueba ahora las palabras partidas |
+| Revisión final: `tests/checks/comprobaciones.py` fallaba desde la 1.3.0 | El aviso empieza por el código de incidente y el script no abría el formulario completo | Corregido: 12/12 comprobaciones |
+| Revisión final: tras instalar una versión nueva, el servidor mostraba la consulta de versiones de la anterior hasta 6 h después | La comprobación periódica partía de la hora de la última consulta | Consulta una vez al arrancar una versión distinta de la que hizo la última consulta (`actualizador_arranque.test.mjs`) |
 
-## 6. Cuestión estructural detectada (para decidir)
+## 6. Cuestión estructural detectada (resuelta en la 1.4.0)
 
 Las instrucciones del proyecto piden que **los permisos y reglas (p. ej. «sin descanso con aviso activo») se comprueben también en el servidor**. Hoy el servidor recibe las operaciones **cifradas de extremo a extremo** y no puede leerlas: las reglas y permisos se comprueban en la capa de negocio de cada dispositivo (no solo ocultando botones) y cada dispositivo vuelve a validar lo que recibe.
 
@@ -99,12 +136,21 @@ Alternativas:
 
 Recomendación: la 2 cuando se quiera la validación en servidor estricta (el servidor es un equipo propio). Requiere autorización por cambiar la arquitectura de seguridad; no se ha aplicado.
 
+**Resuelta en la 1.4.0** (decisión del 24/11): alternativa 2 como **modo servidor opcional** (D13). El espacio real sigue en el modo anterior hasta que un administrador lo pase al modo servidor después de publicar.
+
 ## 7. Pendiente y limitaciones conocidas
+**Necesita tu autorización o una persona:**
+- Publicar la 1.4.0 y la 1.5.0 (§4). El servidor 1.5.0 exige apps 1.5.0 para sincronizar; las apps se actualizan solas al abrirse.
+- Primera versión en GitHub Releases. Con ella se probará de verdad la actualización del servidor desde GitHub.
+- Clave de Google Maps Platform (opcional, con facturación).
+- Revisión con lectores de pantalla y prueba en un Android físico.
 
-- **Publicar la 1.2.1 en GitHub Releases** (ver §4). Hasta entonces, la descarga e instalación desde GitHub real no se ha podido probar (sí con una API local con el mismo formato).
-- Tras instalar una versión nueva del servidor, el panel muestra el resultado de la última consulta de la versión anterior hasta la siguiente (cada 6 h) o hasta pulsar «Comprobar versiones publicadas». Propuesta para la próxima versión: consultar al arrancar una versión nueva. No afecta al funcionamiento.
-- Google Maps Platform no se ha probado con una clave real (no hay clave); el código sigue la documentación oficial (sesión de Map Tiles API, atribución, Places API (New)).
-- Pruebas en dispositivos físicos: las de navegador emulan móvil, tablet y Chrome para Android; falta probar en un Android real.
-- Firma de las versiones con clave propia (además de HTTPS, repositorio oficial y SHA-256): mejora opcional; exige custodiar una clave privada.
-- Cuestión estructural del §6 (validación en el servidor de operaciones cifradas): pendiente de decisión.
+**Limitaciones conocidas** (detalle en `INFORME-1.5.0.md` §9):
+- En el modo anterior, el estado del sistema no puede mostrar conflictos ni incoherencias de los preventivos.
+- Plantillas de preventivo por dispositivo (se exportan e importan).
+- El PDF de cada versión del informe queda en el dispositivo que la generó; los demás ven su registro y su huella.
+- Dos versiones del informe generadas a la vez sin conexión pueden llevar el mismo número; se distinguen por hora, autor, dispositivo y huella.
 
+**Mejoras opcionales propuestas:**
+- Firma de las versiones con clave propia (además de HTTPS, repositorio oficial y SHA-256). Exige custodiar una clave privada.
+- Plantillas de preventivo compartidas a través del servidor central.

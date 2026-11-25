@@ -31,7 +31,8 @@ Actualizaciones
 Basta con instalar este paquete una vez. Las versiones siguientes se instalan desde la
 aplicación, sin descargar nada a mano: Sistema → Actualizaciones (usuario con el permiso
 «Gestionar las actualizaciones» y el código de administración del servidor).
-- El servidor consulta las versiones publicadas del repositorio oficial cada 6 horas.
+- El servidor consulta las versiones publicadas del repositorio oficial al arrancar una versión
+  nueva y después cada 6 horas.
 - «Descargar y verificar»: comprueba la suma SHA-256 publicada por GitHub y la lista de
   sumas de la versión, y prueba la versión nueva con una copia de los datos.
 - «Instalar ahora» o «en la ventana segura» (cuando lleva 30 minutos sin cambios en ningún
@@ -51,6 +52,8 @@ A tener en cuenta
 - El instalador pregunta si se evita la suspensión del PC cuando está enchufado.
 - Tailscale es gratuito en su plan Personal, solo para uso no comercial. Si lo usa una
   empresa o se cobra por el servicio, revisa sus condiciones (plan de pago).
-- Los datos que guarda el servidor están cifrados de extremo a extremo: el servidor no
-  puede leerlos. Copia de seguridad: carpeta C:\ProgramData\GestorUCO\datos (las copias
+- Los datos que guarda el servidor están cifrados. En el modo de siempre, de extremo a extremo:
+  el servidor no puede leerlos. En el modo servidor (opcional, Sistema → Servidor central), el
+  servidor guarda las claves en datos\_servidor\claves para validar los permisos: protege este
+  PC y sus copias. Copia de seguridad: carpeta C:\ProgramData\GestorUCO\datos (las copias
   automáticas de cada actualización están en C:\ProgramData\GestorUCO\copias).

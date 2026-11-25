@@ -12,6 +12,7 @@ Sistema → Actualizaciones y solo se instala cuando un administrador lo decide.
   - Son preferencias de cada dispositivo y de cada preventivo: no cambian datos ni lo que ven los demás.
 - **Leyenda automática.** La disponibilidad se marca con símbolo (✓ ● ‖ ◆ ✕), no solo con color.
 - **Agrupación de unidades cercanas.** Probada con 150 unidades.
+- **Avisos con su código de incidente en el mapa** (por ejemplo, «Nº 1 · 1.1»): se distinguen por su tipo sin depender del color.
 - **Sectores delimitados** en el plano y **puntos de interés y de apoyo**. Hay 13 categorías de partida (accesos, puesto sanitario, hospital, abastecimiento…).
 - **Ficha contextual** al tocar cualquier elemento, y **lista** como alternativa al mapa.
 
@@ -28,12 +29,16 @@ Sistema → Actualizaciones y solo se instala cuando un administrador lo decide.
   - las no asignables, deshabilitadas;
   - se pueden asignar varias a la vez.
 - **Sin conexión,** el aviso se ve como «Pendiente de confirmar» hasta que el servidor lo confirma.
+- **Ficha del aviso en el mapa** con su historial reciente y, según los permisos, «Asignar unidad», «Finalizar» y «Editar», sin salir del plano.
 
 **Accesibilidad** (WCAG 2.2 AA como referencia; no se declara conformidad completa)
 - El aviso se crea sin depender del arrastre ni del mapa.
 - El foco va al panel que se abre y vuelve al cerrarlo. Escape cierra.
 - Símbolos además de colores, y alternativa en lista.
 - Barra del plano en una fila en el móvil.
+- **Contraste:** etiquetas de colores legibles en los temas claro y oscuro, tema oscuro con colores de estado propios y texto negro o blanco que siempre alcanza 4,5:1 sobre cualquier color configurado.
+- **Datos del estado del sistema y de las actualizaciones legibles en el móvil:** la etiqueta va encima del valor en pantallas estrechas.
+- **Comprobado en el móvil (320 y 390 px), la tablet, el escritorio y el tema oscuro**, con una auditoría automática en cada pantalla.
 
 **Detección de incoherencias**
 - **21 reglas** en cinco grupos: unidades, avisos, descansos, preventivo y sincronización.
@@ -89,6 +94,7 @@ Sistema → Actualizaciones y solo se instala cuando un administrador lo decide.
 - **Peticiones atendidas dos veces en el modo servidor** (1.4.0). El servidor seguía procesando las peticiones ya atendidas e intentaba responder dos veces (errores en el registro).
 - **Permisos incluidos en cadena.** Ahora se aplican en cadena: quien puede revisar incoherencias también puede verlas.
 - **Texto escrito en los paneles abiertos** (Chrome). Al repintar un panel abierto se podía guardar el valor anterior de un campo con el foco.
+- **Versiones publicadas del servidor.** Tras instalar una versión nueva, el servidor vuelve a consultar las versiones publicadas al arrancar. Antes mostraba la consulta de la versión anterior hasta 6 horas después.
 
 **Datos y compatibilidad**
 - **Todo es aditivo:**

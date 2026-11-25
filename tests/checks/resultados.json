@@ -1,5 +1,5 @@
 {
- "fecha": "2026-11-17 22:31:36",
+ "fecha": "2026-11-25 19:39:22",
  "comprobaciones": [
   {
    "comprobacion": "Instalable como aplicación (criterios de Chrome)",
@@ -9,7 +9,7 @@
   {
    "comprobacion": "Manifiesto válido",
    "resultado": "CORRECTA",
-   "detalle": "http://127.0.0.1:8650/manifest.webmanifest"
+   "detalle": "http://127.0.0.1:9695/manifest.webmanifest"
   },
   {
    "comprobacion": "Service worker activo (uso sin conexión)",
@@ -49,7 +49,7 @@
   {
    "comprobacion": "Política de seguridad de contenidos (CSP)",
    "resultado": "CORRECTA",
-   "detalle": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; fon…"
+   "detalle": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://*.googleapis.com https://*.gstatic.com…"
   },
   {
    "comprobacion": "Servidor con HTTPS (certificado propio)",

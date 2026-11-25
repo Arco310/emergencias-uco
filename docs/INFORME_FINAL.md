@@ -1,5 +1,11 @@
 # Informe final — Evolución integral del Gestor de Emergencias UCO (1.0.3 → 1.3.0)
 
+> **Nota (25/11/2026):** informe histórico de la evolución 1.0.3 → 1.3.0. Dos de sus pendientes se resolvieron después:
+> - la validación en el servidor, con el modo servidor de la 1.4.0;
+> - la consulta de versiones al arrancar el servidor, en la revisión final de la 1.5.0.
+>
+> El estado actual está en `IMPLEMENTATION_STATUS.md` y en `INFORME-1.5.0.md`.
+
 Fecha: 19/11/2026. Detalle técnico en `docs/IMPLEMENTATION_STATUS.md`; pruebas en `docs/TESTING_REPORT.md`.
 
 ## 1. Resumen de las modificaciones
