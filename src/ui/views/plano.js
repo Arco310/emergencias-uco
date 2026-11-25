@@ -5,10 +5,11 @@
 // soltar y llega a los demás dispositivos); doble clic o pulsación larga abre el selector de claves;
 // «UNIDADES PENDIENTES DE ASIGNACIÓN» admite arrastrar al plano y desde el plano; avisos por punto o zona.
 import { G, A, F, CH, filt } from '../state.js';
-import { esc, attr, toast, confirmDlg, btn, empty, pickFile, readBytes, closeSheet, openSheet } from '../dom.js';
+import { esc, attr, toast, confirmDlg, btn, empty, pickFile, readBytes, closeSheet, openSheet, refreshSheets, fieldsHtml, readForm } from '../dom.js';
 import { icon, unitSvg, SIZE_PX } from '../icons.js';
-import { now } from '../../core/util.js';
-import { liveUnits, unitLabel } from '../../core/engine.js';
+import { now, uid } from '../../core/util.js';
+import { liveUnits, unitLabel, unitSituation, SITUACION_LABEL, sectorNombre, activeParts } from '../../core/engine.js';
+import { normalizarFiltros, filtrosActivos, filtrarUnidades, filtrarAvisos, sectoresVisibles, puntosVisibles, leyenda, agrupar, categoriasPunto, centroide, DISPONIBILIDAD, simboloDisponibilidad, GRUPOS_PUNTO } from '../../core/capas.js';
 import { unitVisual, effectiveVis } from '../../core/visual.js';
 import * as C from '../../core/commands.js';
 import { geoANorm, normAGeo, hasCoords, fmtCoords, round6 } from '../../core/geo.js';
@@ -16,6 +17,8 @@ import { openUnit, openAviso, avisoNumber, nuevoAvisoEn } from './ops.js';
 import { L, crearMapa, capaBase, aLatLngBounds, NOMBRE_PROVEEDOR, proveedor } from '../mapa.js';
 import { VISTAS_MAPA, VISTA_DEFECTO, nombreVista } from '../../core/mapas.js';
 import { abrirSelectorMapa, abrirBiblioteca, incorporarAlPreventivo } from './cartografia.js';
+import { etiquetaTipoAviso } from '../../core/incidentes.js';
+import { AVISO_ESTADO } from '../../core/timeline.js';
 
 const urls = new Map(); const loading = new Set();
 const S = () => G.core.state;
@@ -24,7 +27,24 @@ const can = p => G.core.can(p);
 const editable = () => P().estado !== 'cerrado' && !P().archivado;
 const operativo = () => P().estado === 'activo';
 const clamp = v => Math.min(1, Math.max(0, v));
-let M = null; // mapa vivo: { key, pid, el, map, u: Map, a: Map, z: Map, dibujo }
+let M = null; // mapa vivo: { key, pid, el, map, u: Map, a: Map, z: Map, s: Map, p: Map, g: grupo, dibujo }
+
+// Capas y filtros: preferencias de visualización de cada persona en este dispositivo, por preventivo.
+// No cambian los datos ni lo que ven los demás; ocultar no es desactivar ni eliminar.
+const VISTA = new Map(); const TOCADA = new Set();
+export function filtrosPlano() {
+  const pid = G.core.cur;
+  if (!VISTA.has(pid)) {
+    VISTA.set(pid, normalizarFiltros({}));
+    G.core.repo.getDoc('vista:' + pid, null).then(v => { if (v && !TOCADA.has(pid)) { VISTA.set(pid, normalizarFiltros(v)); G.render(); refreshSheets(); } }).catch(() => { });
+  }
+  return VISTA.get(pid);
+}
+function guardarFiltros(fl) {
+  const pid = G.core.cur; TOCADA.add(pid); VISTA.set(pid, normalizarFiltros(fl));
+  G.core.repo.putDoc('vista:' + pid, VISTA.get(pid)).catch(() => { });
+  G.render(); refreshSheets();
+}
 
 function blobUrl(id) {
   if (urls.has(id)) return urls.get(id);
@@ -76,7 +96,7 @@ function posAviso(a) {
 export function renderPlano() {
   const p = P(); const s = S(); const f = filt('plano'); const t = now();
   const canEdit = editable() && can('planos.editar');
-  const pl = p.plano;
+  const pl = p.plano; const fl = filtrosPlano(); const nfl = filtrosActivos(fl);
   const tools = `<div class="toolbar plan-tools">
     ${canEdit ? btn(pl && !esMapa(pl) ? 'Cambiar imagen' : 'Importar imagen', 'plan.import', { ic: 'subir', cls: pl ? '' : 'primary' }) : ''}
     ${canEdit ? btn('Importar desde Google Maps', 'plan.google', { ic: 'mapa', cls: pl ? '' : 'primary' }) : ''}
@@ -84,8 +104,10 @@ export function renderPlano() {
     ${pl && operativo() && can('avisos.crear') ? btn(f.dibujo ? 'Cancelar zona' : 'Aviso por zona', 'plan.zona', { ic: 'zona', cls: f.dibujo ? 'primary' : '' }) : ''}
     ${esMapa(pl) ? btn(nombreVista(vistaActual()), 'plan.vista', { ic: 'capas', title: 'Tipo de mapa: estándar, satélite, híbrido o relieve', disabled: !puedeVista(), cls: 'vista-btn' }) : ''}
     ${pl ? `${btn('', 'plan.fit', { ic: 'ajustar', title: 'Ver todo el plano' })}
-    <label class="switch sm"><input type="checkbox" data-c="plan.layer" data-v="avisos"${f.hideAvisos ? '' : ' checked'}><span>Avisos</span></label>
-    <label class="switch sm"><input type="checkbox" data-c="plan.layer" data-v="labels"${f.hideLabels ? '' : ' checked'}><span>Etiquetas</span></label>` : ''}
+    ${btn('Capas y filtros' + (nfl ? ' · ' + nfl : ''), 'plan.capas', { ic: 'filtro', cls: nfl ? 'primary' : '', title: nfl ? nfl + ' filtro(s) activo(s)' : 'Elegir qué se ve en el plano' })}
+    ${nfl ? btn('Restablecer', 'plan.restablecer', { cls: 'ghost sm', title: 'Volver a ver todo' }) : ''}
+    <label class="switch sm"><input type="checkbox" data-c="plan.capa" data-v="avisos"${fl.capas.avisos ? ' checked' : ''}><span>Avisos</span></label>
+    <label class="switch sm"><input type="checkbox" data-c="plan.capa" data-v="etiquetas"${fl.capas.etiquetas ? ' checked' : ''}><span>Etiquetas</span></label>` : ''}
   </div>`;
   if (!pl) return tools + empty('No hay plano. Importa una zona de mapa (Google Maps o la biblioteca de planos: conserva las coordenadas reales) o una imagen del recinto (funciona sin Internet).');
   if (!esMapa(pl)) {
@@ -100,17 +122,18 @@ export function renderPlano() {
   return `${tools}
   ${placingAviso ? `<div class="banner info">${icon('pin')}<div>Toca en el plano para situar el aviso <b>${esc(avisoNumber(placingAviso))}</b>.</div>${btn('Cancelar', 'plan.cancelPlace', { cls: 'ghost' })}</div>` : ''}
   ${placing ? `<div class="banner info">${icon('pin')}<div>Toca en el plano para colocar <b>${esc(placing.ind)}</b>.</div>${btn('Cancelar', 'plan.cancelPick', { cls: 'ghost' })}</div>` : ''}
-  ${f.dibujo ? `<div class="banner info">${icon('zona')}<div>Toca en el plano para marcar los puntos de la zona (${(f.dibujo.pts || []).length} marcados, mínimo 3).</div>
-    <div class="row gap-s">${btn('Deshacer punto', 'plan.zonaUndo', { cls: 'ghost sm' })}${btn('Crear aviso en la zona', 'plan.zonaOk', { cls: 'primary sm' })}${zonas.length ? btn('Usar una zona existente', 'plan.zonaExist', { cls: 'ghost sm' }) : ''}</div></div>` : ''}
+  ${f.dibujo ? `<div class="banner info">${icon('zona')}<div>${f.dibujo.para ? `Toca en el plano para delimitar <b>${esc(f.dibujo.para.nombre)}</b>` : 'Toca en el plano para marcar los puntos de la zona'} (${(f.dibujo.pts || []).length} marcados, mínimo 3).</div>
+    <div class="row gap-s">${btn('Deshacer punto', 'plan.zonaUndo', { cls: 'ghost sm' })}${btn(f.dibujo.para ? 'Guardar delimitación' : 'Crear aviso en la zona', 'plan.zonaOk', { cls: 'primary sm' })}${!f.dibujo.para && zonas.length ? btn('Usar una zona existente', 'plan.zonaExist', { cls: 'ghost sm' }) : ''}${f.dibujo.para ? btn('Cancelar', 'plan.zona', { cls: 'ghost sm' }) : ''}</div></div>` : ''}
+  ${f.situarPunto ? `<div class="banner info">${icon('pin')}<div>Toca en el plano para situar <b>${esc(f.situarPunto.nombre)}</b>.</div>${btn('Cancelar', 'plan.puntoCancelar', { cls: 'ghost' })}</div>` : ''}
   <div class="coord">
     <aside class="coord-pend" data-pendientes>
       <h3>Unidades pendientes de asignación <span class="chip sm">${pend.length}</span></h3>
       ${pend.length ? `<div class="pend-list">${pend.map(u => `<button type="button" class="uchip${f.place === u.id ? ' on' : ''}" data-a="plan.pick" data-id="${u.id}" data-arrastre="${u.id}" style="--bc:${attr(u.colorC0)}" title="Arrástrala al plano o tócala y luego toca el plano">${unitSvg(unitVisual(p, u, t), { px: 22 })}${esc(u.ind)}</button>`).join('')}</div>` : '<p class="muted small">Ninguna. Para devolver una unidad aquí, arrástrala desde el plano a este recuadro.</p>'}
     </aside>
-    <div class="coord-host" id="coord-host"></div>
+    <div class="coord-host" id="coord-host">${tarjetaMapa()}</div>
   </div>
   <p class="muted small coord-ayuda">${canEdit ? 'Arrastra una unidad para moverla (se guarda al soltar). ' : ''}Doble clic o pulsación larga sobre una unidad: cambiar su clave. ${operativo() && can('avisos.crear') ? 'Toca un punto libre del plano para crear un aviso en él.' : ''}${esMapa(pl) ? ' Plano cartográfico «' + esc(pl.nombre || '') + '» (' + esc(NOMBRE_PROVEEDOR[pl.proveedor] || '') + '), con coordenadas reales. Vista: ' + esc(nombreVista(vistaActual())) + '.' : ' Plano de imagen: no tiene vistas de mapa (satélite, relieve…); para usarlas, importa una zona de mapa.'}</p>
-  <div class="legend">${p.cat.claves.map(c => `<span><i style="background:${attr(c.color)}"></i>${esc(c.codigo)} ${esc(c.nombre)}</span>`).join('')}<span><i style="background:#9E9E9E"></i>Descanso</span></div>`;
+  ${leyendaHtml(p, fl)}`;
 }
 
 export function afterRender() {
@@ -140,7 +163,8 @@ function crear(host, key) {
     L.imageOverlay(urls.get(pl.blob), b, { className: 'plano-img' }).addTo(map);
     map.fitBounds(b, { animate: false }); map.setMaxBounds(L.latLngBounds(b).pad(0.6));
   }
-  M = { key, pid: G.core.cur, el, map, u: new Map(), a: new Map(), z: new Map(), dibujo: null, movido: false, vista: null, base: null };
+  M = { key, pid: G.core.cur, el, map, u: new Map(), a: new Map(), z: new Map(), s: new Map(), p: new Map(), g: L.layerGroup().addTo(map), dibujo: null, movido: false, vista: null, base: null };
+  map.on('zoomend', () => sincronizar()); // la agrupación depende del zoom
   if (esMapa(pl)) cambiarVista();
   map.on('click', clicMapa);
   map.on('dragstart zoomstart', ev => { if (ev && ev.hard !== true) M && (M.movido = true); });
@@ -181,17 +205,31 @@ A['plan.vistaSel'] = async el => {
 function iconoUnidad(u) {
   const p = P(); const f = filt('plano'); const v = unitVisual(p, u, now()); const vis = effectiveVis(p, u);
   const px = SIZE_PX[v.tam] || 38;
-  const label = f.hideLabels || vis.etiqueta === 'ninguna' ? '' : vis.etiqueta === 'nombre' ? (u.nombre || u.ind) : vis.etiqueta === 'ambos' ? u.ind + (u.nombre ? ' · ' + u.nombre : '') : u.ind;
-  const html = `<div class="mk${f.focus === u.id ? ' focus' : ''}" data-mk="u" data-id="${u.id}">${unitSvg(v, { px, title: unitLabel(u) + ' · ' + u.clave })}${label ? `<span class="mk-l">${esc(label)}</span>` : ''}</div>`;
+  const label = !filtrosPlano().capas.etiquetas || vis.etiqueta === 'ninguna' ? '' : vis.etiqueta === 'nombre' ? (u.nombre || u.ind) : vis.etiqueta === 'ambos' ? u.ind + (u.nombre ? ' · ' + u.nombre : '') : u.ind;
+  // Disponibilidad con símbolo (no solo color): ocupada, descanso, clave especial, fuera de servicio
+  const sit = unitSituation(S(), u, now()); const sim = sit === 'disponible' ? '' : simboloDisponibilidad(sit);
+  const html = `<div class="mk${f.focus === u.id ? ' focus' : ''}${f.sel && f.sel.id === u.id ? ' sel' : ''}" data-mk="u" data-id="${u.id}" data-sit="${sit}">${unitSvg(v, { px, title: unitLabel(u) + ' · ' + u.clave + ' · ' + (SITUACION_LABEL[sit] || sit) })}${sim ? `<span class="mk-disp d-${sit}" aria-hidden="true">${sim}</span>` : ''}${label ? `<span class="mk-l">${esc(label)}</span>` : ''}</div>`;
   return { html, px };
 }
 function sincronizar() {
   if (!M) return;
-  const s = S(); const p = P(); const f = filt('plano');
+  const s = S(); const p = P(); const f = filt('plano'); const fl = filtrosPlano(); const t = now();
   const puede = editable() && can('planos.editar');
+  // 1) Qué se ve según capas y filtros (los datos no cambian)
+  const uVis = filtrarUnidades(s, fl, t).filter(u => u.plan && effectiveVis(p, u).enPlano !== false);
+  const aVis = filtrarAvisos(s, fl);
+  const ptVis = puntosVisibles(p, fl);
+  // 2) Agrupación cuando hay muchos elementos: por rejilla de pantalla (nunca la unidad que se arrastra ni la seleccionada)
+  const candidatos = [];
+  for (const u of uVis) { const m = M.u.get(u.id); if (!(m && m._arrastrando) && !(f.sel && f.sel.id === u.id) && f.focus !== u.id) candidatos.push({ id: 'u:' + u.id, ll: aLatLng(u.plan) }); }
+  for (const a of aVis) { const pos = posAviso(a); if (pos) candidatos.push({ id: 'a:' + a.id, ll: aLatLng(pos) }); }
+  for (const pt of ptVis) if (pt.pos) candidatos.push({ id: 'p:' + pt.id, ll: aLatLng(pt.pos) });
+  const ag = agrupar(candidatos.map(c => { const q = M.map.latLngToContainerPoint(c.ll); return { id: c.id, x: q.x, y: q.y, ll: c.ll }; }), { celda: 56, umbral: UMBRAL_AGRUPAR });
+  const agrupados = new Set(ag.grupos.flatMap(g => g.ids));
+  // 3) Unidades
   const vivos = new Set();
-  for (const u of liveUnits(s)) {
-    if (!u.plan || u.sit === 'archivada' || effectiveVis(p, u).enPlano === false) continue;
+  for (const u of uVis) {
+    if (agrupados.has('u:' + u.id)) continue;
     vivos.add(u.id);
     const { html, px } = iconoUnidad(u); const sig = html + JSON.stringify(u.plan) + puede;
     let m = M.u.get(u.id);
@@ -204,34 +242,79 @@ function sincronizar() {
     }
     m._sig = sig;
   }
-  for (const [id, m] of M.u) if (!vivos.has(id)) { m.remove(); M.u.delete(id); }
-  // Avisos: punto y zona
+  for (const [id, m] of M.u) if (!vivos.has(id) && !m._arrastrando) { m.remove(); M.u.delete(id); }
+  // 4) Avisos: punto y zona (los finalizados, solo si se piden, en gris y con borde discontinuo)
   const av = new Set(); const zs = new Set();
-  if (!f.hideAvisos) for (const a of Object.values(s.avisos)) {
-    if (a.estado === 'finalizado') continue;
-    const pos = posAviso(a);
-    if (pos) {
-      av.add(a.id); const html = `<div class="mk av est-${a.estado}" data-mk="a" data-id="${a.id}"><span class="mk-av">!</span><span class="mk-l">${esc(avisoNumber(a))}</span></div>`;
+  for (const a of aVis) {
+    const fin = a.estado === 'finalizado'; const pos = posAviso(a);
+    if (pos && !agrupados.has('a:' + a.id)) {
+      av.add(a.id);
+      const html = `<div class="mk av est-${a.estado}${fin ? ' fin' : ''}${a.num == null && a.ref ? ' prov' : ''}${f.sel && f.sel.id === a.id ? ' sel' : ''}" data-mk="a" data-id="${a.id}" title="Aviso ${attr(avisoNumber(a))}${fin ? ' (finalizado)' : ''}"><span class="mk-av">${fin ? '✓' : '!'}</span><span class="mk-l">${esc(avisoNumber(a))}</span></div>`;
       let m = M.a.get(a.id); const sig = html + JSON.stringify(pos);
-      if (!m) { m = L.marker(aLatLng(pos), { icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: false, zIndexOffset: 500 }); m.on('click', () => openAviso(a.id)); m.addTo(M.map); M.a.set(a.id, m); }
+      if (!m) { m = L.marker(aLatLng(pos), { icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: false, zIndexOffset: fin ? 100 : 500 }); m.on('click', () => seleccionar('a', a.id)); m.addTo(M.map); M.a.set(a.id, m); }
       else if (m._sig !== sig) { m.setLatLng(aLatLng(pos)); m.setIcon(L.divIcon({ html, className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15] })); }
       m._sig = sig;
     }
     if (a.zona && a.zona.pts && a.zona.pts.length >= 3) {
-      zs.add(a.id); const col = a.estado === 'en_curso' ? '#1565C0' : a.estado === 'asignado' ? '#B26A00' : '#C62828';
+      zs.add(a.id); const col = fin ? '#757575' : a.estado === 'en_curso' ? '#1565C0' : a.estado === 'asignado' ? '#B26A00' : '#C62828';
       let z = M.z.get(a.id); const lls = a.zona.pts.map(aLatLng); const sig = JSON.stringify(a.zona.pts) + col;
-      if (!z) { z = L.polygon(lls, { color: col, weight: 2, fillOpacity: 0.15, bubblingMouseEvents: false }); z.on('click', () => { if (!filt('plano').dibujo) openAviso(a.id); }); z.bindTooltip('Aviso ' + avisoNumber(a)); z.addTo(M.map); M.z.set(a.id, z); }
-      else if (z._sig !== sig) { z.setLatLngs(lls); z.setStyle({ color: col }); }
+      if (!z) { z = L.polygon(lls, { color: col, weight: 2, fillOpacity: fin ? 0.05 : 0.15, dashArray: fin ? '4 4' : null, bubblingMouseEvents: false }); z.on('click', () => { if (!filt('plano').dibujo) seleccionar('a', a.id); }); z.bindTooltip('Aviso ' + avisoNumber(a)); z.addTo(M.map); M.z.set(a.id, z); }
+      else if (z._sig !== sig) { z.setLatLngs(lls); z.setStyle({ color: col, dashArray: fin ? '4 4' : null, fillOpacity: fin ? 0.05 : 0.15 }); }
       z._sig = sig;
     }
   }
   for (const [id, m] of M.a) if (!av.has(id)) { m.remove(); M.a.delete(id); }
   for (const [id, z] of M.z) if (!zs.has(id)) { z.remove(); M.z.delete(id); }
+  // 5) Sectores con delimitación (color y nombre; se ocultan uno a uno)
+  const ss = new Set();
+  for (const sec of sectoresVisibles(p, fl)) {
+    ss.add(sec.id); const lls = sec.zona.pts.map(aLatLng); const sig = JSON.stringify(sec.zona.pts) + sec.color + sec.nombre + fl.capas.etiquetas;
+    let z = M.s.get(sec.id);
+    if (z && z._sig !== sig) { z.remove(); z = null; }
+    if (!z) {
+      z = L.polygon(lls, { color: sec.color || '#455A64', weight: 2, dashArray: '8 6', fillOpacity: 0.06, bubblingMouseEvents: false });
+      z.on('click', () => { if (!filt('plano').dibujo && !filt('plano').situarPunto) seleccionar('s', sec.id); });
+      if (fl.capas.etiquetas) z.bindTooltip(sec.nombre, { permanent: true, direction: 'center', className: 'sec-label' });
+      z.addTo(M.map); z.bringToBack(); z._sig = sig; M.s.set(sec.id, z);
+    }
+  }
+  for (const [id, z] of M.s) if (!ss.has(id)) { z.remove(); M.s.delete(id); }
+  // 6) Puntos de interés y de apoyo (marcador con icono y nombre, o zona)
+  const cats = new Map(categoriasPunto(p).map(c => [c.id, c])); const ps = new Set();
+  for (const pt of ptVis) {
+    if (pt.pos && agrupados.has('p:' + pt.id)) continue;
+    const c = cats.get(pt.categoria); ps.add(pt.id);
+    const sig = JSON.stringify([pt, c, fl.capas.etiquetas, f.sel && f.sel.id === pt.id]);
+    let m = M.p.get(pt.id);
+    if (m && m._sig !== sig) { m.remove(); m = null; }
+    if (!m) {
+      if (pt.zona) {
+        m = L.polygon(pt.zona.pts.map(aLatLng), { color: c.color, weight: 2, fillOpacity: 0.12, bubblingMouseEvents: false });
+        m.bindTooltip(pt.nombre + ' · ' + c.nombre, fl.capas.etiquetas ? { permanent: true, direction: 'center', className: 'poi-label' } : {});
+      } else {
+        const html = `<div class="mk poi${f.sel && f.sel.id === pt.id ? ' sel' : ''}" data-mk="p" data-id="${pt.id}" style="--pc:${attr(c.color)}" title="${attr(pt.nombre + ' · ' + c.nombre)}"><span class="mk-poi">${icon(c.icono || 'pin')}</span>${fl.capas.etiquetas ? `<span class="mk-l">${esc(pt.nombre)}</span>` : ''}</div>`;
+        m = L.marker(aLatLng(pt.pos), { icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [28, 28], iconAnchor: [14, 14] }), keyboard: false, zIndexOffset: 200 });
+      }
+      m.on('click', () => { if (!filt('plano').dibujo) seleccionar('p', pt.id); });
+      m.addTo(M.map); m._sig = sig; M.p.set(pt.id, m);
+    }
+  }
+  for (const [id, m] of M.p) if (!ps.has(id)) { m.remove(); M.p.delete(id); }
+  // 7) Grupos: número de elementos; al tocarlo se acerca
+  M.g.clearLayers();
+  for (const g of ag.grupos) {
+    const lls = g.ids.map(id => candidatos.find(c => c.id === id).ll); const b = L.latLngBounds(lls);
+    const tipos = new Set(g.ids.map(id => id[0]));
+    const m = L.marker(b.getCenter(), { icon: L.divIcon({ html: `<div class="mk grupo" title="${g.n} elementos: acércate para verlos">${g.n}</div>`, className: 'mk-wrap', iconSize: [40, 40], iconAnchor: [20, 20] }), keyboard: false, zIndexOffset: 800 });
+    m._tipos = [...tipos]; m.on('click', () => M.map.fitBounds(b.pad(0.4), { maxZoom: M.map.getMaxZoom() }));
+    M.g.addLayer(m);
+  }
   dibujarBorrador();
 }
+const UMBRAL_AGRUPAR = 60;
 function eventosUnidad(m, id) {
   let clicT = null;
-  m.on('click', () => { clearTimeout(clicT); clicT = setTimeout(() => openUnit(id), 260); });
+  m.on('click', () => { clearTimeout(clicT); clicT = setTimeout(() => seleccionar('u', id), 260); });
   m.on('dblclick', ev => { clearTimeout(clicT); L.DomEvent.stop(ev); selectorClave(id); });
   m.on('contextmenu', ev => { clearTimeout(clicT); if (ev.originalEvent) ev.originalEvent.preventDefault(); selectorClave(id); });
   let ultimo = null; const seguir = ev => { ultimo = ev; };
@@ -255,8 +338,11 @@ function eventosUnidad(m, id) {
 async function clicMapa(ev) {
   const f = filt('plano'); const ll = ev.latlng;
   try {
+    // Un toque fuera de los elementos cierra la ficha contextual (también fuera del plano)
+    if (f.sel && !f.place && !f.placeAviso && !f.dibujo && !f.situarPunto) { f.sel = null; G.render(); return; }
     if (!dentro(ll)) { if (f.place || f.placeAviso || f.dibujo) toast('Toca dentro del plano', 'warn'); return; }
     if (f.dibujo) { f.dibujo.pts.push(dePunto(ll)); G.render(); return; }
+    if (f.situarPunto) { const d = f.situarPunto; f.situarPunto = null; await guardarPunto({ ...d, pos: dePunto(ll) }); return; }
     if (f.placeAviso) { const id = f.placeAviso; f.placeAviso = null; await G.core.exec(C.avisoPlan, id, dePunto(ll)); toast('Aviso situado en el plano', 'ok'); openAviso(id); return; }
     if (f.place) {
       const id = f.place; await G.core.exec(C.unitPlan, id, dePunto(ll));
@@ -332,13 +418,15 @@ A['plan.fit'] = () => { filt('plano').focus = null; if (!M) return; const pl = P
 A['plan.pick'] = el => { const ch = document.querySelector(`[data-arrastre="${el.dataset.id}"]`); if (ch && ch._soltado && Date.now() - ch._soltado < 400) return; const f = filt('plano'); f.place = f.place === el.dataset.id ? null : el.dataset.id; G.render(); };
 A['plan.cancelPick'] = () => { filt('plano').place = null; G.render(); };
 A['plan.cancelPlace'] = () => { filt('plano').placeAviso = null; G.render(); };
-CH['plan.layer'] = el => { const f = filt('plano'); if (el.dataset.v === 'avisos') f.hideAvisos = !el.checked; else f.hideLabels = !el.checked; if (M) { for (const m of M.u.values()) m._sig = null; } G.render(); };
 A['plan.zona'] = () => { const f = filt('plano'); f.dibujo = f.dibujo ? null : { pts: [] }; f.place = null; G.render(); };
 A['plan.zonaUndo'] = () => { const f = filt('plano'); if (f.dibujo) { f.dibujo.pts.pop(); G.render(); } };
 A['plan.zonaOk'] = () => {
   const f = filt('plano'); const pts = f.dibujo ? f.dibujo.pts : [];
   if (pts.length < 3) { toast('Marca al menos 3 puntos para delimitar la zona', 'warn'); return; }
-  f.dibujo = null; G.render(); crearAvisoZona(pts);
+  const para = f.dibujo.para; f.dibujo = null; G.render();
+  if (para && para.k === 'sector') return guardarDelimitacion(para.id, pts);
+  if (para && para.k === 'punto') return guardarPunto({ ...para.datos, zona: { pts } });
+  crearAvisoZona(pts);
 };
 A['plan.zonaExist'] = () => {
   const s = S(); const zonas = Object.values(s.avisos).filter(a => a.zona && a.zona.pts && a.zona.pts.length >= 3);
@@ -360,6 +448,130 @@ A['plan.import'] = async () => {
   const id = await G.core.repo.putBlob(bytes, { mime, w, h, nombre: file.name });
   await G.core.exec(C.planoSet, { blob: id, w, h, mime, nombre: file.name });
   toast('Plano importado', 'ok'); G.render();
+};
+// ---------- ficha contextual (sin salir del mapa) ----------
+function seleccionar(k, id) { const f = filt('plano'); f.sel = { k, id }; G.render(); }
+function tarjetaMapa() {
+  const f = filt('plano'); if (!f.sel) return '';
+  const s = S(); const p = P(); const t = now(); const { k, id } = f.sel;
+  let cab = '', det = [], acc = '';
+  if (k === 'u') {
+    const u = s.units[id]; if (!u) return ''; const sit = unitSituation(s, u, t); const a = u.aviso && s.avisos[u.aviso];
+    cab = unitLabel(u);
+    det = [`Clave ${esc(u.clave)}`, `${simboloDisponibilidad(sit) ? simboloDisponibilidad(sit) + ' ' : ''}${esc(SITUACION_LABEL[sit] || sit)}`, esc(((p.cat.tiposRecurso || []).find(x => x.id === u.tipo) || {}).nombre || ''), 'Sector ' + esc(sectorNombre(p, u, '—')), a ? 'Aviso ' + esc(avisoNumber(a)) : ''];
+    acc = btn('Ficha', 'plan.selAbrir', { cls: 'primary sm' }) + (can('estados.cambiar') && operativo() && u.sit === 'activa' ? btn('Cambiar clave', 'plan.selClave', { cls: 'sm' }) : '');
+  } else if (k === 'a') {
+    const a = s.avisos[id]; if (!a) return '';
+    const part = activeParts(a).map(x => s.units[x.u]).filter(Boolean).map(unitLabel);
+    cab = 'Aviso ' + avisoNumber(a);
+    det = [esc(etiquetaTipoAviso(p.cat.tiposAviso, a.tipo) || a.desc || ''), esc(AVISO_ESTADO[a.estado] || a.estado), a.num == null && a.ref ? '<b>Pendiente de confirmar por el servidor</b>' : '', part.length ? 'Unidades: ' + esc(part.join(', ')) : 'Sin unidades', a.loc && a.loc.txt ? esc(a.loc.txt) : ''];
+    acc = btn('Abrir aviso', 'plan.selAbrir', { cls: 'primary sm' });
+  } else if (k === 's') {
+    const sec = (p.cat.sectores || []).find(x => x.id === id); if (!sec) return '';
+    const us = liveUnits(s).filter(u => u.sector === id); const av = Object.values(s.avisos).filter(a => a.sector === id && a.estado !== 'finalizado');
+    cab = 'Sector ' + sec.nombre;
+    det = [`${us.length} unidad(es)`, `${us.filter(u => unitSituation(s, u, t) === 'disponible').length} disponible(s)`, `${av.length} aviso(s) activo(s)`];
+    acc = editable() && can('sectores.gestionar') ? btn('Cambiar delimitación', 'plan.secDelimitar', { cls: 'sm', data: { id } }) : '';
+  } else if (k === 'p') {
+    const pt = (p.cat.puntos || []).find(x => x.id === id); if (!pt) return ''; const c = categoriasPunto(p).find(x => x.id === pt.categoria) || {};
+    cab = pt.nombre; det = [esc(c.nombre || ''), esc(GRUPOS_PUNTO[c.grupo] || ''), esc(pt.desc || '')];
+    acc = editable() && can('planos.editar') ? btn('Editar', 'plan.puntoEditar', { cls: 'sm', data: { id } }) + btn('Quitar', 'plan.puntoQuitar', { cls: 'sm danger-ghost', data: { id } }) : '';
+  }
+  return `<div class="map-card" role="region" aria-live="polite" aria-label="${attr(cab)}" data-map-card="${k}"><div class="grow"><b>${esc(cab)}</b><div class="small">${det.filter(Boolean).join(' · ')}</div></div><div class="row gap-s wrap">${acc}${btn('', 'plan.selCerrar', { cls: 'icon ghost', ic: 'cerrar', title: 'Cerrar' })}</div></div>`;
+}
+A['plan.selCerrar'] = () => { filt('plano').sel = null; G.render(); };
+A['plan.selAbrir'] = () => { const sel = filt('plano').sel; if (!sel) return; if (sel.k === 'u') openUnit(sel.id); else if (sel.k === 'a') openAviso(sel.id); };
+A['plan.selClave'] = () => { const sel = filt('plano').sel; if (sel) selectorClave(sel.id); };
+
+// ---------- leyenda ----------
+function leyendaHtml(p, fl) {
+  const ley = leyenda(p, fl); const usadas = new Set((p.cat.puntos || []).map(x => x.categoria)); const s = S();
+  const prov = Object.values(s.avisos).some(a => a.num == null && a.ref && a.estado !== 'finalizado');
+  return `<div class="legend" aria-label="Leyenda del plano">${ley.claves.map(c => `<span><i style="background:${attr(c.color)}"></i>${esc(c.codigo)} ${esc(c.nombre)}</span>`).join('')}<span><i style="background:#9E9E9E"></i>Descanso</span>
+    ${ley.disponibilidad.filter(d => d.id !== 'disponible').map(d => `<span><b class="sim d-${d.id}" aria-hidden="true">${d.simbolo}</b>${esc(d.nombre)}</span>`).join('')}
+    ${fl.capas.avisos ? '<span><b class="sim av" aria-hidden="true">!</b>Aviso activo</span>' : ''}${fl.capas.finalizados ? '<span><b class="sim av fin" aria-hidden="true">✓</b>Aviso finalizado</span>' : ''}${prov ? '<span><b class="sim av prov" aria-hidden="true">!</b>Aviso pendiente de confirmar</span>' : ''}
+    ${ley.categorias.filter(c => usadas.has(c.id)).map(c => `<span><b class="sim poi" style="--pc:${attr(c.color)}" aria-hidden="true">${icon(c.icono || 'pin')}</b>${esc(c.nombre)}</span>`).join('')}</div>`;
+}
+
+// ---------- capas y filtros ----------
+CH['plan.capa'] = el => { const fl = structuredClone(filtrosPlano()); fl.capas[el.dataset.v] = el.checked; guardarFiltros(fl); };
+CH['plan.secVer'] = el => { const fl = structuredClone(filtrosPlano()); const id = el.dataset.id; fl.sectoresOcultos = el.checked ? fl.sectoresOcultos.filter(x => x !== id) : [...fl.sectoresOcultos, id]; guardarFiltros(fl); };
+CH['plan.catVer'] = el => { const fl = structuredClone(filtrosPlano()); const id = el.dataset.id; fl.categoriasOcultas = el.checked ? fl.categoriasOcultas.filter(x => x !== id) : [...fl.categoriasOcultas, id]; guardarFiltros(fl); };
+A['plan.filtro'] = el => { const fl = structuredClone(filtrosPlano()); const k = el.dataset.campo; const v = el.dataset.v; fl[k] = fl[k].includes(v) ? fl[k].filter(x => x !== v) : [...fl[k], v]; guardarFiltros(fl); };
+A['plan.restablecer'] = () => { guardarFiltros({}); toast('Se ve todo de nuevo', 'ok'); };
+A['plan.capas'] = () => openSheet({ title: 'Capas y filtros', size: 'm', live: true, render: renderCapas });
+function renderCapas() {
+  const fl = filtrosPlano(); const p = P(); const s = S(); const t = now(); const vivas = liveUnits(s);
+  const sw = (k, label, n) => `<label class="switch"><input type="checkbox" data-c="plan.capa" data-v="${k}"${fl.capas[k] ? ' checked' : ''}><span>${esc(label)}${n != null ? ` <span class="muted">(${n})</span>` : ''}</span></label>`;
+  const chips = (campo, titulo, items) => items.length ? `<fieldset class="filtro"><legend>${esc(titulo)}</legend><div class="chips-f">${items.map(([id, label, extra]) => { const on = fl[campo].includes(id); return `<button type="button" class="chip-f${on ? ' on' : ''}" aria-pressed="${on}" data-a="plan.filtro" data-campo="${campo}" data-v="${attr(id)}">${extra || ''}${esc(label)}</button>`; }).join('')}</div></fieldset>` : '';
+  const sw2 = c => `<i class="sw" style="background:${attr(c || '#9E9E9E')}"></i>`;
+  const avisos = Object.values(s.avisos); const puntos = p.cat.puntos || []; const cats = categoriasPunto(p);
+  const conZona = (p.cat.sectores || []).filter(x => x.zona);
+  return `<p class="muted small">Solo cambia lo que ves tú en este dispositivo y en este preventivo: los datos y lo que ven los demás no cambian. En cada filtro, sin marcar = todos.</p>
+    <h3>Qué se ve</h3><div class="capas-grid">${sw('unidades', 'Unidades', filtrarUnidades(s, fl, t).length + ' de ' + vivas.length)}${sw('avisos', 'Avisos activos', avisos.filter(a => a.estado !== 'finalizado').length)}${sw('finalizados', 'Avisos finalizados', avisos.filter(a => a.estado === 'finalizado').length)}${sw('sectores', 'Sectores delimitados', conZona.length)}${sw('interes', GRUPOS_PUNTO.interes, puntos.filter(x => (cats.find(c => c.id === x.categoria) || {}).grupo === 'interes').length)}${sw('apoyo', GRUPOS_PUNTO.apoyo, puntos.filter(x => (cats.find(c => c.id === x.categoria) || {}).grupo === 'apoyo').length)}${sw('etiquetas', 'Etiquetas')}</div>
+    <h3>Unidades</h3>
+    ${chips('tipos', 'Tipo de recurso', [...new Set(vivas.map(u => u.tipo).filter(Boolean))].map(id => [id, ((p.cat.tiposRecurso || []).find(x => x.id === id) || {}).nombre || id]))}
+    ${chips('claves', 'Clave', p.cat.claves.map(c => [c.codigo, c.codigo + ' · ' + c.nombre, sw2(c.color)]))}
+    ${chips('disponibilidad', 'Disponibilidad', DISPONIBILIDAD.map(d => [d.id, d.nombre, `<b class="sim" aria-hidden="true">${d.simbolo}</b>`]))}
+    ${chips('sectores', 'Sector', (p.cat.sectores || []).map(x => [x.id, x.nombre, sw2(x.color)]))}
+    <h3>Avisos</h3>${chips('tiposAviso', 'Tipo de aviso', [...new Set(avisos.map(a => a.tipo).filter(Boolean))].map(id => [id, etiquetaTipoAviso(p.cat.tiposAviso, id) || id])) || '<p class="muted small">Aún no hay avisos con tipo.</p>'}
+    <h3>Sectores</h3><ul class="ref-list capas-list">${(p.cat.sectores || []).map(x => `<li class="row gap wrap">${sw2(x.color)}<b class="grow">${esc(x.nombre)}</b>
+      ${x.zona ? `<label class="switch sm"><input type="checkbox" data-c="plan.secVer" data-id="${attr(x.id)}"${fl.sectoresOcultos.includes(x.id) ? '' : ' checked'}><span>Ver</span></label>` : '<span class="muted small">sin delimitar</span>'}
+      ${editable() && can('sectores.gestionar') ? btn(x.zona ? 'Cambiar delimitación' : 'Delimitar en el plano', 'plan.secDelimitar', { cls: 'sm', data: { id: x.id } }) + (x.zona ? btn('Quitar delimitación', 'plan.secQuitarZona', { cls: 'sm ghost', data: { id: x.id } }) : '') : ''}</li>`).join('')}</ul>
+    <h3>Puntos del plano</h3>${editable() && can('planos.editar') ? `<div class="row">${btn('Añadir punto', 'plan.puntoNuevo', { ic: 'mas_add', cls: 'sm' })}</div>` : ''}
+    ${Object.entries(GRUPOS_PUNTO).map(([g, nom]) => `<fieldset class="filtro"><legend>${esc(nom)}</legend><ul class="ref-list capas-list">${cats.filter(c => c.grupo === g).map(c => { const n = puntos.filter(x => x.categoria === c.id).length; return `<li class="row gap"><b class="sim poi" style="--pc:${attr(c.color)}" aria-hidden="true">${icon(c.icono || 'pin')}</b><span class="grow">${esc(c.nombre)} <span class="muted">(${n})</span></span><label class="switch sm"><input type="checkbox" data-c="plan.catVer" data-id="${attr(c.id)}"${fl.categoriasOcultas.includes(c.id) ? '' : ' checked'}><span>Ver</span></label></li>`; }).join('')}</ul></fieldset>`).join('')}
+    <h3>Leyenda</h3>${leyendaHtml(p, fl)}
+    <div class="row end gap">${btn('Restablecer', 'plan.restablecer', { ic: 'sync' })}<button type="button" class="btn primary" data-a="sheet.close">Hecho</button></div>`;
+}
+
+// ---------- delimitación de sectores ----------
+A['plan.secDelimitar'] = el => {
+  const sec = (P().cat.sectores || []).find(x => x.id === el.dataset.id); if (!sec) return;
+  closeSheet(); const f = filt('plano'); f.sel = null; f.place = null; f.dibujo = { pts: [], para: { k: 'sector', id: sec.id, nombre: sec.nombre } }; G.render();
+};
+async function guardarDelimitacion(id, pts) {
+  const lista = structuredClone(P().cat.sectores); const sec = lista.find(x => x.id === id); if (!sec) return;
+  sec.zona = { pts: pts.map(q => ({ ...q })) };
+  try { await G.core.exec(C.catUpdate, 'sectores', lista); toast('Delimitación de «' + sec.nombre + '» guardada', 'ok'); filt('plano').sel = { k: 's', id }; G.render(); } catch (e) { toast(e.message, 'error'); }
+}
+A['plan.secQuitarZona'] = async el => {
+  const lista = structuredClone(P().cat.sectores); const sec = lista.find(x => x.id === el.dataset.id); if (!sec) return;
+  if (!(await confirmDlg({ title: 'Quitar la delimitación', text: 'El sector ' + sec.nombre + ' deja de dibujarse en el plano. Sus unidades y avisos no cambian.', ok: 'Quitar' }))) return;
+  delete sec.zona; await G.core.exec(C.catUpdate, 'sectores', lista); toast('Delimitación quitada', 'ok'); G.render(); refreshSheets();
+};
+
+// ---------- puntos de interés y de apoyo ----------
+let PT = null;
+function formPunto() {
+  const cats = categoriasPunto(P());
+  return `<form data-f="plan.puntoForm">${fieldsHtml([
+    { name: 'nombre', label: 'Nombre', required: true, maxlength: 80, value: PT.nombre || '' },
+    { name: 'categoria', label: 'Categoría', type: 'select', options: cats.map(c => [c.id, GRUPOS_PUNTO[c.grupo] + ' · ' + c.nombre]), value: PT.categoria || cats[0].id },
+    { name: 'desc', label: 'Descripción (opcional)', type: 'textarea', value: PT.desc || '' },
+    { name: 'modo', label: 'Situarlo en el plano', type: 'select', options: [['punto', 'Tocando un punto'], ['zona', 'Dibujando una zona (p. ej. zona restringida o de riesgo)'], ...(PT.id ? [['igual', 'Dejarlo donde está']] : [])], value: PT.id ? 'igual' : 'punto' },
+  ])}<div class="row end gap"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">${PT.id ? 'Guardar' : 'Continuar'}</button></div></form>`;
+}
+A['plan.puntoNuevo'] = () => { PT = {}; closeSheet(); openSheet({ title: 'Nuevo punto', size: 's', render: formPunto }); };
+A['plan.puntoEditar'] = el => { const pt = (P().cat.puntos || []).find(x => x.id === el.dataset.id); if (!pt) return; PT = { ...pt }; openSheet({ title: 'Editar punto', size: 's', render: formPunto }); };
+F['plan.puntoForm'] = async form => {
+  const v = readForm(form); const d = { id: PT.id, nombre: v.nombre.trim(), categoria: v.categoria, desc: (v.desc || '').trim() };
+  closeSheet(); const f = filt('plano'); f.sel = null;
+  if (v.modo === 'igual') return guardarPunto({ ...d, pos: PT.pos, zona: PT.zona });
+  if (v.modo === 'zona') { f.dibujo = { pts: [], para: { k: 'punto', nombre: d.nombre, datos: d } }; G.render(); return; }
+  f.situarPunto = d; G.render();
+};
+A['plan.puntoCancelar'] = () => { filt('plano').situarPunto = null; G.render(); };
+async function guardarPunto(d) {
+  const lista = structuredClone(P().cat.puntos || []); const i = d.id ? lista.findIndex(x => x.id === d.id) : -1;
+  const it = { id: d.id || uid('pt_'), nombre: d.nombre, categoria: d.categoria, desc: d.desc || '' };
+  if (d.zona) it.zona = d.zona; else it.pos = d.pos;
+  if (i >= 0) lista[i] = it; else lista.push(it);
+  try { await G.core.exec(C.catUpdate, 'puntos', lista); toast(i >= 0 ? 'Punto guardado' : 'Punto añadido', 'ok'); filt('plano').sel = { k: 'p', id: it.id }; G.render(); } catch (e) { toast(e.message, 'error'); }
+}
+A['plan.puntoQuitar'] = async el => {
+  const lista = (P().cat.puntos || []).filter(x => x.id !== el.dataset.id); const pt = (P().cat.puntos || []).find(x => x.id === el.dataset.id); if (!pt) return;
+  if (!(await confirmDlg({ title: 'Quitar punto', text: '«' + pt.nombre + '» deja de estar en el plano de este preventivo. Queda registrado en la bitácora.', ok: 'Quitar', danger: true }))) return;
+  await G.core.exec(C.catUpdate, 'puntos', lista); filt('plano').sel = null; toast('Punto quitado', 'ok'); G.render();
 };
 /** Reduce imágenes muy grandes para no saturar el almacenamiento del dispositivo */
 async function prepareImage(file) {

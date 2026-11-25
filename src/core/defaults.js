@@ -152,10 +152,28 @@ export const DEFAULT_PREV_CFG = {
   avisoCompatibilidadEstricta: false,
 };
 
+/** Categorías de puntos del plano (1.5.0): configurables en cada preventivo y en las plantillas */
+export const DEFAULT_CATEGORIAS_PUNTO = [
+  { id: 'cp_acceso', nombre: 'Accesos y salidas', grupo: 'interes', color: '#2E7D32', icono: 'salir' },
+  { id: 'cp_encuentro', nombre: 'Punto de encuentro', grupo: 'interes', color: '#00838F', icono: 'equipo' },
+  { id: 'cp_puesto', nombre: 'Puesto sanitario', grupo: 'interes', color: '#C62828', icono: 'cruz' },
+  { id: 'cp_coordinacion', nombre: 'Punto de coordinación', grupo: 'interes', color: '#283593', icono: 'antena' },
+  { id: 'cp_restringida', nombre: 'Zona restringida', grupo: 'interes', color: '#6A1B9A', icono: 'candado', zona: true },
+  { id: 'cp_riesgo', nombre: 'Zona de riesgo', grupo: 'interes', color: '#E65100', icono: 'alerta', zona: true },
+  { id: 'cp_otro_interes', nombre: 'Otros puntos de interés', grupo: 'interes', color: '#546E7A', icono: 'pin' },
+  { id: 'cp_hospital', nombre: 'Hospital', grupo: 'apoyo', color: '#B71C1C', icono: 'cruz' },
+  { id: 'cp_centro', nombre: 'Centro sanitario', grupo: 'apoyo', color: '#AD1457', icono: 'cruz' },
+  { id: 'cp_asistencia', nombre: 'Puesto de asistencia', grupo: 'apoyo', color: '#D84315', icono: 'tienda' },
+  { id: 'cp_abastecimiento', nombre: 'Punto de abastecimiento', grupo: 'apoyo', color: '#4E342E', icono: 'camion' },
+  { id: 'cp_apoyo', nombre: 'Recurso de apoyo', grupo: 'apoyo', color: '#1565C0', icono: 'escudo' },
+  { id: 'cp_otro_apoyo', nombre: 'Otras ubicaciones de apoyo', grupo: 'apoyo', color: '#455A64', icono: 'pin' },
+];
+
 export function defaultCatalogs() {
   return clone({
     claves: DEFAULT_CLAVES, motivosEsp: DEFAULT_MOTIVOS_ESP, sectores: DEFAULT_SECTORES,
     tiposAviso: DEFAULT_TIPOS_AVISO, tiposRecurso: DEFAULT_TIPOS_RECURSO,
+    categoriasPunto: DEFAULT_CATEGORIAS_PUNTO, puntos: [],
   });
 }
 

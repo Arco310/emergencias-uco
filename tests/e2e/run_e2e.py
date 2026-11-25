@@ -1414,6 +1414,117 @@ def scenario_migracion_sesion(b):
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)
 
+# ---------------- Escenario 12 (1.5.0): capas y filtros del plano ----------------
+def scenario_capas(b):
+    print('\n== Escenario 12: capas y filtros del plano, sectores, puntos, ficha contextual y agrupación (1.5.0) ==')
+    port = PORT + 12; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-capas-')
+    salida = os.path.join(data, 'capas.json')
+    subprocess.run(['node', 'tests/e2e/generar_capas.mjs', salida], cwd=ROOT, check=True)
+    datos = json.load(open(salida))
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'capas', TABLET, base=url)
+        estado = {}
+        def mk(sel): return A.pg.locator('.coord-map ' + sel).count()
+        def tocar(fx, fy):
+            bb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(bb['x'] + bb['width'] * fx, bb['y'] + bb['height'] * fy); A.pg.wait_for_timeout(500)
+        def abrir(pid):
+            A.pg.evaluate(f"async () => {{ await window.__UCO.core.openPrev('{pid}'); window.__UCO.render(); }}"); A.pg.wait_for_timeout(500)
+            A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-marker-icon', timeout=20000); A.pg.wait_for_timeout(1200)
+        def capas():
+            A.setup('Carla Coordinadora', 'carla', 'clave-carla-1', 'Tablet', 'K'); A.perms(False)
+            for pid, ops in datos.items():
+                nmax = max([o.get('num') or 0 for o in ops])
+                A.pg.evaluate("async ([pid, ops, n]) => { const c = window.__UCO.core; await c.repo.appendOps(pid, ops); await c.repo.maxCounter(pid, n); await c.openPrev(pid); await c._summary(pid); }", [pid, ops, nmax])
+            abrir('prev_capas')
+            assert mk('.mk[data-mk="u"]') == 3, mk('.mk[data-mk="u"]')
+            assert mk('.mk[data-mk="a"]') == 1, 'solo el aviso activo; el finalizado no se pide'
+            assert mk('.mk.poi') == 2 and mk('.mk[data-sit="descanso"] .mk-disp') == 1
+            assert 'Sector 1' in ' '.join(A.pg.locator('.sec-label').all_inner_texts())
+            ley = A.pg.locator('.legend').inner_text()
+            for t in ['En descanso', 'Fuera de servicio', 'Aviso activo', 'Accesos y salidas', 'Hospital']: assert t in ley, t
+            A.shot('01-capas')
+            return '3 unidades (una con el símbolo de descanso), aviso activo, sector delimitado con su nombre, 2 puntos y leyenda con símbolos'
+        check('Capas: unidades, avisos, sectores y puntos con su leyenda', capas)
+        def filtros():
+            A.a('plan.capas'); A.pg.wait_for_selector('.sheet-wrap .chips-f')
+            A.sheet().locator('[data-a="plan.filtro"][data-campo="tipos"][data-v="rt_svb"]').click(); A.pg.wait_for_timeout(500)
+            assert mk('.mk[data-mk="u"]') == 2, mk('.mk[data-mk="u"]')
+            A.sheet().locator('[data-a="plan.filtro"][data-campo="disponibilidad"][data-v="descanso"]').click(); A.pg.wait_for_timeout(500)
+            assert mk('.mk[data-mk="u"]') == 1 and mk('.mk[data-sit="descanso"]') == 1, 'tipo + disponibilidad combinados'
+            assert A.sheet().locator('[data-a="plan.filtro"][data-v="rt_svb"]').get_attribute('aria-pressed') == 'true'
+            A.pg.wait_for_timeout(300); A.shot('02-filtros', True)
+            r = A.state("const u = Object.values(s.units).find(x => x.ind === 'SVB-1'); return [u.sit, u.clave, !!u.plan]")
+            assert r == ['activa', 'C0', True], 'ocultar no desactiva ni mueve: ' + str(r)
+            A.close_sheets(); assert 'Capas y filtros · 2' in A.pg.locator('.plan-tools').inner_text()
+            A.a('plan.restablecer'); A.pg.wait_for_timeout(500)
+            assert mk('.mk[data-mk="u"]') == 3
+            return 'tipo SVB → 2; + descanso → 1 (SVB-2); los datos no cambian; «Restablecer» vuelve a mostrar las 3'
+        check('Filtros combinados y restablecer (ocultar no es desactivar)', filtros)
+        def finalizados_y_ocultar():
+            A.a('plan.capas'); A.pg.wait_for_selector('.sheet-wrap [data-c="plan.capa"][data-v="finalizados"]')
+            A.sheet().locator('[data-c="plan.capa"][data-v="finalizados"]').check(); A.pg.wait_for_timeout(500)
+            assert mk('.mk.av.fin') == 1, 'el finalizado aparece al pedirlo, en gris'
+            A.sheet().locator('[data-c="plan.secVer"]').first.uncheck(); A.pg.wait_for_timeout(500)
+            assert A.pg.locator('.sec-label').count() == 0, 'sector oculto'
+            A.sheet().locator('[data-c="plan.catVer"][data-id="cp_hospital"]').uncheck(); A.pg.wait_for_timeout(500)
+            assert mk('.mk.poi') == 1, 'categoría Hospital oculta'
+            A.a('plan.restablecer', A.sheet()); A.pg.wait_for_timeout(500); A.close_sheets()
+            assert mk('.mk.av.fin') == 0 and mk('.mk.poi') == 2 and A.pg.locator('.sec-label').count() == 1
+            return 'avisos finalizados bajo petición; sectores y categorías se ocultan uno a uno; restablecer'
+        check('Avisos finalizados, sectores y categorías: mostrar u ocultar', finalizados_y_ocultar)
+        def editar():
+            # Nuevo punto tocando el plano
+            A.a('plan.capas'); A.a('plan.puntoNuevo', A.sheet()); A.pg.wait_for_selector('.sheet-wrap form[data-f="plan.puntoForm"]')
+            f = A.sheet().locator('form[data-f="plan.puntoForm"]'); f.locator('[name=nombre]').fill('Punto de encuentro norte'); f.locator('[name=categoria]').select_option('cp_encuentro')
+            f.locator('button.primary').click(); A.pg.wait_for_selector('[data-a="plan.puntoCancelar"]')
+            tocar(0.6, 0.15); A.pg.wait_for_timeout(500)
+            assert mk('.mk.poi') == 3 and 'Punto de encuentro norte' in A.pg.locator('.map-card').inner_text()
+            # Delimitar el sector 2 con tres toques
+            A.a('plan.capas'); A.sheet().locator('[data-a="plan.secDelimitar"][data-id="sec_2"]').click(); A.pg.wait_for_timeout(400)
+            for x, y in ((0.55, 0.35), (0.78, 0.35), (0.7, 0.85)): tocar(x, y)  # dentro del plano (el rectángulo rojo)
+            A.a('plan.zonaOk'); A.pg.wait_for_timeout(800)
+            assert 'Sector 2' in ' '.join(A.pg.locator('.sec-label').all_inner_texts())
+            z = A.state("return s.prev.cat.sectores.find(x => x.id === 'sec_2').zona.pts.length"); assert z == 3, z
+            A.shot('03-punto-y-sector')
+            return 'punto nuevo tocando el plano y sector 2 delimitado con 3 toques; se guardan en el preventivo (bitácora)'
+        check('Puntos y delimitación de sectores desde el plano', editar)
+        def ficha():
+            A.a('plan.selCerrar'); uid = A.state("return Object.values(s.units).find(x => x.ind === 'SVB-1').id")
+            A.pg.locator(f'.coord-map .mk[data-mk="u"][data-id="{uid}"]').click(); A.pg.wait_for_selector('.map-card[data-map-card="u"]', timeout=5000)
+            t = A.pg.locator('.map-card').inner_text(); assert 'SVB-1' in t and 'Disponible' in t and 'Sector 1' in t, t
+            A.pg.wait_for_timeout(300); A.shot('04-ficha-contextual')
+            A.a('plan.selAbrir'); A.pg.wait_for_selector('.sheet-wrap'); A.close_sheets()
+            aid = A.state("return Object.values(s.avisos).find(a => a.estado !== 'finalizado').id")
+            A.pg.locator(f'.coord-map .mk[data-mk="a"][data-id="{aid}"]').click(); A.pg.wait_for_selector('.map-card[data-map-card="a"]', timeout=5000)
+            assert 'SVA-1' in A.pg.locator('.map-card').inner_text()
+            tocar(0.5, 0.06); assert A.pg.locator('.map-card').count() == 0, 'tocar fuera la cierra'  # la ficha ocupa la esquina inferior derecha
+            return 'unidad y aviso: ficha dentro del mapa (situación, clave, unidades) con acceso a la ficha completa'
+        check('Ficha contextual sin salir del mapa', ficha)
+        def preferencias():
+            A.a('plan.capas'); A.sheet().locator('[data-a="plan.filtro"][data-campo="tipos"][data-v="rt_sva"]').click(); A.pg.wait_for_timeout(400); A.close_sheets()
+            assert mk('.mk[data-mk="u"]') == 1
+            A.pg.reload(); A.login('carla', 'clave-carla-1'); abrir('prev_capas')
+            assert mk('.mk[data-mk="u"]') == 1 and 'Capas y filtros · 1' in A.pg.locator('.plan-tools').inner_text(), 'se conserva en este preventivo'
+            abrir('prev_grande')
+            assert 'Capas y filtros ·' not in A.pg.locator('.plan-tools').inner_text(), 'otro preventivo: sin filtros'
+            return 'filtro guardado tras recargar en ese preventivo; el otro preventivo no se ve afectado'
+        check('Preferencias de visualización por preventivo', preferencias)
+        def muchos():
+            t0 = time.time(); abrir('prev_grande'); ms = int((time.time() - t0) * 1000)
+            g = mk('.mk.grupo'); assert g >= 1, 'agrupados con poco zoom'
+            antes = A.pg.evaluate('() => document.querySelectorAll(".coord-map .mk[data-mk=u]").length')
+            A.pg.locator('.coord-map .mk.grupo').first.click(); A.pg.wait_for_timeout(1200)
+            despues = A.pg.evaluate('() => document.querySelectorAll(".coord-map .mk[data-mk=u]").length')
+            assert despues > antes, (antes, despues)
+            A.shot('05-agrupacion')
+            return f'150 unidades: {g} grupos al abrir ({ms} ms hasta ver el plano); al tocar un grupo se acerca y aparecen {despues} unidades sueltas'
+        check('Muchos elementos: agrupación y fluidez', muchos)
+        check('Sin errores de JavaScript (escenario 12)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+        A.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1434,6 +1545,7 @@ def main():
             if only in ('', '9'): scenario_vista_mapa(b)
             if only in ('', '10'): scenario_modo_servidor(b)
             if only in ('', '11'): scenario_migracion_sesion(b)
+            if only in ('', '12'): scenario_capas(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

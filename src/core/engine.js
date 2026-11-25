@@ -9,6 +9,7 @@
 //  - Preventivo cerrado o archivado: no admite cambios operativos.
 //  - Modificaciones simultáneas: nunca se sobrescriben en silencio (conflicto).
 import { clone, same, getPath, setPath } from './util.js';
+import { DEFAULT_CATEGORIAS_PUNTO } from './defaults.js';
 
 export class Reject extends Error {
   constructor(msg, detail) { super(msg); this.detail = detail; }
@@ -27,7 +28,7 @@ export function sectorNombre(p, x, vacio = '') {
   return sec ? sec.nombre : x.sector;
 }
 const AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|zona|cierre\.[a-z]+)$/;
-export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tiposRecurso'];
+export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tiposRecurso', 'categoriasPunto', 'puntos'];
 
 export function emptyState() {
   // numAviso: índice número → aviso, para detectar duplicados sin recorrer todos los avisos
@@ -156,6 +157,7 @@ H['prev.create'] = (s, op) => {
   p.id = op.p; p.creado = op.t; p.creadoPor = op.u ? op.u.n : '';
   p.estado = 'preparacion'; p.archivado = false; p.reaperturas = [];
   p.cfg = p.cfg || {}; p.cat = p.cat || {};
+  if (!Array.isArray(p.cat.categoriasPunto)) p.cat.categoriasPunto = clone(DEFAULT_CATEGORIAS_PUNTO); // preventivos anteriores a la 1.5.0
   for (const c of CATALOGOS) if (!Array.isArray(p.cat[c])) p.cat[c] = [];
   if (!p.cat.claves.some(c => c.base)) throw new Reject('El catálogo de claves no tiene clave base (C0)');
   s.prev = p;

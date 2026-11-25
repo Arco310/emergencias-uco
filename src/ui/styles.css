@@ -392,3 +392,28 @@ details.retirados{margin-top:1rem}details.retirados summary{cursor:pointer;paddi
 .chk.perm{min-height:40px;align-items:center}.chk.perm .chip{font-size:.7rem;margin-left:.25rem}
 .us-alc li{min-height:44px;align-items:center}
 .codigo-act .recovery{font-size:1.6rem;letter-spacing:.12em;text-align:center}
+/* 1.5.0 · capas y filtros del plano, puntos, sectores, agrupación y ficha contextual */
+.mk-disp{position:absolute;top:-7px;right:-9px;min-width:19px;height:19px;padding:0 3px;border-radius:10px;background:#E65100;color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;line-height:1;pointer-events:none}
+.mk-disp.d-descanso{background:#616161}.mk-disp.d-fuera{background:#B71C1C}.mk-disp.d-especial{background:#6A1B9A}
+.mk.sel .usym,.mk.sel .mk-av,.mk.sel .mk-poi{outline:3px solid var(--acc);outline-offset:2px;border-radius:50%}
+.mk.av.fin .mk-av{background:#757575;border-style:dashed}
+.mk.av.prov .mk-av{border-style:dashed;border-color:#FFD54F}
+.mk.poi .mk-poi{width:28px;height:28px;border-radius:50%;background:var(--pc);color:#fff;display:flex;align-items:center;justify-content:center;border:2px solid #fff}
+.mk.poi .mk-poi .ic{width:16px;height:16px;fill:none;stroke:#fff}
+.mk.grupo{width:40px;height:40px;border-radius:50%;background:rgba(33,33,33,.88);color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;border:3px solid #fff;font-size:15px;cursor:zoom-in}
+.sec-label,.poi-label{background:rgba(255,255,255,.88);border:0;box-shadow:none;font-weight:700;font-size:12px;color:#263238;padding:0 4px}
+.sec-label:before,.poi-label:before{display:none}
+.map-card{position:absolute;left:.5rem;right:.5rem;bottom:.5rem;z-index:1100;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 6px 20px rgba(0,0,0,.25);padding:.6rem .7rem;display:flex;gap:.6rem;align-items:flex-start;flex-wrap:wrap}
+@media (min-width:900px){.map-card{left:auto;width:400px}}
+.chips-f{display:flex;flex-wrap:wrap;gap:.35rem}
+.chip-f{min-height:40px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);padding:.2rem .75rem;font:inherit;font-size:.86rem;display:inline-flex;align-items:center;gap:.35rem;cursor:pointer}
+.chip-f.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.chip-f:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;flex:0 0 12px}
+fieldset.filtro{border:0;padding:0;margin:.4rem 0 .7rem}fieldset.filtro legend{font-weight:700;font-size:.85rem;margin-bottom:.35rem;padding:0}
+.capas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:.1rem .8rem}
+.capas-list li{min-height:44px;align-items:center}
+.legend .sim,.capas-list .sim{display:inline-flex;min-width:18px;height:18px;justify-content:center;align-items:center;font-weight:900;margin-right:.3rem;border-radius:9px}
+.legend .sim.d-ocupada{background:#E65100;color:#fff}.legend .sim.d-descanso{background:#616161;color:#fff}.legend .sim.d-fuera{background:#B71C1C;color:#fff}.legend .sim.d-especial{background:#6A1B9A;color:#fff}
+.legend .sim.av{background:#C62828;color:#fff}.legend .sim.av.fin{background:#757575}.legend .sim.av.prov{border:2px dashed #FFD54F}
+.sim.poi{background:var(--pc);color:#fff}.sim.poi .ic{width:12px;height:12px;stroke:#fff}

@@ -5,6 +5,7 @@ import { require as needPerm, can } from './perms.js';
 import { boundsValidos } from './geo.js';
 import { motivoTipoNoDisponible, referenciasTipoPrev } from './recursos.js';
 import { esVista, VISTA_DEFECTO } from './mapas.js';
+import { DEFAULT_CATEGORIAS_PUNTO } from './defaults.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
@@ -131,13 +132,20 @@ export function prevArchivar(ctx, archivar) {
 }
 
 export function catUpdate(ctx, cat, lista) {
-  needPerm(ctx.user, cat === 'sectores' ? 'sectores.gestionar' : 'config.editar');
+  needPerm(ctx.user, permisoCatalogo(cat));
   const s = editable(ctx);
   if (!CATALOGOS.includes(cat)) fail('Catálogo desconocido');
   const cur = s.prev.cat[cat];
   if (same(cur, lista)) return [];
   validateCatalog(cat, lista, s);
   return [mkOp(ctx, 'prev.cat', ctx.pid, { cat, o: cur, n: lista }, uid('b_'))];
+}
+
+/** Permiso para cambiar cada catálogo del preventivo (lo mismo comprueba el servidor) */
+export function permisoCatalogo(cat) { return cat === 'sectores' ? 'sectores.gestionar' : cat === 'puntos' || cat === 'categoriasPunto' ? 'planos.editar' : 'config.editar'; }
+function zonaCorrecta(z, que) {
+  if (!z || !Array.isArray(z.pts) || z.pts.length < 3) fail('La delimitación de ' + que + ' necesita al menos 3 puntos');
+  for (const q of z.pts) if (!(q && q.x >= 0 && q.x <= 1 && q.y >= 0 && q.y <= 1)) fail('Hay un punto fuera del plano en la delimitación de ' + que);
 }
 
 /** Validación de catálogos (también se usa para la configuración global y plantillas) */
@@ -167,6 +175,20 @@ export function validateCatalog(cat, lista, s) {
       ids.add(it.id);
       if (!String(it.nombre || '').trim()) fail('Todos los elementos necesitan nombre');
     }
+    if (cat === 'categoriasPunto') for (const c of lista) {
+      if (!['interes', 'apoyo'].includes(c.grupo)) fail('Grupo no válido en la categoría ' + c.nombre + ': debe ser «interés» o «apoyo»');
+      if (!isHexColor(c.color)) fail('Color no válido en la categoría ' + c.nombre);
+    }
+    if (cat === 'puntos') {
+      const cats = new Set(((s && s.prev && s.prev.cat.categoriasPunto && s.prev.cat.categoriasPunto.length) ? s.prev.cat.categoriasPunto : DEFAULT_CATEGORIAS_PUNTO).map(c => c.id));
+      for (const pt of lista) {
+        if (!cats.has(pt.categoria)) fail('Categoría desconocida en el punto ' + pt.nombre);
+        if (!pt.pos && !pt.zona) fail('El punto ' + pt.nombre + ' necesita una posición o una zona en el plano');
+        if (pt.pos && !(pt.pos.x >= 0 && pt.pos.x <= 1 && pt.pos.y >= 0 && pt.pos.y <= 1)) fail('El punto ' + pt.nombre + ' está fuera del plano');
+        if (pt.zona) zonaCorrecta(pt.zona, 'el punto ' + pt.nombre);
+      }
+    }
+    if (cat === 'sectores') for (const x of lista) if (x.zona) zonaCorrecta(x.zona, 'el sector ' + x.nombre);
     if (cat === 'tiposAviso') {
       const cods = lista.map(t => String(t.codigo || '').trim()).filter(Boolean);
       const rep = cods.find((c, i) => cods.indexOf(c) !== i);

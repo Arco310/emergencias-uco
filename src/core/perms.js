@@ -161,7 +161,7 @@ export function permisosOp(op, s, lote = []) {
         const uso = lote.find(o => o.b === op.b && ((o.k === 'unit.create' && o.x && o.x.u && o.x.u.tipo === nuevo) || (o.k === 'unit.update' && o.x && o.x.f && o.x.f.tipo && o.x.f.tipo.n === nuevo)));
         if (uso) return [uso.k === 'unit.create' ? 'unidades.crear' : 'unidades.tipos'];
       }
-      return [x.cat === 'sectores' ? 'sectores.gestionar' : 'config.editar'];
+      return [x.cat === 'sectores' ? 'sectores.gestionar' : x.cat === 'puntos' || x.cat === 'categoriasPunto' ? 'planos.editar' : 'config.editar'];
     }
     case 'prev.plano': return ['planos.editar'];
     case 'unit.create': return lote.some(o => o.k === 'prev.create' && o.b === op.b) ? ['preventivos.crear'] : ['unidades.crear'];

@@ -65,6 +65,256 @@ var AppError = class extends Error {
   }
 };
 
+// src/core/incidentes.js
+var G = (codigo, nombre, color, items) => ({ codigo, nombre, color, items });
+var GRUPOS_INCIDENTE = [
+  G("1", "Accidente de Tr\xE1fico", "#EF6C00", [
+    ["1.1", "Accidente sin especificar"],
+    ["1.2", "Accidente con menos de 3 v\xEDctimas"],
+    ["1.3", "Accidente con tres o m\xE1s v\xEDctimas confirmadas"],
+    ["1.4", "Atropello"],
+    ["1.5", "Accidente de motocicleta"],
+    ["1.6", "Accidente de bicicleta"],
+    ["1.6.1", "Accidente de patinete"],
+    ["1.7", "Accidente de autob\xFAs"],
+    ["1.8", "Accidente con veh\xEDculo pesado"]
+  ]),
+  G("2", "Accidente no de tr\xE1fico", "#D84315", [
+    ["2.1", "Heridas"],
+    ["2.2", "Atrapamientos / enterramientos"],
+    ["2.3", "Casual: ca\xEDda, etc."],
+    ["2.4", "Agresi\xF3n sin especificar"],
+    ["2.4.1", "Agresi\xF3n por spray de autodefensa"],
+    ["2.5", "Arma blanca"],
+    ["2.6", "Arma de fuego"],
+    ["2.7", "Precipitado"],
+    ["2.8", "Autolisis traum\xE1tica"],
+    ["2.9", "Arrollamiento por metro o tren"],
+    ["2.10", "Quemado"],
+    ["2.11", "Electrocuci\xF3n"],
+    ["2.12", "Ahogamiento"],
+    ["2.12.1", "OVACE"],
+    ["2.13", "Agresi\xF3n sexual"],
+    ["2.13.1", "Agresi\xF3n sexual facilitada por drogas"],
+    ["2.14", "Dispositivos el\xE9ctricos de control policial"]
+  ]),
+  G("3", "Enfermedad", "#C62828", [
+    ["3.1", "Parada cardiorrespiratoria"],
+    ["3.2", "Inconsciente sin filiar causa"],
+    ["3.3", "Infarto o Patolog\xEDa coronaria"],
+    ["3.4", "Convulsi\xF3n"],
+    ["3.5", "Intoxicaci\xF3n por drogas de abuso"],
+    ["3.6", "Intoxicaci\xF3n por f\xE1rmacos y/o productos t\xF3xicos"],
+    ["3.7", "Autolisis no traum\xE1tica"],
+    ["3.8", "Urgencias endocrino-metab\xF3licas"],
+    ["3.9", "Intoxicaci\xF3n et\xEDlica"],
+    ["3.10", "Otros"],
+    ["3.11", "Patolog\xEDa respiratoria"],
+    ["3.12", "Patolog\xEDa cardiovascular"],
+    ["3.13", "Patolog\xEDa neurol\xF3gica"],
+    ["3.14", "Patolog\xEDa digestiva"],
+    ["3.15", "Patolog\xEDa obst\xE9trica"],
+    ["3.16", "Patolog\xEDa ginecol\xF3gica"],
+    ["3.17", "Patolog\xEDa urol\xF3gica"],
+    ["3.18", "Patolog\xEDa infecciosa"],
+    ["3.19", "Patolog\xEDa psicosom\xE1tica"],
+    ["3.20", "Patolog\xEDa anafil\xE1ctica"],
+    ["3.21", "Patolog\xEDas por agentes f\xEDsicos (Fr\xEDo/Calor)"]
+  ]),
+  G("4", "Espec\xEDfica de bomberos o colectivos", "#795548", [
+    ["4.1", "Incendio"],
+    ["4.2", "Explosi\xF3n"],
+    ["4.3", "Apertura de puerta"],
+    ["4.4", "Derrumbamientos"],
+    ["4.5", "Servicios especiales"],
+    ["4.6", "Preventivos"],
+    ["4.7", "Riesgo qu\xEDmico"],
+    ["4.8", "Riesgo nuclear"],
+    ["4.9", "Riesgo biol\xF3gico"],
+    ["4.10", "Incendio con v\xEDctimas confirmadas"],
+    ["4.11", "Petici\xF3n de apoyo por parte de bomberos"]
+  ]),
+  G("5", "Psiqui\xE1trico y sociosanitario", "#6A1B9A", [
+    ["5.1", "Orden judicial"],
+    ["5.2", "Orden m\xE9dica"],
+    ["5.3", "Orden m\xE9dica urgente / orden m\xE9dica en paciente muy agresivo"],
+    ["5.4", "Certificaci\xF3n psiqui\xE1trica"],
+    ["5.5", "Problema social"],
+    ["5.6", "Huelga de hambre"],
+    ["5.7", "Violencia de g\xE9nero"],
+    ["5.8", "Maltrato a menores"],
+    ["5.9", "Atenci\xF3n sociosanitaria a personas mayores en riesgo social o con sospecha de maltrato"],
+    ["5.10", "Desamparo sobrevenido en persona dependiente"]
+  ]),
+  G("6", "Cad\xE1ver", "#37474F", [
+    ["6.1", "Domicilio"],
+    ["6.2", "V\xEDa p\xFAblica"],
+    ["6.3", "Local p\xFAblico (incluye centro sanitario)"],
+    ["6.4", "Fallecimiento personas sin hogar con independencia lugar del suceso"]
+  ]),
+  G("7", "Especiales", "#263238", [
+    ["7.1", "Amenaza de bomba"],
+    ["7.2", "Atentado explosivo"],
+    ["7.3", "Otro tipo de atentado"],
+    ["7.4", "Accidente de tren"],
+    ["7.5", "Accidente de avi\xF3n"],
+    ["7.6", "Accidente de transporte de mercanc\xEDas peligrosas"]
+  ]),
+  G("8", "Servicios programados", "#1565C0", [
+    ["8.1", "Presencia de una unidad, sin SVA ni PSA"],
+    ["8.2", "Presencia de 2 o 3 unidades, sin SVA ni PSA"],
+    ["8.3", "Presencia de m\xE1s de 3 unidades, sin SVA ni PSA"],
+    ["8.4", "Presencia de una o m\xE1s unidades SVA, sin PSA, sin sobrepasar 3 recursos en total"],
+    ["8.4.1", "Presencia de una o m\xE1s unidades SVA, sin PSA, sumando m\xE1s de 3 recursos en total"],
+    ["8.5", "Despliegue de PSA, con o sin otras unidades (m\xE1ximo 3 recursos en total)"],
+    ["8.5.1", "Despliegue de PSA, con otros recursos (m\xE1s de 3 recursos en total)"],
+    ["8.6", "Presencia de todos los medios y recursos de SAMUR-Protecci\xF3n Civil"],
+    ["8.7", "Servicio preventivo desde el operativo ordinario"],
+    ["8.8", "Emergencia en la ciudad de Madrid con necesidad de refuerzo de medios (orden de Directivo de Guardia)"],
+    ["8.9", "Emergencia con refuerzo de medios (orden de Directivo de Guardia) fuera de la ciudad de Madrid"],
+    ["8.10", "CECOR externo en dispositivo de riesgo previsible"],
+    ["8.11", "CECOR interno en dispositivo de riesgo previsible"],
+    ["8.12", "Servicio de an\xE1lisis de riesgos"],
+    ["AS-1.1", "Identificaci\xF3n y registro de riesgos espec\xEDficos para planes de distrito (zonas inundables, heladas, etc.)", "8.12"],
+    ["AS-1.2", "Identificaci\xF3n de riesgos en zona/local ante futura celebraci\xF3n de evento de riesgo previsible", "8.12"],
+    ["8.13", "Servicio de seguimiento de riesgos"],
+    ["AS-2.1", "Riesgos meteorol\xF3gicos: nevadas", "8.13"],
+    ["AS-2.2", "Riesgos meteorol\xF3gicos: lluvias torrenciales", "8.13"],
+    ["AS-2.3", "Riesgos meteorol\xF3gicos: otras, a indicar", "8.13"],
+    ["AS-3.1", "Riesgos antr\xF3picos: manifestaciones", "8.13"],
+    ["AS-3.2", "Riesgos antr\xF3picos: concentraciones", "8.13"],
+    ["AS-3.3", "Riesgos antr\xF3picos: fiestas", "8.13"],
+    ["AS-3.4", "Riesgos antr\xF3picos: otros", "8.13"],
+    ["AS-4.1", "Simulacros de evacuaci\xF3n: verificaci\xF3n de instalaciones", "8.13"],
+    ["AS-4.2", "Simulacros de evacuaci\xF3n: activaci\xF3n en tiempo real", "8.13"],
+    ["AS-4.3", "Simulacros de evacuaci\xF3n: mixto, verificaci\xF3n y activaci\xF3n", "8.13"],
+    ["8.14", "Servicio de formaci\xF3n/divulgaci\xF3n externa"],
+    ["8.15", "Servicio de log\xEDstica y otros"]
+  ]),
+  G("9", "Donaci\xF3n de \xF3rganos", "#00838F", [["9", "Donante en asistolia"]]),
+  G("10", "Componentes heridos", "#283593", [
+    ["10.1", "SAMUR - Protecci\xF3n Civil"],
+    ["10.2", "Polic\xEDa Municipal"],
+    ["10.3", "Bombero de Madrid"],
+    ["10.4", "Polic\xEDa Nacional"],
+    ["10.5", "Otras instituciones"]
+  ]),
+  G("15", "Psicol\xF3gicos", "#AD1457", [
+    ["15.1", "Atenci\xF3n psicol\xF3gica a la v\xEDctima primaria"],
+    ["15.2", "Atenci\xF3n psicol\xF3gica a familiares y allegados"],
+    ["15.3", "Atenci\xF3n psicol\xF3gica a implicados"],
+    ["15.4", "Atenci\xF3n psicol\xF3gica a testigos"],
+    ["15.5", "Atenci\xF3n psicol\xF3gica a intervinientes de SAMUR-Protecci\xF3n Civil"],
+    ["15.6", "Atenci\xF3n psicol\xF3gica a intervinientes de Cuerpos y Fuerzas de Seguridad"],
+    ["15.7", "Atenci\xF3n psicol\xF3gica a intervinientes de Bomberos"],
+    ["15.8", "Programa de Sensibilizaci\xF3n y Reeducaci\xF3n vial"],
+    ["15.9", "Colaboraci\xF3n del Romeo en el suceso sin paciente \xABin situ\xBB"],
+    ["15.10", "Activaci\xF3n/Presencia del Romeo en situaci\xF3n de preventivo"]
+  ])
+];
+var idIncidente = (codigo) => "inc_" + String(codigo).toLowerCase().replace(/[^a-z0-9]+/g, "_");
+var nombreGrupo = (g) => g.codigo + ". " + g.nombre;
+function tiposAvisoIncidentes() {
+  const out = [];
+  for (const g of GRUPOS_INCIDENTE) for (const [codigo, nombre, padre] of g.items) {
+    const it = { id: idIncidente(codigo), codigo, nombre, grupo: nombreGrupo(g), color: g.color, compatibles: [] };
+    if (padre) {
+      it.padre = padre;
+      it.cierre = true;
+    }
+    out.push(it);
+  }
+  return out;
+}
+var POR_ID = new Map(tiposAvisoIncidentes().map((t) => [t.id, t]));
+
+// src/core/defaults.js
+var DEFAULT_VIS = {
+  icono: "ambulancia",
+  forma: "circulo",
+  tam: "m",
+  borde: "normal",
+  etiqueta: "indicativo",
+  tarjeta: "compacta",
+  campos: ["tipo", "sector", "clave", "aviso", "ubicacion", "descanso"],
+  enPlano: true
+};
+var DEFAULT_TIPOS_RECURSO = [
+  { id: "rt_svb", nombre: "Ambulancia SVB", categoria: "Sanitario", subtipos: ["SVB", "Colectiva"], caracteristicas: ["Camilla", "DEA", "Ox\xEDgeno"], color: "#2E7D32", vis: { icono: "ambulancia", forma: "circulo", tam: "m" } },
+  { id: "rt_sva", nombre: "Ambulancia SVA", categoria: "Sanitario", subtipos: ["SVA", "SVAE"], caracteristicas: ["M\xE9dico", "Enfermer\xEDa", "DEA", "Ox\xEDgeno"], color: "#1B5E20", vis: { icono: "ambulancia", forma: "hexagono", tam: "m" } },
+  { id: "rt_vir", nombre: "Veh\xEDculo de intervenci\xF3n r\xE1pida", categoria: "Sanitario", subtipos: [], caracteristicas: ["DEA"], color: "#00897B", vis: { icono: "coche", forma: "circulo", tam: "m" } },
+  { id: "rt_coord", nombre: "Veh\xEDculo de coordinaci\xF3n", categoria: "Mando", subtipos: [], caracteristicas: ["Radio"], color: "#283593", vis: { icono: "mando", forma: "rombo", tam: "m" } },
+  { id: "rt_log", nombre: "Veh\xEDculo log\xEDstico", categoria: "Log\xEDstica", subtipos: [], caracteristicas: [], color: "#5D4037", vis: { icono: "camion", forma: "cuadrado", tam: "m" } },
+  { id: "rt_transp", nombre: "Unidad de transporte", categoria: "Log\xEDstica", subtipos: [], caracteristicas: [], color: "#6D4C41", vis: { icono: "furgoneta", forma: "cuadrado", tam: "m" } },
+  { id: "rt_eqsan", nombre: "Equipo sanitario", categoria: "Sanitario", subtipos: ["A pie", "En bicicleta"], caracteristicas: ["Mochila SVB", "DEA"], color: "#43A047", vis: { icono: "cruz", forma: "circulo", tam: "s" } },
+  { id: "rt_eqint", nombre: "Equipo de intervenci\xF3n", categoria: "Intervenci\xF3n", subtipos: [], caracteristicas: [], color: "#E65100", vis: { icono: "equipo", forma: "triangulo", tam: "m" } },
+  { id: "rt_com", nombre: "Unidad de comunicaciones", categoria: "Comunicaciones", subtipos: [], caracteristicas: ["Repetidor"], color: "#455A64", vis: { icono: "antena", forma: "escudo", tam: "m" } },
+  { id: "rt_psa", nombre: "Puesto sanitario (PSA)", categoria: "Sanitario", subtipos: [], caracteristicas: ["Camillas"], color: "#AD1457", vis: { icono: "tienda", forma: "cuadrado", tam: "l" } },
+  { id: "rt_vl", nombre: "Veh\xEDculo ligero", categoria: "Apoyo", subtipos: [], caracteristicas: [], color: "#1565C0", vis: { icono: "coche", forma: "triangulo", tam: "m" } }
+];
+var SAMUR = [
+  // [prefijo, nombre, categoría, color, icono, forma, tamaño, subtipos]
+  ["BASE", "Base de unidades", "Base", "#546E7A", "bandera", "cuadrado", "l"],
+  ["SAMUR", "USVA / Directivo de Guardia", "Sanitario", "#1B5E20", "ambulancia", "hexagono", "m", ["USVA", "Directivo de Guardia"]],
+  ["VIR", "Veh\xEDculo de intervenci\xF3n r\xE1pida", "Sanitario", "#004D40", "coche", "circulo", "m"],
+  ["ALFA", "USVB", "Sanitario", "#2E7D32", "ambulancia", "circulo", "m", ["USVB"]],
+  ["PAPA", "Unidad de psiquiatr\xEDa", "Sanitario", "#880E4F", "ambulancia", "rombo", "m"],
+  ["TANGO", "Veh\xEDculo de transporte", "Log\xEDstica", "#6D4C41", "furgoneta", "cuadrado", "m"],
+  ["MIKE", "Coche de mando", "Mando", "#283593", "mando", "rombo", "m"],
+  ["ECO", "Equipo sanitario a pie", "Sanitario", "#43A047", "pie", "circulo", "s"],
+  ["LINCE", "Equipo sanitario en bicicleta", "Sanitario", "#7CB342", "bici", "circulo", "s"],
+  ["HALC\xD3N", "Equipo sanitario en moto", "Sanitario", "#558B2F", "moto", "triangulo", "s"],
+  ["URO", "Personal y veh\xEDculo de mantenimiento", "Log\xEDstica", "#8D6E63", "furgoneta", "cuadrado", "m"],
+  ["ZUL\xDA", "Personal conductor de veh\xEDculos pesados de la columna sanitaria", "Log\xEDstica", "#4E342E", "camion", "cuadrado", "m"],
+  ["VRALA", "Veh\xEDculo r\xE1pido de apoyo log\xEDstico y avituallamiento", "Log\xEDstica", "#827717", "furgoneta", "triangulo", "m"],
+  ["PM", "Puesto de Mando", "Mando", "#1A237E", "mando", "escudo", "l"],
+  ["PMA", "Puesto M\xE9dico Avanzado", "Sanitario", "#AD1457", "tienda", "cuadrado", "l"],
+  ["VAIS", "Veh\xEDculo de Apoyo Intervenci\xF3n Sanitaria", "Sanitario", "#00695C", "camion", "cuadrado", "m"]
+];
+var idSamur = (pref) => pref.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var TIPOS_RECURSO_SAMUR = SAMUR.map(([pref, nombre, categoria, color, icono, forma, tam, subtipos = []]) => ({ id: "rt_sp_" + idSamur(pref), nombre: pref + " \xB7 " + nombre, categoria, subtipos, caracteristicas: [], color, vis: { icono, forma, tam } }));
+var PLANTILLAS_SAMUR = SAMUR.map(([pref, nombre, , color, icono, forma, tam]) => ({ id: "plt_sp_" + idSamur(pref), nombre: pref + " \xB7 " + nombre, activo: true, tipo: "rt_sp_" + idSamur(pref), prefijo: pref, color, vis: { forma, icono, tam }, campos: [], obligatorios: [], valores: { subtipo: "", caract: [] } }));
+DEFAULT_TIPOS_RECURSO.push(...TIPOS_RECURSO_SAMUR);
+var DEFAULT_PLANTILLAS_UNIDAD = [
+  { id: "plt_upr", nombre: "UPR", activo: true, tipo: "rt_vl", prefijo: "UPR", color: "#1565C0", vis: { forma: "triangulo", icono: "coche" }, campos: [], obligatorios: [], valores: { subtipo: "", caract: [] } },
+  { id: "plt_svb", nombre: "Soporte Vital B\xE1sico (SVB)", activo: true, tipo: "rt_svb", prefijo: "SVB", color: "#2E7D32", vis: { forma: "circulo", icono: "ambulancia" }, campos: [], obligatorios: [], valores: { subtipo: "SVB", caract: ["Camilla", "DEA", "Ox\xEDgeno"] } },
+  { id: "plt_vires", nombre: "VIRES", activo: true, tipo: "rt_vir", prefijo: "VIRES", color: "#00897B", vis: { forma: "circulo", icono: "coche" }, campos: [], obligatorios: [], valores: { subtipo: "", caract: ["DEA"] } },
+  ...PLANTILLAS_SAMUR
+];
+var DEFAULT_TIPOS_AVISO = [
+  ...tiposAvisoIncidentes(),
+  { id: "ta_san", nombre: "Asistencia sanitaria", color: "#C62828", compatibles: [] },
+  { id: "ta_tras", nombre: "Traslado", color: "#6A1B9A", compatibles: ["rt_svb", "rt_sva", "rt_transp"] },
+  { id: "ta_acc", nombre: "Accidente", color: "#EF6C00", compatibles: [] },
+  { id: "ta_inc", nombre: "Incendio", color: "#D84315", compatibles: [] },
+  { id: "ta_desap", nombre: "Persona desaparecida", color: "#00838F", compatibles: [] },
+  { id: "ta_seg", nombre: "Seguridad", color: "#283593", compatibles: [] },
+  { id: "ta_log", nombre: "Log\xEDstica", color: "#5D4037", compatibles: [] },
+  { id: "ta_otro", nombre: "Otro", color: "#546E7A", compatibles: [] }
+];
+var DEFAULT_PREV_CFG = {
+  descansoMin: 30,
+  autoFinalizarAviso: false,
+  camposTarjeta: [...DEFAULT_VIS.campos],
+  kpis: ["total", "disponibles", "ocupadas", "descanso", "especial", "fuera", "pendientes", "activos", "finalizados", "sectores"],
+  avisoCompatibilidadEstricta: false
+};
+var DEFAULT_CATEGORIAS_PUNTO = [
+  { id: "cp_acceso", nombre: "Accesos y salidas", grupo: "interes", color: "#2E7D32", icono: "salir" },
+  { id: "cp_encuentro", nombre: "Punto de encuentro", grupo: "interes", color: "#00838F", icono: "equipo" },
+  { id: "cp_puesto", nombre: "Puesto sanitario", grupo: "interes", color: "#C62828", icono: "cruz" },
+  { id: "cp_coordinacion", nombre: "Punto de coordinaci\xF3n", grupo: "interes", color: "#283593", icono: "antena" },
+  { id: "cp_restringida", nombre: "Zona restringida", grupo: "interes", color: "#6A1B9A", icono: "candado", zona: true },
+  { id: "cp_riesgo", nombre: "Zona de riesgo", grupo: "interes", color: "#E65100", icono: "alerta", zona: true },
+  { id: "cp_otro_interes", nombre: "Otros puntos de inter\xE9s", grupo: "interes", color: "#546E7A", icono: "pin" },
+  { id: "cp_hospital", nombre: "Hospital", grupo: "apoyo", color: "#B71C1C", icono: "cruz" },
+  { id: "cp_centro", nombre: "Centro sanitario", grupo: "apoyo", color: "#AD1457", icono: "cruz" },
+  { id: "cp_asistencia", nombre: "Puesto de asistencia", grupo: "apoyo", color: "#D84315", icono: "tienda" },
+  { id: "cp_abastecimiento", nombre: "Punto de abastecimiento", grupo: "apoyo", color: "#4E342E", icono: "camion" },
+  { id: "cp_apoyo", nombre: "Recurso de apoyo", grupo: "apoyo", color: "#1565C0", icono: "escudo" },
+  { id: "cp_otro_apoyo", nombre: "Otras ubicaciones de apoyo", grupo: "apoyo", color: "#455A64", icono: "pin" }
+];
+
 // src/core/engine.js
 var Reject = class extends Error {
   constructor(msg, detail) {
@@ -77,7 +327,7 @@ var PREV_FIELDS = /^(nombre|descripcion|fecha|horaInicio|horaFin|lugar|participa
 var UNIT_FIELDS = /^(ind|nombre|denom|tipo|subtipo|categoria|sector|sectorOtro|desc|obs|equip|caract|vis(\.[A-Za-z0-9_]+)?)$/;
 var SECTOR_OTROS = "otros";
 var AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|zona|cierre\.[a-z]+)$/;
-var CATALOGOS = ["claves", "motivosEsp", "sectores", "tiposAviso", "tiposRecurso"];
+var CATALOGOS = ["claves", "motivosEsp", "sectores", "tiposAviso", "tiposRecurso", "categoriasPunto", "puntos"];
 function emptyState() {
   return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {} };
 }
@@ -210,6 +460,7 @@ H["prev.create"] = (s, op) => {
   p.reaperturas = [];
   p.cfg = p.cfg || {};
   p.cat = p.cat || {};
+  if (!Array.isArray(p.cat.categoriasPunto)) p.cat.categoriasPunto = clone(DEFAULT_CATEGORIAS_PUNTO);
   for (const c of CATALOGOS) if (!Array.isArray(p.cat[c])) p.cat[c] = [];
   if (!p.cat.claves.some((c) => c.base)) throw new Reject("El cat\xE1logo de claves no tiene clave base (C0)");
   s.prev = p;
@@ -830,7 +1081,7 @@ function permisosOp(op, s, lote = []) {
         const uso = lote.find((o) => o.b === op.b && (o.k === "unit.create" && o.x && o.x.u && o.x.u.tipo === nuevo || o.k === "unit.update" && o.x && o.x.f && o.x.f.tipo && o.x.f.tipo.n === nuevo));
         if (uso) return [uso.k === "unit.create" ? "unidades.crear" : "unidades.tipos"];
       }
-      return [x.cat === "sectores" ? "sectores.gestionar" : "config.editar"];
+      return [x.cat === "sectores" ? "sectores.gestionar" : x.cat === "puntos" || x.cat === "categoriasPunto" ? "planos.editar" : "config.editar"];
     }
     case "prev.plano":
       return ["planos.editar"];
