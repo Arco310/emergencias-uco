@@ -358,7 +358,8 @@ def scenario_standalone(browser):
     def close_prev():
         A.logout(); A.login('ana', 'secreto1'); A.nav('mas'); A.a('nav', v='cierre')
         A.a('prev.close'); A.pg.wait_for_timeout(200)
-        A.sheet().locator('[name=pdf]').uncheck(); A.dlg_ok(); A.pg.wait_for_timeout(1000)
+        A.sheet().locator('[name=pdf]').uncheck(); A.dlg_ok()
+        A.pg.wait_for_function("() => { const p = window.__UCO.core.state.prev; return p.estado === 'cerrado' && p.archivado }", timeout=20000); A.pg.wait_for_timeout(300)
         st = A.state('return s.prev.estado + "/" + s.prev.archivado')
         A.nav('avisos'); nb = A.pg.locator('[data-a="a.new"]').count()
         assert st == 'cerrado/true' and nb == 0, (st, nb)
@@ -444,7 +445,11 @@ def scenario_shared(browser):
         assert sa == sb and 'Creado sin red:null' not in sa and 'A2:C6' in sa, (sa, sb)
         M.nav('avisos'); M.pg.wait_for_timeout(300)
         assert M.pg.locator('.acard', has_text='Creado sin red').locator('.warn-chip').count() == 0, 'confirmado: sin distintivo'
-        return f'trabajo sin red (ref. provisional {ref}, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas'
+        # 1.5.0: cada dispositivo guarda la hora declarada, la de recepción en el servidor y la de sincronización
+        horas = lambda X: X.pg.evaluate("async () => { const c = window.__UCO.core; const op = c.engine().ops.find(o => o.k === 'aviso.create' && o.x.a.desc === 'Creado sin red'); const m = (await c.repo.metaOps(c.cur)).find(x => x.id === op.id); return [op.t, m.rx, m.sy] }")
+        tm, rxm, sym = horas(M); tt, rxt, syt = horas(T)
+        assert rxm and rxm == rxt and tm == tt and rxm - tm >= 3000 and sym and syt and syt >= rxm - 2000, (tm, rxm, sym, tt, rxt, syt)
+        return f'trabajo sin red (ref. provisional {ref}, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas; recibido por el servidor {round((rxm - tm) / 1000)} s después de registrarse'
     check('Compartido: desconexión, trabajo local y reconexión', offline)
     def conflict():
         M.ctx.set_offline(True); a3 = T.unit_id('A3')
@@ -1027,7 +1032,8 @@ def scenario_incidentes(b):
         A.nav('mas'); tile = A.pg.locator('[data-a="nav"][data-v="cierre"]').inner_text(); assert 'Finalizar preventivo' in tile, tile
         A.a('nav', v='cierre'); assert 'Finalizar el preventivo' in A.pg.inner_text('main')
         A.a('prev.close'); A.pg.wait_for_timeout(200); assert 'Finalizar preventivo' in A.sheet().inner_text()
-        A.sheet().locator('[name=pdf]').uncheck(); A.dlg_ok(); A.pg.wait_for_timeout(900)
+        A.sheet().locator('[name=pdf]').uncheck(); A.dlg_ok()
+        A.pg.wait_for_function("() => { const p = window.__UCO.core.state.prev; return p.estado === 'cerrado' && p.archivado }", timeout=20000); A.pg.wait_for_timeout(300)
         r = st("return s.prev.estado + '/' + s.prev.archivado"); assert r == 'cerrado/true', r
         A.shot('06-finalizado'); return 'Más → «Finalizar preventivo e informes» → Finalizar preventivo: queda en solo lectura y archivado'
     check('Finalizar el preventivo', finalizar)
@@ -1682,6 +1688,7 @@ def scenario_incoherencias(b):
             r = A.pg.locator('.inc-grupo').first; assert 'Resuelta por Lola Coordinadora' in r.inner_text(), r.inner_text()
             r.locator('[data-a="inc.historial"]').click(); A.pg.wait_for_selector('.sheet-wrap .ref-list li')
             h = A.sheet().inner_text(); assert 'Asignada' in h and 'Resuelta' in h, h
+            assert 'Se asignó la SVB-2 al terminar su descanso' in h, 'la nota escrita en el diálogo se guarda tal cual: ' + h
             A.close_sheets()
             despues = A.state("return JSON.stringify([s.units, s.avisos])")
             assert despues == A.antes, 'revisar no cambia unidades ni avisos'
@@ -1799,6 +1806,85 @@ def scenario_plantillas(b):
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)
 
+def scenario_informes(b):
+    print('\n== Escenario 16: informe al finalizar, versiones con huella, Excel y registro de accesos (1.5.0) ==')
+    import hashlib
+    port = PORT + 16; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-inf-')
+    salida = os.path.join(data, 'inf.json')
+    subprocess.run(['node', 'tests/e2e/generar_informes.mjs', salida], cwd=ROOT, check=True)
+    datos = json.load(open(salida))
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'informes', TABLET, base=url)
+        def reg(): return A.state("return JSON.stringify(s.informes || [])")
+        def preparar():
+            A.setup('Ana Coordinadora', 'ana', 'clave-ana-1', 'Tablet', 'A'); A.perms(False)
+            ops = datos['prev_inf']; nmax = max([o.get('num') or 0 for o in ops])
+            A.pg.evaluate("async ([pid, ops, n]) => { const c = window.__UCO.core; await c.repo.appendOps(pid, ops); await c.repo.maxCounter(pid, n); await c.openPrev(pid); await c._summary(pid); window.__UCO.go('panel'); }", ['prev_inf', ops, nmax])
+            A.pg.wait_for_selector('.kpis', timeout=15000)
+            A.nav('mas'); A.a('nav', v='cierre'); txt = A.pg.inner_text('main')
+            assert 'versión 1' in txt and 'Excel (XLSX)' in txt, txt[:400]
+            with A.pg.expect_download() as dl: A.a('rep.do', k='xlsx')
+            ruta = os.path.join(data, 'datos.xlsx'); dl.value.save_as(ruta)
+            import openpyxl
+            wb = openpyxl.load_workbook(ruta); hojas = wb.sheetnames
+            assert hojas[:2] == ['Resumen', 'Unidades'] and 'Horas de registro' in hojas and 'Bitácora' in hojas, hojas
+            filas = [[c.value for c in r] for r in wb['Unidades'].iter_rows()]; assert any(f[0] == 'SVB-1' for f in filas), filas[:3]
+            r = json.loads(reg()); assert len(r) == 1 and r[0]['accion'] == 'exportar' and r[0]['formato'] == 'xlsx', r
+            A.antes = A.state("return JSON.stringify([s.units, s.avisos])")
+            return f'Excel válido ({len(hojas)} hojas: {", ".join(hojas[:4])}…); exportación registrada'
+        check('Exportación a Excel (XLSX) abierta con un lector independiente', preparar)
+        def finalizar():
+            A.a('prev.close'); A.pg.wait_for_timeout(300)
+            t = A.sheet().inner_text(); assert 'versión 1 del informe' in t, t[:300]
+            A.dlg_ok()
+            A.pg.wait_for_function("() => { const p = window.__UCO.core.state.prev; return p.estado === 'cerrado' && p.archivado && (window.__UCO.core.state.informes || []).some(x => x.accion === 'generar') }", timeout=30000)
+            A.pg.wait_for_selector('.inf-v [data-a="inf.ver"]', timeout=15000)
+            r = [x for x in json.loads(reg()) if x['accion'] == 'generar']
+            assert len(r) == 1 and r[0]['n'] == 1 and len(r[0]['hash']) == 64 and not r[0].get('provisional'), r
+            txt = A.pg.inner_text('main'); assert 'Versión 1' in txt and 'SHA-256 ' + r[0]['hash'][:24] in txt, txt[:600]
+            assert 'registrados después de la versión' not in txt, 'archivar no es un cambio del informe'
+            A.hash1 = r[0]['hash']; A.shot('01-version-1', True)
+            return 'al finalizar: versión 1 guardada y registrada (SHA-256 ' + A.hash1[:12] + '…), preventivo cerrado y archivado'
+        check('Informe generado automáticamente al finalizar', finalizar)
+        def descargar():
+            with A.pg.expect_download() as dl: A.a('inf.bajar', n='1')
+            ruta = os.path.join(data, 'v1.pdf'); dl.value.save_as(ruta); pdf = open(ruta, 'rb').read()
+            assert hashlib.sha256(pdf).hexdigest() == A.hash1, 'la huella registrada es la del archivo'
+            import pypdf
+            texto = '\n'.join(p.extract_text() for p in pypdf.PdfReader(ruta).pages)
+            for t in ['Versión 1 del informe', 'Configuración y sectores utilizados', 'Actividad por unidad', 'Avisos al cierre', 'Fiabilidad de los datos y limitaciones', 'Lola Pérez (Responsable sanitaria)', 'Mareo en meta']:
+                assert t in texto, t
+            exp = [x for x in json.loads(reg()) if x['accion'] == 'exportar' and x.get('n') == 1]; assert len(exp) == 1 and exp[0]['hash'] == A.hash1, exp
+            # Comprobar: el archivo original coincide; uno modificado, no
+            with A.pg.expect_file_chooser() as fc: A.a('inf.comprobar')
+            fc.value.set_files(ruta); A.pg.wait_for_timeout(800)
+            assert 'es la versión 1' in A.toast_text(), A.toast_text()
+            mod = os.path.join(data, 'v1-mod.pdf'); open(mod, 'wb').write(pdf + b'\n%modificado')
+            with A.pg.expect_file_chooser() as fc: A.a('inf.comprobar')
+            fc.value.set_files(mod); A.pg.wait_for_timeout(800)
+            assert 'no coincide' in A.toast_text(), A.toast_text()
+            return f'PDF de {len(pdf)//1024} KB con la huella registrada; contenido verificado; comprobación de archivos original y modificado'
+        check('Descarga de la versión, contenido y comprobación de la huella', descargar)
+        def nueva():
+            A.a('inf.nueva'); A.pg.wait_for_selector('.sheet-wrap form[data-f="dlg.submit"]')
+            A.sheet().locator('input, textarea').first.fill('Corrección autorizada de la hora de un aviso'); A.dlg_ok()
+            A.pg.wait_for_function("() => (window.__UCO.core.state.informes || []).filter(x => x.accion === 'generar').length === 2", timeout=30000)
+            A.pg.wait_for_selector('.inf-v [data-a="inf.ver"][data-n="2"]', timeout=15000)
+            g = [x for x in json.loads(reg()) if x['accion'] == 'generar']
+            assert [x['n'] for x in g] == [1, 2] and g[0]['hash'] == A.hash1 and g[1]['motivo'].startswith('Corrección autorizada'), g
+            assert A.pg.locator('.inf-v').count() == 2
+            assert A.state("return JSON.stringify([s.units, s.avisos])") == A.antes, 'generar o exportar no cambia unidades ni avisos'
+            A.nav('mas'); A.a('nav', v='bitacora'); A.pg.wait_for_timeout(500)
+            txt = A.pg.inner_text('main'); assert 'Informe generado (versión 2)' in txt and 'Informe exportado' in txt, txt[:500]
+            A.shot('02-bitacora', True)
+            return 'versión 2 con motivo; la 1 se conserva con su huella; unidades y avisos intactos; todo en la bitácora'
+        check('Nueva versión con motivo, conservando la anterior', nueva)
+        check('Sin errores de JavaScript (escenario 16)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+        A.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1823,6 +1909,7 @@ def main():
             if only in ('', '13'): scenario_avisos_mapa(b)
             if only in ('', '14'): scenario_incoherencias(b)
             if only in ('', '15'): scenario_plantillas(b)
+            if only in ('', '16'): scenario_informes(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

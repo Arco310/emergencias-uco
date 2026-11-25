@@ -63,6 +63,19 @@ test('envío idempotente, numeración concurrente única y lectura incremental',
   assert.equal(part.ops[0].sq, 36);
 });
 
+test('hora de recepción en el servidor: se devuelve al enviar, al reenviar y al leer (1.5.0)', async () => {
+  assert.equal((await post('/prev', { pid: 'prev_rx', tokenHash })).status, 201);
+  const antes = Date.now();
+  const lote = { ops: [{ id: 'op_rx1', d: 'devR', h: '00000000000099', c: 'x' }] };
+  const r = await (await post('/prev/prev_rx/ops', lote)).json();
+  const rx = r.res[0].rx; assert.ok(rx >= antes && rx <= Date.now(), String(rx));
+  await new Promise(res => setTimeout(res, 15));
+  const again = await (await post('/prev/prev_rx/ops', lote)).json();
+  assert.equal(again.res[0].rx, rx, 'el reenvío conserva la hora de la primera recepción');
+  const all = await (await fetch(base() + '/prev/prev_rx/ops?after=0', { headers: H })).json();
+  assert.equal(all.ops[0].rx, rx);
+});
+
 test('archivos (planos) cifrados', async () => {
   const data = crypto.randomBytes(5000);
   const put = await fetch(base() + '/prev/prev_test1/blobs/blob_12345678', { method: 'PUT', headers: { Authorization: H.Authorization, 'Content-Type': 'application/octet-stream' }, body: data });

@@ -5,10 +5,13 @@ import { fmtCoords } from './geo.js';
 import { CATEGORIAS_CLAVE } from './defaults.js';
 import { tipoAvisoDef, etiquetaTipo, etiquetaTipoAviso } from './incidentes.js';
 import { describirOrigen } from './templates.js';
+import { ACCIONES_INFORME, FORMATOS_INFORME } from './ubicacion.js';
+import { REGLAS } from './validaciones.js';
 
 export const CATEGORIAS = {
   preventivo: 'Preventivo', configuracion: 'Configuración', unidad: 'Unidades', clave: 'Claves', aviso: 'Avisos',
   asignacion: 'Asignaciones', descanso: 'Descansos', ubicacion: 'Ubicaciones', plano: 'Planos', nota: 'Observaciones', conflicto: 'Conflictos',
+  control: 'Control operativo', informe: 'Informes',
 };
 
 const FIELD = {
@@ -75,6 +78,17 @@ export function describeOp(s, op, status) {
     case 'aviso.estado': cat = 'aviso'; acc = x.n === 'finalizado' ? 'Finalización' : x.o === 'finalizado' ? 'Reapertura' : 'Marcado en curso'; ant = AVISO_ESTADO[x.o] || x.o || ''; nue = (AVISO_ESTADO[x.n] || x.n) + (x.nota ? ' · ' + x.nota : '') + (x.motivo ? ' · Motivo: ' + x.motivo : ''); break;
     case 'aviso.nota': cat = 'nota'; acc = 'Nota en aviso'; nue = x.txt; break;
     case 'conf.resolve': cat = 'conflicto'; acc = 'Resolución de conflicto'; nue = x.d === 'aceptar' ? 'Aceptado' : 'Descartado'; break;
+    case 'revision.set': {
+      cat = 'control'; const regla = REGLAS.find(r => r.id === x.regla);
+      elem = 'Incoherencia' + (regla ? ': ' + regla.titulo : '');
+      acc = { revisada: 'Marcada como revisada', asignada: 'Asignada', resuelta: 'Resuelta', abierta: 'Reabierta' }[x.estado] || 'Revisión';
+      nue = [x.entidad && x.entidad.nombre, x.asignadoA && x.asignadoA.nombre ? 'asignada a ' + x.asignadoA.nombre : '', x.nota].filter(Boolean).join(' · '); break;
+    }
+    case 'informe.reg':
+      cat = 'informe'; elem = 'Informe'; acc = (ACCIONES_INFORME[x.accion] || 'Informe') + (x.n ? ' (versión ' + x.n + ')' : '');
+      nue = [FORMATOS_INFORME[x.formato], x.hash && 'SHA-256 ' + x.hash.slice(0, 16) + '…', x.motivo && 'Motivo: ' + x.motivo,
+        x.provisional && 'provisional' + (x.pendientes ? ': ' + x.pendientes + (x.pendientes === 1 ? ' cambio sin sincronizar' : ' cambios sin sincronizar') : '') + (x.conflictos ? (x.pendientes ? ', ' : ': ') + x.conflictos + ' conflicto(s) sin resolver' : '')].filter(Boolean).join(' · ');
+      break;
   }
   if (u) elem = 'Unidad ' + unitLabel(u);
   if (a) elem = 'Aviso ' + avisoLabel(a);

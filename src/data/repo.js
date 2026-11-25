@@ -9,7 +9,8 @@ import { cambioContenido, versionarPlantilla } from '../core/templates.js';
 
 const LOCK_AFTER = 5;
 const credV = u => (u && u.cred && u.cred.v) || 'v0';
-const META_FIELDS = ['num', 'ref', 'sq', 'ps'];
+// rx: hora de recepción en el servidor; sy: hora en que este dispositivo recibió la operación o su confirmación (1.5.0)
+const META_FIELDS = ['num', 'ref', 'sq', 'ps', 'rx', 'sy'];
 
 export class Repo {
   constructor(db) { this.db = db; this.dek = null; this.device = null; this.session = null; }
@@ -276,6 +277,15 @@ export class Repo {
     return out.sort((a, b) => (b.favorita - a.favorita) || a.nombre.localeCompare(b.nombre));
   }
   async getTemplate(id) { return this.getDoc('tpl:' + id); }
+
+  // ---------------- informes guardados (1.5.0) ----------------
+  /** Versiones del informe generadas en este dispositivo (el PDF se guarda cifrado como archivo interno) */
+  async versionesInforme(pid) { return ((await this.getDoc('inf:' + pid)) || { versiones: [] }).versiones; }
+  async guardarVersionInforme(pid, v) {
+    const d = (await this.getDoc('inf:' + pid)) || { pid, versiones: [] };
+    d.versiones.push(v); await this.putDoc('inf:' + pid, d);
+    await this.audit('Informe generado', 'Preventivo ' + pid, '', 'versión ' + v.n + ' · SHA-256 ' + v.hash.slice(0, 16) + '…' + (v.provisional ? ' · provisional' : ''));
+  }
   async saveTemplate(t, accion = 'Modificación de plantilla') {
     // Versiones (1.5.0): si cambia lo que crea la plantilla, la anterior se conserva tal cual
     const ant = await this.getTemplate(t.id); const por = this.session ? this.session.user.nombre : '';
@@ -304,7 +314,7 @@ export class Repo {
 
   _body(op) { const b = { ...op }; for (const k of META_FIELDS) delete b[k]; return b; }
   async _record(op, ps) {
-    return { id: op.id, p: op.p, h: op.h, d: op.d, nn: !!op.nn, nl: !!op.nl, nr: !!op.nr, num: op.num ?? null, ref: op.ref ?? null, sq: op.sq ?? null, ps: ps ? 1 : 0, enc: await this.enc(this._body(op)) };
+    return { id: op.id, p: op.p, h: op.h, d: op.d, nn: !!op.nn, nl: !!op.nl, nr: !!op.nr, num: op.num ?? null, ref: op.ref ?? null, sq: op.sq ?? null, rx: op.rx ?? null, sy: op.sy ?? null, ps: ps ? 1 : 0, enc: await this.enc(this._body(op)) };
   }
   /** Guarda operaciones locales (asignación atómica de números) y devuelve las operaciones completas */
   async appendOps(pid, ops, { shared = false } = {}) {
@@ -326,13 +336,15 @@ export class Repo {
     for (let i = 0; i < recs.length; i += 512) {
       await Promise.all(recs.slice(i, i + 512).map(async (r, j) => {
         const op = await this.dec(r.enc);
-        op.num = r.num; op.ref = r.ref || op.ref || null; op.sq = r.sq;
+        op.num = r.num; op.ref = r.ref || op.ref || null; op.sq = r.sq; op.rx = r.rx ?? null; op.sy = r.sy ?? null;
         out[i + j] = op;
       }));
     }
     return out;
   }
   async opMeta(id) { return this.db.get('ops', id); }
+  /** Horas de cada operación sin descifrarla: servidor (rx), sincronización (sy), pendiente (ps) */
+  async metaOps(pid) { return (await this.db.getAll('ops', 'p', pid)).map(r => ({ id: r.id, sq: r.sq ?? null, rx: r.rx ?? null, sy: r.sy ?? null, ps: !!r.ps })); }
   async pendingOps(pid) {
     const recs = await this.db.getAll('ops', 'pend', [pid, 1]);
     const out = [];
@@ -342,15 +354,17 @@ export class Repo {
   async countPending(pid) { return (await this.db.getAll('ops', 'pend', [pid, 1])).length; }
   async markSynced(results) {
     const recs = [];
-    for (const r of results) { const rec = await this.db.get('ops', r.id); if (!rec) continue; rec.sq = r.sq; if (r.num != null) rec.num = r.num; rec.ps = 0; recs.push(rec); }
+    const t = now();
+    for (const r of results) { const rec = await this.db.get('ops', r.id); if (!rec) continue; rec.sq = r.sq; if (r.num != null) rec.num = r.num; if (r.rx != null) rec.rx = r.rx; if (rec.ps || rec.sy == null) rec.sy = t; rec.ps = 0; recs.push(rec); }
     if (recs.length) await this.db.putMany('ops', recs);
   }
-  async setOpServerMeta(id, sq, num) {
+  async setOpServerMeta(id, sq, num, rx = null) {
     const rec = await this.db.get('ops', id); if (!rec) return false;
     let ch = false;
     if (rec.sq !== sq) { rec.sq = sq; ch = true; }
     if (num != null && rec.num !== num) { rec.num = num; ch = true; }
-    if (rec.ps) { rec.ps = 0; ch = true; }
+    if (rx != null && rec.rx !== rx) { rec.rx = rx; ch = true; }
+    if (rec.ps) { rec.ps = 0; rec.sy = now(); ch = true; }
     if (ch) await this.db.put('ops', rec);
     return ch;
   }

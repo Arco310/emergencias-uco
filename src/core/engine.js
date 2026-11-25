@@ -16,6 +16,8 @@ export class Reject extends Error {
 }
 
 const CLOSED_OK = new Set(['prev.estado', 'prev.archivo']);
+// Registro de informes (1.5.0): se genera al finalizar y se consulta después, también archivado; no cambia nada operativo
+const SIEMPRE_OK = new Set(['informe.reg']);
 const PREV_FIELDS = /^(nombre|descripcion|fecha|horaInicio|horaFin|lugar|participantes|modalidad|cfg\.[A-Za-z0-9_.]+)$/;
 const UNIT_FIELDS = /^(ind|nombre|denom|tipo|subtipo|categoria|sector|sectorOtro|desc|obs|equip|caract|vis(\.[A-Za-z0-9_]+)?)$/;
 /** Sector «OTROS»: ubicación personalizada de una unidad dentro del preventivo, sin crear categorías globales */
@@ -32,7 +34,7 @@ export const CATALOGOS = ['claves', 'motivosEsp', 'sectores', 'tiposAviso', 'tip
 
 export function emptyState() {
   // numAviso: índice número → aviso, para detectar duplicados sin recorrer todos los avisos
-  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {}, revisiones: {} };
+  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {}, revisiones: {}, informes: [] };
 }
 
 // ---------- utilidades de consulta ----------
@@ -164,6 +166,13 @@ H['prev.create'] = (s, op) => {
 };
 
 // Revisión de una incoherencia detectada (1.5.0): queda en el preventivo con su historial; no cambia nada más
+/** Registro de informes (1.5.0): versiones generadas, exportaciones y consultas. Solo añade; nunca cambia lo operativo */
+H['informe.reg'] = (s, op) => {
+  const x = op.x || {};
+  const r = { id: op.id, accion: x.accion, formato: x.formato || null, t: op.t, por: op.u ? op.u.n : '', dev: op.dn || op.d || '' };
+  for (const k of ['n', 'hash', 'motivo', 'provisional', 'pendientes', 'conflictos', 'nOps']) if (x[k] != null) r[k] = x[k];
+  s.informes = [...(s.informes || []), r];
+};
 H['revision.set'] = (s, op) => {
   const x = op.x || {}; if (!x.id || !x.firma) throw new Reject('Revisión no válida');
   s.revisiones = s.revisiones || {};
@@ -458,8 +467,8 @@ export function applyOp(s, op, ctx = {}) {
   try {
     if (op.k !== 'prev.create') {
       if (!s.prev) throw new Reject('Preventivo no creado');
-      if (s.prev.archivado && op.k !== 'prev.archivo') throw new Reject('El preventivo está archivado');
-      if (s.prev.estado === 'cerrado' && !CLOSED_OK.has(op.k)) throw new Reject('El preventivo está cerrado');
+      if (s.prev.archivado && op.k !== 'prev.archivo' && !SIEMPRE_OK.has(op.k)) throw new Reject('El preventivo está archivado');
+      if (s.prev.estado === 'cerrado' && !CLOSED_OK.has(op.k) && !SIEMPRE_OK.has(op.k)) throw new Reject('El preventivo está cerrado');
     }
     const fn = H[op.k]; if (!fn) throw new Reject('Operación desconocida: ' + op.k);
     const r = fn(s, op, ctx) || {};
@@ -504,7 +513,7 @@ function lazyMap(src) {
   });
 }
 export function lazyCopy(s) {
-  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso }, revisiones: { ...(s.revisiones || {}) } };
+  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso }, revisiones: { ...(s.revisiones || {}) }, informes: s.informes || [] };
 }
 
 /** Motor de un preventivo: registro ordenado + estado derivado */

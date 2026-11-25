@@ -46,5 +46,20 @@ export function motivoContenidoNoValido(op) {
   if (op.k === 'aviso.create') return motivoLocNoValida(x.a && x.a.loc);
   if (op.k === 'aviso.update') return x.f && x.f.loc ? motivoLocNoValida(x.f.loc.n) : null;
   if (op.k === 'unit.loc') return motivoLocNoValida(x.n);
+  if (op.k === 'informe.reg') return motivoInformeNoValido(x);
+  return null;
+}
+/** Registro de un informe (1.5.0): qué se hizo, con qué versión y con qué huella */
+export const ACCIONES_INFORME = { generar: 'Informe generado', exportar: 'Informe exportado', consultar: 'Informe consultado' };
+export const FORMATOS_INFORME = { pdf: 'PDF', xlsx: 'Excel (XLSX)', csv: 'CSV', json: 'JSON' };
+export function motivoInformeNoValido(x = {}) {
+  if (!ACCIONES_INFORME[x.accion]) return 'Acción de informe no válida';
+  if (x.formato != null && !FORMATOS_INFORME[x.formato]) return 'Formato de informe no válido';
+  if (x.accion === 'generar' && !(Number.isInteger(x.n) && x.n >= 1)) return 'Número de versión del informe no válido';
+  if (x.n != null && !(Number.isInteger(x.n) && x.n >= 1 && x.n < 100000)) return 'Número de versión del informe no válido';
+  if (x.accion === 'generar' && x.hash == null) return 'Falta la huella del informe';
+  if (x.hash != null && !/^[0-9a-f]{64}$/.test(x.hash)) return 'Huella SHA-256 del informe no válida';
+  if (x.motivo != null && (typeof x.motivo !== 'string' || x.motivo.length > 500)) return 'Motivo del informe demasiado largo';
+  for (const k of ['pendientes', 'nOps', 'conflictos']) if (x[k] != null && !(Number.isInteger(x[k]) && x[k] >= 0)) return 'Dato del informe no válido: ' + k;
   return null;
 }

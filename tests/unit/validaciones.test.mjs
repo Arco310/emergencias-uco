@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import * as C from '../../src/core/commands.js';
 import { REGLAS, NIVELES, detectarIncoherencias } from '../../src/core/validaciones.js';
 import { permisosOp } from '../../src/core/perms.js';
+import { logEntries } from '../../src/core/timeline.js';
 import { Device, createPrev, unitByInd, makeClock, mkUser, MIN } from './helpers.mjs';
 
 function preparado() {
@@ -99,6 +100,9 @@ test('revisar, asignar y resolver: queda en el preventivo con su historial; si l
   h = detectarIncoherencias(d.s, { t: clock.now() }).find(x => x.id === h.id);
   assert.equal(h.revision.estado, 'resuelta'); assert.equal(h.revision.hist.length, 2); assert.equal(h.revision.hist[0].asignadoA.nombre, 'Ana');
   assert.equal(d.s.avisos[a].estado, 'pendiente', 'revisar no toca el aviso');
+  const log = logEntries(d.engine).filter(e => e.k === 'revision.set');
+  assert.deepEqual(log.map(e => [e.cat, e.elemento, e.accion]), [['control', 'Incoherencia: Aviso sin unidad asignada', 'Asignada'], ['control', 'Incoherencia: Aviso sin unidad asignada', 'Resuelta']]);
+  assert.match(log[0].nuevo, /asignada a Ana · Lo mira Ana/);
   // La revisión vale para esa situación concreta: si cambia, vuelve a aparecer como nueva
   const s = structuredClone(d.s); s.avisos[a].creado += MIN; s.avisos[a].t = s.avisos[a].creado;
   assert.ok(!detectarIncoherencias(s, { t: clock.now() }).find(x => x.id === h.id).revision);

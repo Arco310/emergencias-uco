@@ -1,7 +1,7 @@
 // Configuración (global y del preventivo), sincronización, cierre e informes,
 // usuarios y roles, copias de seguridad, auditoría y permisos del dispositivo.
 import { G, A, F, CH, filt } from '../state.js';
-import { esc, attr, openSheet, closeSheet, refreshSheets, toast, confirmDlg, fieldsHtml, readForm, chip, empty, btn, tabs, copyText, saveFile, pickFile, readText, fileStamp, safeName, systemNotify } from '../dom.js';
+import { esc, attr, openSheet, closeSheet, refreshSheets, toast, confirmDlg, fieldsHtml, readForm, chip, empty, btn, tabs, copyText, saveFile, pickFile, readText, readBytes, fileStamp, safeName, systemNotify } from '../dom.js';
 import { icon, unitSvg } from '../icons.js';
 import { now, fmtDateTime, fmtTime, fmtDur, clone, AppError, contrastText } from '../../core/util.js';
 import { APP_NAME, APP_VERSION, KPIS, CAMPOS_TARJETA, ICONOS, FORMAS, CAMPOS_PLANTILLA, DEFAULT_PLANTILLAS_UNIDAD } from '../../core/defaults.js';
@@ -9,7 +9,9 @@ import { PERMISOS } from '../../core/perms.js';
 import * as C from '../../core/commands.js';
 import { unitLabel, avisoLabel, liveUnits } from '../../core/engine.js';
 import { buildReport } from '../../core/report.js';
-import { prevJSON, csvZip } from '../../core/exporters.js';
+import { prevJSON, csvZip, prevXLSX } from '../../core/exporters.js';
+import { sha256hex } from '../../core/crypto.js';
+import { registrosInforme } from '../../core/fiabilidad.js';
 import { SYNC_ESTADOS } from '../../data/sync.js';
 import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './catalogs.js';
 import { overriddenVis } from '../../core/visual.js';
@@ -184,26 +186,101 @@ A['sync.importBundle'] = async () => {
 };
 
 // ======================= cierre e informes =======================
+const MIME = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', json: 'application/json', csv: 'application/zip' };
+/** Exportación de los datos actuales (PDF sin versión, Excel, JSON o CSV). Queda registrada en el preventivo. */
 export async function exportReport(kind, { share = false } = {}) {
   if (!can('exportar')) throw new AppError('No tienes permiso para exportar', 'permiso');
-  const e = core().engine(); const base = safeName(P().nombre) + '-' + fileStamp();
-  const who = { usuario: core().user.nombre, dispositivo: core().device.nombre };
+  const c = core(); const e = c.engine(); const base = safeName(P().nombre) + '-' + fileStamp();
+  const meta = await c.horasOps(); const compartido = c.isShared();
+  const who = { usuario: c.user.nombre, dispositivo: c.device.nombre, meta, compartido };
+  let r, hash = null;
   if (kind === 'pdf') {
-    toast('Generando el informe PDF…', 'info', 20000); await new Promise(r => setTimeout(r, 60)); // deja pintar el aviso antes del trabajo pesado
-    return saveFile(base + '.pdf', await buildReport(e, who), 'application/pdf', { share });
-  }
-  if (kind === 'json') return saveFile(base + '.json', JSON.stringify(prevJSON(e, who), null, 1), 'application/json', { share });
-  if (kind === 'csv') return saveFile(base + '-csv.zip', csvZip(e), 'application/zip', { share });
+    const aviso = toast('Generando el informe PDF…', 'info', 20000); await new Promise(res => setTimeout(res, 60)); // deja pintar el aviso antes del trabajo pesado
+    let bytes; try { bytes = await buildReport(e, { usuario: who.usuario, dispositivo: who.dispositivo, horas: { meta, compartido } }); } finally { if (aviso) aviso.remove(); }
+    hash = await sha256hex(bytes);
+    r = await saveFile(base + '.pdf', bytes, MIME.pdf, { share });
+  } else if (kind === 'xlsx') r = await saveFile(base + '.xlsx', prevXLSX(e, who), MIME.xlsx, { share });
+  else if (kind === 'json') r = await saveFile(base + '.json', JSON.stringify(prevJSON(e, who), null, 1), MIME.json, { share });
+  else if (kind === 'csv') r = await saveFile(base + '-csv.zip', csvZip(e, now(), { meta, compartido }), MIME.csv, { share });
+  else return;
+  if (r && r !== 'cancelado') { try { await c.registrarInforme('exportar', { formato: kind, hash }); } catch (err) { console.warn('Registro de la exportación', err); } }
+  return r;
 }
+// Versiones guardadas en este dispositivo (se cargan una vez por preventivo y se repinta al tenerlas)
+const LOCALES = new Map();
+function localesInforme(pid) {
+  if (!LOCALES.has(pid)) { LOCALES.set(pid, null); core().repo.versionesInforme(pid).then(v => { LOCALES.set(pid, new Set(v.map(x => x.n))); G.render(); }).catch(() => LOCALES.set(pid, new Set())); }
+  return LOCALES.get(pid);
+}
+/** Informes del preventivo (1.5.0): versiones guardadas, nueva versión con motivo, comprobación y exportaciones */
+function seccionInformes(p, s) {
+  const shareOk = !!(navigator.canShare && !G.preview);
+  const exportes = can('exportar') ? `<div class="actions">${p.estado !== 'cerrado' ? btn('Informe PDF (provisional)', 'rep.do', { cls: 'primary', ic: 'archivo', data: { k: 'pdf' } }) : ''}${btn('Excel (XLSX)', 'rep.do', { ic: 'descargar', data: { k: 'xlsx' } })}${btn('Datos JSON', 'rep.do', { ic: 'descargar', data: { k: 'json' } })}${btn('Tablas CSV (ZIP)', 'rep.do', { ic: 'descargar', data: { k: 'csv' } })}
+      ${shareOk && p.estado !== 'cerrado' ? btn('Compartir PDF', 'rep.do', { ic: 'compartir', data: { k: 'pdf', share: 1 } }) : ''}</div>` : '<p class="muted">No tienes permiso para exportar.</p>';
+  const intro = '<p class="muted small">Generados en el dispositivo, sin Internet, solo con datos registrados. El PDF incluye información general, configuración y sectores, plano, unidades y su actividad, claves, avisos, descansos, ubicaciones, estadísticas, cronología, incidencias, fiabilidad de las horas, bitácora y auditoría.</p>';
+  if (p.estado !== 'cerrado') return `<section class="card pad"><h2>Informes</h2>${intro}<p class="small">Al finalizar el preventivo se genera y se guarda la <b>versión 1</b> del informe. Mientras tanto puedes exportar un informe provisional o los datos.</p>${exportes}</section>`;
+  if (!can('informes.ver')) return `<section class="card pad"><h2>Informes</h2><p class="muted">No tienes permiso para consultar los informes.</p>${exportes}</section>`;
+  const gens = (s.informes || []).filter(x => x.accion === 'generar').slice().sort((a, b) => b.n - a.n);
+  const loc = localesInforme(p.id);
+  const ahora = registrosInforme(core().engine().ops); const ult = gens[0];
+  const cambios = ult && ult.nOps != null ? ahora - ult.nOps : 0;
+  const filas = gens.map(v => `<li class="inf-v"><div class="grow"><b>Versión ${v.n}</b>${v.provisional ? ' ' + chip('Provisional', '#C62828') : ''}${v === ult ? ' ' + chip('Última', '#2E7D32') : ''}
+      <div class="muted small">${esc(fmtDateTime(v.t))} · ${esc(v.por)}${v.dev ? ' · ' + esc(v.dev) : ''}</div>
+      ${v.motivo ? `<div class="small">Motivo: ${esc(v.motivo)}</div>` : ''}
+      ${v.provisional ? `<div class="small bad-txt">${esc([v.pendientes ? v.pendientes + ' cambio(s) sin sincronizar' : '', v.conflictos ? v.conflictos + ' conflicto(s) sin resolver' : ''].filter(Boolean).join(' · ') || 'Generada antes de finalizar')}</div>` : ''}
+      <div class="muted small mono" title="Huella SHA-256 del PDF">SHA-256 ${esc((v.hash || '').slice(0, 24))}…</div></div>
+      <div class="actions">${loc && loc.has(v.n) ? btn('Ver', 'inf.ver', { ic: 'ojo', data: { n: v.n } }) + (can('exportar') ? btn('Descargar', 'inf.bajar', { ic: 'descargar', data: { n: v.n } }) + (shareOk ? btn('', 'inf.bajar', { cls: 'icon ghost', ic: 'compartir', data: { n: v.n, share: 1 }, title: 'Compartir' }) : '') : '')
+        : loc ? `<span class="muted small">PDF guardado en el dispositivo «${esc(v.dev || '—')}»</span>` : ''}</div></li>`).join('');
+  const accesos = (s.informes || []).filter(x => x.accion !== 'generar').slice(-30).reverse();
+  return `<section class="card pad"><h2>Informes</h2>${intro}
+    ${gens.length ? `<ul class="inf-versiones">${filas}</ul>` : '<p class="note warn">Todavía no se ha generado el informe de este preventivo.</p>'}
+    ${cambios > 0 ? `<p class="note warn">${icon('alerta')} Hay ${cambios} cambio(s) registrados después de la versión ${ult.n} (por ejemplo, sincronizados más tarde o tras una reapertura). Si están autorizados, genera una nueva versión: la anterior se conserva.</p>` : ''}
+    <div class="actions">${can('informes.generar') ? (gens.length ? btn('Nueva versión…', 'inf.nueva', { cls: cambios > 0 ? 'primary' : '', ic: 'archivo' }) : btn('Generar el informe', 'inf.nueva', { cls: 'primary', ic: 'archivo' })) : ''}${gens.length ? btn('Comprobar un PDF…', 'inf.comprobar', { ic: 'escudo', title: 'Comprueba si un archivo PDF es una versión registrada de este informe' }) : ''}</div>
+    ${accesos.length ? `<details><summary>Consultas y exportaciones (${(s.informes || []).length - gens.length})</summary><ul class="ref-list small">${accesos.map(r => `<li>${esc(fmtDateTime(r.t))} · ${esc(r.por)}${r.dev ? ' (' + esc(r.dev) + ')' : ''}: ${r.accion === 'consultar' ? 'consultó' : 'exportó'} ${r.n ? 'la versión ' + r.n : 'los datos'} en ${esc((r.formato || 'pdf').toUpperCase())}</li>`).join('')}</ul></details>` : ''}
+    <h3>Exportar los datos</h3>${exportes}</section>`;
+}
+A['inf.nueva'] = async () => {
+  const c = core(); const n = (S().informes || []).filter(x => x.accion === 'generar').length;
+  let motivo = '';
+  if (n) {
+    motivo = await confirmDlg({ title: 'Nueva versión del informe', text: 'La versión anterior se conserva sin cambios. Indica por qué se genera una nueva (por ejemplo, correcciones autorizadas tras una reapertura o datos sincronizados después del cierre).', input: { label: 'Motivo de la nueva versión' }, ok: 'Generar versión ' + (n + 1) });
+    if (motivo == null) return;
+    if (!String(motivo).trim()) return toast('Indica el motivo de la nueva versión', 'error');
+  }
+  const aviso = toast('Generando el informe…', 'info', 20000); await new Promise(res => setTimeout(res, 60));
+  let r; try { r = await c.generarInforme({ motivo }); } finally { if (aviso) aviso.remove(); }
+  LOCALES.delete(c.cur); toast('Informe guardado: versión ' + r.n + (r.provisional ? ' (provisional)' : ''), 'ok'); G.render();
+};
+async function pdfVersion(n) {
+  const v = await core().pdfInforme(n); if (!v) throw new AppError('El PDF de esta versión no está en este dispositivo');
+  return v;
+}
+A['inf.ver'] = async el => {
+  if (!can('informes.ver')) throw new AppError('No tienes permiso para consultar los informes', 'permiso');
+  const n = Number(el.dataset.n); const v = await pdfVersion(n);
+  const url = URL.createObjectURL(new Blob([v.bytes], { type: 'application/pdf' }));
+  const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+  await core().registrarInforme('consultar', { n, formato: 'pdf' });
+};
+A['inf.bajar'] = async el => {
+  if (!can('exportar')) throw new AppError('No tienes permiso para exportar', 'permiso');
+  const n = Number(el.dataset.n); const v = await pdfVersion(n);
+  const r = await saveFile(safeName(P().nombre) + '-informe-v' + n + '.pdf', v.bytes, MIME.pdf, { share: !!el.dataset.share });
+  if (r && r !== 'cancelado') await core().registrarInforme('exportar', { n, formato: 'pdf', hash: v.hash });
+};
+A['inf.comprobar'] = async () => {
+  const f = await pickFile('.pdf,application/pdf'); if (!f) return;
+  const h = await sha256hex(await readBytes(f));
+  const v = (S().informes || []).find(x => x.accion === 'generar' && x.hash === h);
+  if (v) toast('El archivo es la versión ' + v.n + ' del informe, generada el ' + fmtDateTime(v.t) + ' por ' + v.por + '. No se ha modificado.', 'ok', 9000);
+  else toast('El archivo no coincide con ninguna versión registrada de este informe (puede ser otra exportación o estar modificado).', 'error', 9000);
+};
 export function renderClose() {
   const p = P(); const s = S(); const t = now();
   const chk = C.closeChecks(s, t); const pend = core().isShared() ? core().sync.status(core().cur).pendientes || 0 : 0;
   const li = (n, txt, route, list) => `<li class="${n ? 'warn' : 'ok'}">${icon(n ? 'alerta' : 'ok')}<span><b>${n}</b> ${esc(txt)}${list && n ? ': ' + esc(list) : ''}</span>${n && route ? btn('Revisar', 'nav', { cls: 'ghost sm', data: { v: route } }) : ''}</li>`;
-  const shareOk = !!(navigator.canShare && !G.preview);
-  return `<section class="card pad"><h2>Informes</h2>
-    <p class="muted small">Generados en el dispositivo, sin Internet. El PDF incluye información general, unidades, claves, avisos, descansos, ubicaciones, estadísticas, resumen cronológico, bitácora y auditoría.</p>
-    ${can('exportar') ? `<div class="actions">${btn('Informe PDF', 'rep.do', { cls: 'primary', ic: 'archivo', data: { k: 'pdf' } })}${btn('Datos JSON', 'rep.do', { ic: 'descargar', data: { k: 'json' } })}${btn('Tablas CSV (ZIP)', 'rep.do', { ic: 'descargar', data: { k: 'csv' } })}
-      ${shareOk ? btn('Compartir PDF', 'rep.do', { ic: 'compartir', data: { k: 'pdf', share: 1 } }) : ''}</div>` : '<p class="muted">No tienes permiso para exportar.</p>'}</section>
+  return `${seccionInformes(p, s)}
   ${p.estado !== 'cerrado' ? `<section class="card pad"><h2>Finalizar el preventivo</h2>
     <ul class="checks-list">
       ${li(chk.pendientes.length, 'avisos pendientes', 'avisos', chk.pendientes.map(avisoLabel).join(', '))}
@@ -225,16 +302,29 @@ A['prev.close'] = async () => {
   const s = S(); const chk = C.closeChecks(s, now());
   const r = await confirmDlg({
     title: 'Finalizar preventivo', ok: chk.total ? 'Finalizar con advertencias' : 'Finalizar preventivo', danger: !!chk.total,
-    html: (chk.total ? `<p class="note warn">${icon('alerta')} Hay ${chk.total} advertencia(s). Quedarán registradas en la finalización y en el informe.</p>` : '<p>No hay advertencias.</p>'),
-    fields: [{ name: 'pdf', label: 'Generar el informe PDF al finalizar', type: 'checkbox', value: can('exportar') }, { name: 'arch', label: 'Archivar al finalizar', type: 'checkbox', value: true }],
+    html: (chk.total ? `<p class="note warn">${icon('alerta')} Hay ${chk.total} advertencia(s). Quedarán registradas en la finalización y en el informe.</p>` : '<p>No hay advertencias.</p>')
+      + (can('informes.generar') ? '<p class="small">Se generará y guardará la <b>versión 1 del informe</b>, con su huella SHA-256. Generarla no modifica ningún registro.</p>'
+        : `<p class="note">${icon('info')} No tienes permiso para generar informes: la versión 1 la generará quien lo tenga.</p>`),
+    fields: [...(can('exportar') && can('informes.generar') ? [{ name: 'pdf', label: 'Descargar también el informe PDF', type: 'checkbox', value: false }] : []), { name: 'arch', label: 'Archivar al finalizar', type: 'checkbox', value: true }],
   });
   if (!r) return;
   await core().repo.createBackup('previa', 'Antes del cierre de ' + P().nombre);
   await exec(C.prevCerrar, { confirmarAdvertencias: true });
-  if (r.pdf && can('exportar')) { try { await exportReport('pdf'); } catch (e) { toast(e.message, 'error'); } }
+  // 1.5.0: versión 1 del informe al finalizar (guardada y registrada con su huella); no bloquea el cierre si falla
+  let inf = null;
+  if (can('informes.generar')) {
+    const aviso = toast('Generando el informe…', 'info', 20000);
+    try { await new Promise(res => setTimeout(res, 60)); inf = await core().generarInforme({ automatico: true }); LOCALES.delete(core().cur); }
+    catch (e) { toast('No se pudo generar el informe: ' + e.message, 'error'); }
+    finally { if (aviso) aviso.remove(); }
+  }
+  if (r.pdf && inf && can('exportar')) {
+    try { const rr = await saveFile(safeName(P().nombre) + '-informe-v' + inf.n + '.pdf', inf.bytes, MIME.pdf); if (rr && rr !== 'cancelado') await core().registrarInforme('exportar', { n: inf.n, formato: 'pdf', hash: inf.hash }); }
+    catch (e) { toast(e.message, 'error'); }
+  }
   if (r.arch) await exec(C.prevArchivar, true);
   await core().autoBackup(true);
-  toast('Preventivo finalizado', 'ok'); G.render();
+  toast('Preventivo finalizado' + (inf ? ' · informe versión ' + inf.n + ' guardado' + (inf.provisional ? ' (provisional)' : '') : ''), 'ok'); G.render();
 };
 A['prev.reopen'] = async () => {
   const m = await confirmDlg({ title: 'Reabrir preventivo', text: 'La reapertura queda registrada en la auditoría.', input: { label: 'Motivo de la reapertura' }, ok: 'Continuar' });

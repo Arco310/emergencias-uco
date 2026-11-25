@@ -82,6 +82,23 @@ export class PDFDoc {
   line(x1, y1, x2, y2, { color = '#999999', lw = 0.5 } = {}) {
     this.cur.push(rgb(color) + ' RG ' + n2(lw) + ' w ' + n2(x1) + ' ' + n2(this.H - y1) + ' m ' + n2(x2) + ' ' + n2(this.H - y2) + ' l S');
   }
+  _pintar(fill, stroke, lw) { return (fill ? rgb(fill) + ' rg ' : '') + (stroke ? rgb(stroke) + ' RG ' + n2(lw) + ' w ' : ''); }
+  _op(fill, stroke) { return fill && stroke ? 'B' : fill ? 'f' : 'S'; }
+  /** Polígono (puntos [x, y] desde arriba) */
+  poly(pts, { fill = null, stroke = null, lw = 0.5, close = true } = {}) {
+    if (!pts || pts.length < 2 || (!fill && !stroke)) return;
+    this.cur.push(this._pintar(fill, stroke, lw) + pts.map((q, i) => n2(q[0]) + ' ' + n2(this.H - q[1]) + (i ? ' l' : ' m')).join(' ') + (close ? ' h ' : ' ') + this._op(fill, close ? stroke : stroke || '#000000'));
+  }
+  /** Círculo (cuatro curvas de Bézier) */
+  circle(cx, cy, r, { fill = null, stroke = null, lw = 0.5 } = {}) {
+    if (!fill && !stroke) return;
+    const k = 0.5523 * r; const Y = this.H - cy; const P = (x, y) => n2(x) + ' ' + n2(y);
+    this.cur.push(this._pintar(fill, stroke, lw) + P(cx + r, Y) + ' m '
+      + P(cx + r, Y + k) + ' ' + P(cx + k, Y + r) + ' ' + P(cx, Y + r) + ' c '
+      + P(cx - k, Y + r) + ' ' + P(cx - r, Y + k) + ' ' + P(cx - r, Y) + ' c '
+      + P(cx - r, Y - k) + ' ' + P(cx - k, Y - r) + ' ' + P(cx, Y - r) + ' c '
+      + P(cx + k, Y - r) + ' ' + P(cx + r, Y - k) + ' ' + P(cx + r, Y) + ' c h ' + this._op(fill, stroke));
+  }
   // ---- flujo ----
   ensure(h) { if (this.y + h > this.H - this.m - 18) { this.addPage(); return true; } return false; }
   space(h = 8) { this.y += h; }
@@ -103,12 +120,14 @@ export class PDFDoc {
       const cells = pairs.slice(i, i + cols).map(([k, v]) => {
         const kw = Math.min(colW * 0.45, this.textWidth(k + ': ', size, true) + 2);
         const lines = this.wrap(String(v ?? '—'), colW - kw - 8, size);
-        rowH = Math.max(rowH, lines.length * lh); return { k, kw, lines };
+        // Etiquetas largas en varias líneas: nunca se montan sobre el valor
+        const klines = this.wrap(k + ':', kw - 3, size, true);
+        rowH = Math.max(rowH, lines.length * lh, klines.length * lh); return { k, kw, lines, klines };
       });
       this.ensure(rowH);
       cells.forEach((c, j) => {
         const x = this.m + j * colW;
-        this.text(x, this.y, c.k + ':', { size, bold: true, color: '#444444' });
+        c.klines.forEach((l, li) => this.text(x, this.y + li * lh, l, { size, bold: true, color: '#444444' }));
         c.lines.forEach((l, li) => this.text(x + c.kw, this.y + li * lh, l, { size }));
       });
       this.y += rowH + 2;
@@ -126,7 +145,8 @@ export class PDFDoc {
       this.ensure(hh + lh * 2);
       this.rect(this.m, this.y, this.width, hh, { fill: header });
       let x = this.m;
-      hl.forEach((ls, i) => { ls.forEach((l, li) => this.text(x + pad, this.y + pad + li * lh, l, { size, bold: true, color: '#263238' })); x += widths[i]; });
+      // La cabecera se alinea como su columna (las numéricas, a la derecha)
+      hl.forEach((ls, i) => { ls.forEach((l, li) => this.text(cols[i].align === 'right' ? x + widths[i] - pad - this.textWidth(l, size, true) : x + pad, this.y + pad + li * lh, l, { size, bold: true, color: '#263238' })); x += widths[i]; });
       this.y += hh;
     };
     drawHeader();

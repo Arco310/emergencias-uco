@@ -47,6 +47,7 @@ export const PERMISOS = [
   ['planos.vista', 'Cambiar la visualización del mapa (satélite, híbrido, relieve)', 'Planos y mapas'],
   ['estadisticas.ver', 'Consultar estadísticas', 'Informes y datos', 'ver'],
   ['bitacora.ver', 'Consultar la bitácora', 'Informes y datos', 'ver'],
+  ['informes.ver', 'Consultar los informes guardados y su registro', 'Informes y datos', 'ver'],
   ['informes.generar', 'Generar informes', 'Informes y datos'],
   ['exportar', 'Exportar información', 'Informes y datos'],
   ['importar', 'Importar información', 'Informes y datos'],
@@ -83,6 +84,7 @@ export const IMPLICA = {
   'planos.editar': ['planos.vista'],
   'config.editar': ['sectores.gestionar'],
   'exportar': ['informes.generar'],
+  'informes.generar': ['informes.ver'],
   'usuarios.admin': ['usuarios.crear', 'usuarios.editar', 'usuarios.aprobar', 'usuarios.permisos', 'auditoria.ver'],
 };
 const VER = PERMISOS_VER.filter(k => k !== 'auditoria.ver');
@@ -166,6 +168,7 @@ export function permisosOp(op, s, lote = []) {
       return ['preventivos.iniciar'];
     case 'prev.archivo': return ['preventivos.archivar'];
     case 'revision.set': return ['incoherencias.revisar'];
+    case 'informe.reg': return [x.accion === 'generar' ? 'informes.generar' : x.accion === 'exportar' ? 'exportar' : 'informes.ver'];
     case 'prev.cat': {
       // Tipo general que se incorpora al preventivo al usarlo en una unidad (mismo lote): es parte de esa operación
       if (x.cat === 'tiposRecurso' && Array.isArray(x.o) && Array.isArray(x.n) && x.n.length === x.o.length + 1 && x.o.every((t, i) => JSON.stringify(t) === JSON.stringify(x.n[i]))) {

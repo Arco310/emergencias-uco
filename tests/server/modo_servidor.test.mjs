@@ -152,6 +152,13 @@ test('operaciones: el servidor comprueba permisos e identidad aunque se llame di
   av[0].x.a.loc.lat = 500;
   const r5 = await enviar(PID, kPrev, av, opeSes);
   assert.equal(r5.res[0].rechazada, true); assert.equal(r5.res[0].codigo, 'datos'); assert.match(r5.res[0].error, /coordenadas/i);
+  // Registro del informe (1.5.0): el servidor valida la huella y lo admite con el permiso (exportar incluye generar)
+  const inf = B.run(C.informeRegistrar, { accion: 'generar', n: 1, hash: 'ab'.repeat(32), formato: 'pdf' });
+  inf[0].x.hash = 'no-es-una-huella';
+  const r6 = await enviar(PID, kPrev, inf, opeSes);
+  assert.equal(r6.res[0].rechazada, true); assert.equal(r6.res[0].codigo, 'datos'); assert.match(r6.res[0].error, /huella/i);
+  const r7 = await enviar(PID, kPrev, B.run(C.informeRegistrar, { accion: 'exportar', formato: 'xlsx' }), opeSes);
+  assert.ok(!r7.res[0].rechazada, JSON.stringify(r7.res[0])); assert.ok(r7.res[0].rx > 0, 'hora de recepción del servidor');
   // Suplantación: Pepe envía una operación firmada como la administradora, o desde otro dispositivo
   const falsa = A.run(C.unitCreate, { ind: 'X-1' });
   const s1 = await enviar(PID, kPrev, falsa, opeSes);

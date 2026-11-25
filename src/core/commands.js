@@ -6,7 +6,7 @@ import { boundsValidos } from './geo.js';
 import { motivoTipoNoDisponible, referenciasTipoPrev } from './recursos.js';
 import { esVista, VISTA_DEFECTO } from './mapas.js';
 import { DEFAULT_CATEGORIAS_PUNTO } from './defaults.js';
-import { normalizarLoc, motivoLocNoValida } from './ubicacion.js';
+import { normalizarLoc, motivoLocNoValida, motivoInformeNoValido } from './ubicacion.js';
 import { REGLAS, NIVELES } from './validaciones.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
@@ -155,6 +155,20 @@ export function incoherenciaRevisar(ctx, h, { estado = 'revisada', nota = '', as
   return [mkOp(ctx, 'revision.set', ctx.pid, { id: h.id, firma: h.firma, regla: h.regla, entidad: h.entidad || null, estado, nota: String(nota || '').slice(0, 500), asignadoA: quien }, uid('b_'))];
 }
 /** Niveles, umbrales y reglas activas de las incoherencias del preventivo («reglas aprobadas») */
+/** Registro de un informe (1.5.0): versión generada, exportación o consulta. Se admite con el preventivo
+ *  finalizado o archivado porque no cambia nada operativo (ni unidades, ni avisos, ni el propio preventivo). */
+export function informeRegistrar(ctx, x = {}) {
+  S(ctx);
+  const perm = { generar: 'informes.generar', exportar: 'exportar', consultar: 'informes.ver' }[x.accion];
+  if (!perm) fail('Acción de informe no válida');
+  needPerm(ctx.user, perm);
+  const d = {};
+  for (const k of ['accion', 'n', 'hash', 'formato', 'motivo', 'provisional', 'pendientes', 'conflictos', 'nOps']) if (x[k] != null && x[k] !== '') d[k] = x[k];
+  if (d.motivo != null) d.motivo = String(d.motivo).trim();
+  if (d.provisional != null) d.provisional = !!d.provisional;
+  const m = motivoInformeNoValido(d); if (m) fail(m, 'datos');
+  return [mkOp(ctx, 'informe.reg', ctx.pid, d)];
+}
 export function reglasSet(ctx, reglas) {
   needPerm(ctx.user, 'incoherencias.reglas');
   const s = editable(ctx); const n = {};

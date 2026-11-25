@@ -135,8 +135,10 @@ export function confirmDlg({ title = 'Confirmar', text = '', html = '', ok = 'Ac
 }
 export function dialogSubmit(form) {
   const name = form.querySelector('[name=_v]');
-  const extra = form.querySelectorAll('[data-field]');
-  if (extra.length) { const vals = {}; for (const el of extra) vals[el.name] = readControl(el); form._resolve(vals); return; }
+  // El campo de texto del diálogo (_v) también lleva data-field: solo cuentan como «campos» los demás.
+  // Antes se devolvía { _v } y las notas y motivos escritos se guardaban como «[object Object]».
+  const extra = [...form.querySelectorAll('[data-field]')].filter(el => el.name !== '_v');
+  if (extra.length) { const vals = {}; for (const el of form.querySelectorAll('[data-field]')) vals[el.name] = readControl(el); form._resolve(vals); return; }
   form._resolve(name ? name.value : true);
 }
 
@@ -149,6 +151,7 @@ export function toast(msg, kind = 'info', ms = 3800) {
   el.innerHTML = `${icon(kind === 'error' ? 'alerta' : kind === 'ok' ? 'ok' : 'info')}<span>${esc(msg)}</span>`;
   box.appendChild(el);
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
+  return el; // permite quitar antes un aviso de «trabajando…»
 }
 
 // ---------------- formularios declarativos ----------------

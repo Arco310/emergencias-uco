@@ -17,6 +17,9 @@ import { tiposNoDisponibles, tiposParaNuevaUnidad, plantillasDisponibles, tipoAc
 import { permisosEfectivos } from '../core/perms.js';
 import { describeOp } from '../core/timeline.js';
 import { detectarIncoherencias } from '../core/validaciones.js';
+import { buildReport } from '../core/report.js';
+import { sha256hex } from '../core/crypto.js';
+import { registrosInforme } from '../core/fiabilidad.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -544,6 +547,42 @@ export class AppCore {
   closePrev() { if (this.cur) this.sync.stop(this.cur); this.cur = null; this.emit('prev', { pid: null }); }
 
   /** Ejecuta un comando de negocio: valida, guarda de forma atómica y aplica */
+  // ---------------- informes (1.5.0) ----------------
+  /** Horas de sincronización de cada operación guardadas en este dispositivo */
+  async horasOps(pid = this.cur) { return new Map((await this.repo.metaOps(pid)).map(m => [m.id, m])); }
+  /** Genera una versión del informe PDF, la guarda en este dispositivo y la registra en el preventivo con su huella.
+   *  No cambia nada operativo ni cierra el preventivo. Desde la segunda versión hay que indicar el motivo. */
+  async generarInforme({ motivo = '', automatico = false } = {}) {
+    if (!this.can('informes.generar')) throw new AppError('No tienes permiso para generar informes', 'permiso');
+    const pid = this.cur; const e = this.engine(); if (!e) throw new AppError('No hay preventivo abierto');
+    const s = e.state; motivo = String(motivo || '').trim();
+    const n = (s.informes || []).filter(x => x.accion === 'generar').reduce((m, x) => Math.max(m, x.n || 0), 0) + 1;
+    if (n > 1 && !motivo) throw new AppError('Indica el motivo de la nueva versión (por ejemplo, correcciones autorizadas o datos sincronizados después)', 'regla');
+    const compartido = this.isShared(pid);
+    // Antes de generar se intenta enviar lo pendiente (incluido el cierre): sin conexión, la versión queda provisional
+    if (compartido) { try { await Promise.race([this.sync.syncNow(pid), new Promise(r => setTimeout(r, 8000))]); } catch { } }
+    const meta = await this.horasOps(pid);
+    const pendientes = compartido ? [...meta.values()].filter(m => m.ps && (e.byId.get(m.id) || {}).k !== 'informe.reg').length : 0;
+    const conflictos = Object.values(s.conflicts).filter(x => x.estado === 'pendiente').length;
+    const provisional = s.prev.estado !== 'cerrado' || pendientes > 0 || conflictos > 0;
+    const nOps = registrosInforme(e.ops);
+    const bytes = await buildReport(e, { usuario: this.user.nombre, dispositivo: this.device.nombre, version: { n, motivo, provisional, pendientes, conflictos }, horas: { meta, compartido } });
+    const hash = await sha256hex(bytes);
+    await this.exec(C.informeRegistrar, { accion: 'generar', n, hash, formato: 'pdf', motivo, provisional, pendientes, conflictos, nOps });
+    const blob = await this.repo.putBlob(bytes, { mime: 'application/pdf', nombre: 'informe-v' + n + '.pdf' });
+    await this.repo.guardarVersionInforme(pid, { n, t: now(), por: this.user.nombre, dispositivo: this.device.nombre, hash, blob, tam: bytes.length, motivo, provisional, pendientes, conflictos, nOps, automatico: !!automatico });
+    return { n, hash, bytes, provisional };
+  }
+  /** PDF de una versión guardada en este dispositivo (null si se generó en otro) */
+  async pdfInforme(n, pid = this.cur) {
+    const v = (await this.repo.versionesInforme(pid)).find(x => x.n === n); if (!v) return null;
+    const b = await this.repo.getBlob(v.blob); return b ? { ...v, bytes: b.bytes } : null;
+  }
+  /** Registra una consulta o exportación del informe (quién, cuándo, qué versión y formato) */
+  async registrarInforme(accion, { n = null, formato = 'pdf', hash = null } = {}) {
+    return this.exec(C.informeRegistrar, { accion, n, formato, hash });
+  }
+
   async exec(fn, ...args) {
     const pid = this.cur; const engine = this.engine(pid);
     if (!engine) throw new AppError('No hay preventivo abierto');

@@ -323,13 +323,14 @@ var Reject = class extends Error {
   }
 };
 var CLOSED_OK = /* @__PURE__ */ new Set(["prev.estado", "prev.archivo"]);
+var SIEMPRE_OK = /* @__PURE__ */ new Set(["informe.reg"]);
 var PREV_FIELDS = /^(nombre|descripcion|fecha|horaInicio|horaFin|lugar|participantes|modalidad|cfg\.[A-Za-z0-9_.]+)$/;
 var UNIT_FIELDS = /^(ind|nombre|denom|tipo|subtipo|categoria|sector|sectorOtro|desc|obs|equip|caract|vis(\.[A-Za-z0-9_]+)?)$/;
 var SECTOR_OTROS = "otros";
 var AVISO_FIELDS = /^(tipo|desc|t|loc|sector|obs|zona|cierre\.[a-z]+)$/;
 var CATALOGOS = ["claves", "motivosEsp", "sectores", "tiposAviso", "tiposRecurso", "categoriasPunto", "puntos"];
 function emptyState() {
-  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {}, revisiones: {} };
+  return { prev: null, units: {}, avisos: {}, conflicts: {}, maxNum: 0, lastT: 0, numAviso: {}, revisiones: {}, informes: [] };
 }
 function claveDef(prev, code) {
   return (prev && prev.cat && prev.cat.claves || []).find((c) => c.codigo === code) || null;
@@ -464,6 +465,12 @@ H["prev.create"] = (s, op) => {
   for (const c of CATALOGOS) if (!Array.isArray(p.cat[c])) p.cat[c] = [];
   if (!p.cat.claves.some((c) => c.base)) throw new Reject("El cat\xE1logo de claves no tiene clave base (C0)");
   s.prev = p;
+};
+H["informe.reg"] = (s, op) => {
+  const x = op.x || {};
+  const r = { id: op.id, accion: x.accion, formato: x.formato || null, t: op.t, por: op.u ? op.u.n : "", dev: op.dn || op.d || "" };
+  for (const k of ["n", "hash", "motivo", "provisional", "pendientes", "conflictos", "nOps"]) if (x[k] != null) r[k] = x[k];
+  s.informes = [...s.informes || [], r];
 };
 H["revision.set"] = (s, op) => {
   const x = op.x || {};
@@ -807,8 +814,8 @@ function applyOp(s, op, ctx = {}) {
   try {
     if (op.k !== "prev.create") {
       if (!s.prev) throw new Reject("Preventivo no creado");
-      if (s.prev.archivado && op.k !== "prev.archivo") throw new Reject("El preventivo est\xE1 archivado");
-      if (s.prev.estado === "cerrado" && !CLOSED_OK.has(op.k)) throw new Reject("El preventivo est\xE1 cerrado");
+      if (s.prev.archivado && op.k !== "prev.archivo" && !SIEMPRE_OK.has(op.k)) throw new Reject("El preventivo est\xE1 archivado");
+      if (s.prev.estado === "cerrado" && !CLOSED_OK.has(op.k) && !SIEMPRE_OK.has(op.k)) throw new Reject("El preventivo est\xE1 cerrado");
     }
     const fn = H[op.k];
     if (!fn) throw new Reject("Operaci\xF3n desconocida: " + op.k);
@@ -852,7 +859,7 @@ function lazyMap(src) {
   });
 }
 function lazyCopy(s) {
-  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso }, revisiones: { ...s.revisiones || {} } };
+  return { ...s, prev: clone(s.prev), units: lazyMap(s.units), avisos: lazyMap(s.avisos), conflicts: lazyMap(s.conflicts), numAviso: { ...s.numAviso }, revisiones: { ...s.revisiones || {} }, informes: s.informes || [] };
 }
 var Engine = class {
   constructor(ops = []) {
@@ -982,6 +989,7 @@ var PERMISOS = [
   ["planos.vista", "Cambiar la visualizaci\xF3n del mapa (sat\xE9lite, h\xEDbrido, relieve)", "Planos y mapas"],
   ["estadisticas.ver", "Consultar estad\xEDsticas", "Informes y datos", "ver"],
   ["bitacora.ver", "Consultar la bit\xE1cora", "Informes y datos", "ver"],
+  ["informes.ver", "Consultar los informes guardados y su registro", "Informes y datos", "ver"],
   ["informes.generar", "Generar informes", "Informes y datos"],
   ["exportar", "Exportar informaci\xF3n", "Informes y datos"],
   ["importar", "Importar informaci\xF3n", "Informes y datos"],
@@ -1017,6 +1025,7 @@ var IMPLICA = {
   "planos.editar": ["planos.vista"],
   "config.editar": ["sectores.gestionar"],
   "exportar": ["informes.generar"],
+  "informes.generar": ["informes.ver"],
   "usuarios.admin": ["usuarios.crear", "usuarios.editar", "usuarios.aprobar", "usuarios.permisos", "auditoria.ver"]
 };
 var VER = PERMISOS_VER.filter((k) => k !== "auditoria.ver");
@@ -1103,6 +1112,8 @@ function permisosOp(op, s, lote = []) {
       return ["preventivos.archivar"];
     case "revision.set":
       return ["incoherencias.revisar"];
+    case "informe.reg":
+      return [x.accion === "generar" ? "informes.generar" : x.accion === "exportar" ? "exportar" : "informes.ver"];
     case "prev.cat": {
       if (x.cat === "tiposRecurso" && Array.isArray(x.o) && Array.isArray(x.n) && x.n.length === x.o.length + 1 && x.o.every((t, i) => JSON.stringify(t) === JSON.stringify(x.n[i]))) {
         const nuevo = x.n[x.n.length - 1].id;
@@ -1220,6 +1231,20 @@ function motivoContenidoNoValido(op) {
   if (op.k === "aviso.create") return motivoLocNoValida(x.a && x.a.loc);
   if (op.k === "aviso.update") return x.f && x.f.loc ? motivoLocNoValida(x.f.loc.n) : null;
   if (op.k === "unit.loc") return motivoLocNoValida(x.n);
+  if (op.k === "informe.reg") return motivoInformeNoValido(x);
+  return null;
+}
+var ACCIONES_INFORME = { generar: "Informe generado", exportar: "Informe exportado", consultar: "Informe consultado" };
+var FORMATOS_INFORME = { pdf: "PDF", xlsx: "Excel (XLSX)", csv: "CSV", json: "JSON" };
+function motivoInformeNoValido(x = {}) {
+  if (!ACCIONES_INFORME[x.accion]) return "Acci\xF3n de informe no v\xE1lida";
+  if (x.formato != null && !FORMATOS_INFORME[x.formato]) return "Formato de informe no v\xE1lido";
+  if (x.accion === "generar" && !(Number.isInteger(x.n) && x.n >= 1)) return "N\xFAmero de versi\xF3n del informe no v\xE1lido";
+  if (x.n != null && !(Number.isInteger(x.n) && x.n >= 1 && x.n < 1e5)) return "N\xFAmero de versi\xF3n del informe no v\xE1lido";
+  if (x.accion === "generar" && x.hash == null) return "Falta la huella del informe";
+  if (x.hash != null && !/^[0-9a-f]{64}$/.test(x.hash)) return "Huella SHA-256 del informe no v\xE1lida";
+  if (x.motivo != null && (typeof x.motivo !== "string" || x.motivo.length > 500)) return "Motivo del informe demasiado largo";
+  for (const k of ["pendientes", "nOps", "conflictos"]) if (x[k] != null && !(Number.isInteger(x[k]) && x[k] >= 0)) return "Dato del informe no v\xE1lido: " + k;
   return null;
 }
 

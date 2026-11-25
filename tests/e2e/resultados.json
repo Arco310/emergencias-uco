@@ -1,34 +1,49 @@
 {
- "fecha": "2026-11-25 12:03:08",
+ "fecha": "2026-11-25 12:38:45",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Plantilla desde un preventivo, eligiendo qué incluir",
+   "prueba": "Unidades plantilla de SAMUR-PC",
    "resultado": "SUPERADA",
-   "detalle": "desde el preventivo: 10 elementos a elegir (personas previstas desmarcadas); sin puntos por elección; 3 unidades y reglas; ningún aviso"
+   "detalle": "16 plantillas (BASE … VAIS); «31» → ALFA 31 (USVB) y «2» → HALCÓN 2 (moto), en C0"
   },
   {
-   "prueba": "Versiones de plantilla",
+   "prueba": "Avisos por código de incidente (carpetas)",
    "resultado": "SUPERADA",
-   "detalle": "cambiar la descripción crea la versión 2 y conserva la 1; marcarla como favorita no es otra versión"
+   "detalle": "Nuevo aviso → carpeta «1. Accidente de Tráfico» → 1.2: aviso Nº 1 creado con ese tipo y abierto para asignar"
   },
   {
-   "prueba": "Crear un preventivo con el asistente, revisando lo heredado",
+   "prueba": "Avisos: buscar el código",
    "resultado": "SUPERADA",
-   "detalle": "asistente en 7 pasos; sin SVB-2, sin la grada (SVA-1 queda sin sector) y sin plano; resumen previo; el preventivo dice «versión 2» y qué no se heredó"
+   "detalle": "buscar «atropello» → 1.4 → aviso creado"
   },
   {
-   "prueba": "Desactivar, restaurar, duplicar y eliminar plantillas",
+   "prueba": "Avisos: nuevo aviso con una unidad por código",
    "resultado": "SUPERADA",
-   "detalle": "desactivada: no se ofrece al crear; reactivada; versión 1 restaurada como versión 3; usos con su versión; duplicar y eliminar"
+   "detalle": "ALFA 31 → Nuevo aviso con esta unidad → Enfermedad → 3.1: aviso asignado y la unidad en C1"
   },
   {
-   "prueba": "Asistente en el móvil",
+   "prueba": "Avisos: formulario completo con el selector de código",
    "resultado": "SUPERADA",
-   "detalle": "sin desplazamiento horizontal (358 px en 358 px); filas de unidades de 78 px"
+   "detalle": "Más datos → campo «Tipo de incidente» → 2.12.1 OVACE con descripción; filtro de avisos agrupado por carpetas"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 15)",
+   "prueba": "Cronología: todas las unidades a la vez",
+   "resultado": "SUPERADA",
+   "detalle": "4 acontecimientos de 2 unidades en un único registro, lo más reciente primero"
+  },
+  {
+   "prueba": "Preventivos anteriores: añadir los códigos",
+   "resultado": "SUPERADA",
+   "detalle": "preventivo creado sin códigos → «Añadir los códigos de incidente» → 123 códigos y aviso 1.1"
+  },
+  {
+   "prueba": "Finalizar el preventivo",
+   "resultado": "SUPERADA",
+   "detalle": "Más → «Finalizar preventivo e informes» → Finalizar preventivo: queda en solo lectura y archivado"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (incidentes)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

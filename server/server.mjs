@@ -449,7 +449,7 @@ async function api(req, res, url) {
     }
     for (const o of b.ops) {
       const ex = p.ids.get(o.id);
-      if (ex) { out.push({ id: o.id, sq: ex.sq, num: ex.num ?? null }); continue; } // idempotente
+      if (ex) { out.push({ id: o.id, sq: ex.sq, num: ex.num ?? null, rx: ex.r ?? null }); continue; } // idempotente (conserva la primera recepción)
       const val = validas.get(o.id);
       if (val && !val.ok) { out.push({ id: o.id, rechazada: true, error: val.error, codigo: val.codigo }); continue; }
       // Si la operación ya tenía número definitivo (reenvío tras recuperar el servidor), se conserva
@@ -457,7 +457,7 @@ async function api(req, res, url) {
       const rec = { id: o.id, d: o.d, h: o.h, sq: p.meta.nextSq++, num: prevNum != null ? prevNum : o.nn ? p.meta.nextNum++ : null, c: o.c, r: Date.now() };
       if (prevNum != null && prevNum >= p.meta.nextNum) p.meta.nextNum = prevNum + 1;
       p.ids.set(rec.id, rec); p.ops.push(rec); lines += JSON.stringify(rec) + '\n'; metaChanged = true;
-      out.push({ id: rec.id, sq: rec.sq, num: rec.num });
+      out.push({ id: rec.id, sq: rec.sq, num: rec.num, rx: rec.r }); // rx: hora de recepción en el servidor (1.5.0)
       if (val && val.ok) aceptadas.push({ ...val.op, sq: rec.sq, num: rec.num });
     }
     if (lines) { appendDurable(path.join(p.dir, 'ops.jsonl'), lines); ACT.escritura(pid); }
@@ -470,7 +470,7 @@ async function api(req, res, url) {
     const limit = Math.min(2000, Math.max(1, Number(url.searchParams.get('limit') || 500)));
     // las operaciones están en orden de sq: búsqueda binaria del inicio
     let lo = 0, hi = p.ops.length; while (lo < hi) { const m = (lo + hi) >> 1; if (p.ops[m].sq <= after) lo = m + 1; else hi = m; }
-    const slice = p.ops.slice(lo, lo + limit).map(o => ({ id: o.id, d: o.d, h: o.h, sq: o.sq, num: o.num, c: o.c }));
+    const slice = p.ops.slice(lo, lo + limit).map(o => ({ id: o.id, d: o.d, h: o.h, sq: o.sq, num: o.num, c: o.c, rx: o.r ?? null }));
     return send(res, 200, { ops: slice, last: p.meta.nextSq - 1, more: lo + limit < p.ops.length });
   }
   if (what === 'blobs' && parts[5] && /^[A-Za-z0-9_-]{8,100}$/.test(parts[5])) {

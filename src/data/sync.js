@@ -25,7 +25,7 @@ export function decodeJoinCode(code) {
 export function newSecret() { return randomBytes(16); }
 export function normServer(s) { s = String(s || '').trim().replace(/\/+$/, ''); if (s && !/^https?:\/\//i.test(s)) s = 'https://' + s; return s; }
 
-function transportBody(op) { const b = { ...op }; delete b.sq; delete b.num; delete b.ps; return b; }
+function transportBody(op) { const b = { ...op }; delete b.sq; delete b.num; delete b.ps; delete b.rx; delete b.sy; return b; }
 
 export class SyncManager {
   /**
@@ -115,12 +115,13 @@ export class SyncManager {
         const m = await this.h.repo.opMeta(x.id);
         if (m) {
           const prevNum = m.num;
-          if (await this.h.repo.setOpServerMeta(x.id, x.sq, x.num) && x.num != null && prevNum !== x.num) this.h.onNumber(pid, x.id, x.num);
+          if (await this.h.repo.setOpServerMeta(x.id, x.sq, x.num, x.rx ?? null) && x.num != null && prevNum !== x.num) this.h.onNumber(pid, x.id, x.num);
           continue;
         }
         let op; try { op = await open(k.key, x.c); } catch { throw new AppError('No se pudo descifrar una operación: la clave del preventivo no coincide'); }
         if (op.p !== pid) continue;
-        op.sq = x.sq; op.num = x.num ?? null; nuevos.push(op);
+        // Las horas del servidor y de recepción las fija quien las conoce, nunca el contenido de la operación
+        op.sq = x.sq; op.num = x.num ?? null; op.rx = x.rx ?? null; op.sy = now(); nuevos.push(op);
       }
       if (nuevos.length) { await this.h.repo.storeRemoteOps(pid, nuevos); await this.h.onRemoteOps(pid, nuevos); total += nuevos.length; }
       after = r.ops.length ? r.ops[r.ops.length - 1].sq : after;
@@ -229,7 +230,7 @@ export class SyncManager {
     }
     return JSON.stringify({
       formato: 'uco-sync', version: 1, pid, nombre: nombre || '', creado: now(),
-      ops: await Promise.all(ops.map(async op => ({ id: op.id, d: op.d, h: op.h, num: op.num ?? null, sq: op.sq ?? null, c: await seal(k.key, transportBody(op)) }))),
+      ops: await Promise.all(ops.map(async op => ({ id: op.id, d: op.d, h: op.h, num: op.num ?? null, sq: op.sq ?? null, rx: op.rx ?? null, c: await seal(k.key, transportBody(op)) }))),
       blobs,
     });
   }
@@ -250,7 +251,7 @@ export class SyncManager {
         if (m) { if (x.num != null && m.num == null) { await this.h.repo.setOpServerMeta(x.id, m.sq ?? x.sq, x.num); nums.push([x.id, x.num]); } continue; }
         const op = abiertos[j];
         if (!op) throw new AppError('El paquete pertenece a otro preventivo o la clave no coincide');
-        op.num = x.num ?? null; op.sq = x.sq ?? null; nuevos.push(op);
+        op.num = x.num ?? null; op.sq = x.sq ?? null; op.rx = x.rx ?? null; op.sy = now(); nuevos.push(op);
       }
     }
     if (nuevos.length) { await this.h.repo.storeRemoteOps(pid, nuevos); await this.h.onRemoteOps(pid, nuevos); }

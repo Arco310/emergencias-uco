@@ -451,3 +451,8 @@ details.rev-lista[open] summary{border-bottom:1px solid var(--line);margin-botto
 fieldset.rev-items{border:0;padding:0;margin:.3rem 0 .5rem;max-height:46vh;overflow:auto}
 .resumen-crear{background:var(--soft, rgba(0,0,0,.04));border-radius:var(--r-s);padding:.6rem .8rem;margin:.3rem 0 .8rem}
 .pcard.inactiva{opacity:.75}
+/* 1.5.0 · versiones del informe */
+.inf-versiones{list-style:none;padding:0;margin:.4rem 0 .8rem}
+.inf-v{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--line)}
+.inf-v .actions{margin:0}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
