@@ -472,7 +472,7 @@ H["prev.create"] = (s, op) => {
 H["informe.reg"] = (s, op) => {
   const x = op.x || {};
   const r = { id: op.id, accion: x.accion, formato: x.formato || null, t: op.t, por: op.u ? op.u.n : "", dev: op.dn || op.d || "" };
-  for (const k of ["n", "hash", "motivo", "provisional", "pendientes", "conflictos", "nOps"]) if (x[k] != null) r[k] = x[k];
+  for (const k of ["n", "hash", "huellaOps", "motivo", "provisional", "pendientes", "conflictos", "nOps"]) if (x[k] != null) r[k] = x[k];
   s.informes = [...s.informes || [], r];
 };
 H["revision.set"] = (s, op) => {
@@ -1248,6 +1248,7 @@ function motivoInformeNoValido(x = {}) {
   if (x.n != null && !(Number.isInteger(x.n) && x.n >= 1 && x.n < 1e5)) return "N\xFAmero de versi\xF3n del informe no v\xE1lido";
   if (x.accion === "generar" && x.hash == null) return "Falta la huella del informe";
   if (x.hash != null && !/^[0-9a-f]{64}$/.test(x.hash)) return "Huella SHA-256 del informe no v\xE1lida";
+  if (x.huellaOps != null && !/^[0-9a-f]{64}$/.test(x.huellaOps)) return "Huella del registro de operaciones no v\xE1lida";
   if (x.motivo != null && (typeof x.motivo !== "string" || x.motivo.length > 500)) return "Motivo del informe demasiado largo";
   for (const k of ["pendientes", "nOps", "conflictos"]) if (x[k] != null && !(Number.isInteger(x[k]) && x[k] >= 0)) return "Dato del informe no v\xE1lido: " + k;
   return null;

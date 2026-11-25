@@ -869,8 +869,11 @@ def publicar(dest, version, rompe=False, sha_mal=False):
 
 def scenario_actualizaciones(b):
     print('\n[6] Actualizaciones automáticas de la aplicación (service worker)')
+    # Versiones simuladas desde la mínima que admite el servidor (por debajo la app se mostraría como obsoleta)
+    mj, mn, pt = map(int, re.search(r"const MIN_CLIENTE = '([^']+)'", open(os.path.join(ROOT, 'server', 'server.mjs'), encoding='utf-8').read()).group(1).split('.'))
+    V = lambda n: f'{mj}.{mn}.{pt + n}'
     static = tempfile.mkdtemp(prefix='uco-act-app-'); data = tempfile.mkdtemp(prefix='uco-act-datos-')
-    publicar(static, '1.2.0')
+    publicar(static, V(0))
     srv = start_server(data, PORT_ACT, static)
     A = App(b, 'act', PHONE, base=URL_ACT)
     ver = lambda: A.pg.evaluate('() => window.__UCO && window.__UCO.version')
@@ -890,42 +893,42 @@ def scenario_actualizaciones(b):
             sw_listo()
             A.new_prev('Preventivo actualizaciones'); A.new_unit('ACT 1')
             return 'versión ' + ver() + ' con funcionamiento sin conexión activo'
-        check('Actualización: aplicación instalada (1.2.0) y controlada por el service worker', instalar)
+        check('Actualización: aplicación instalada y controlada por el service worker', instalar)
 
         def nueva_con_sesion():
-            publicar(static, '1.2.1')
+            publicar(static, V(1))
             buscar()
             A.pg.wait_for_selector('[data-act-bar="lista"]', timeout=30000)
-            assert 'Versión 1.2.1' in A.pg.inner_text('[data-act-bar="lista"]')
+            assert f'Versión {V(1)}' in A.pg.inner_text('[data-act-bar="lista"]')
             A.pg.wait_for_timeout(1500)
-            assert ver() == '1.2.0', 'con la sesión abierta no se recarga sola'
+            assert ver() == V(0), 'con la sesión abierta no se recarga sola'
             assert A.pg.evaluate('() => !!window.__UCO.core.session'), 'la sesión sigue abierta'
             A.shot('01-version-lista')
-            return 'aviso «Versión 1.2.1 lista» sin interrumpir el trabajo'
+            return f'aviso «Versión {V(1)} lista» sin interrumpir el trabajo'
         check('Actualización: versión nueva detectada, descargada y verificada sin interrumpir la sesión', nueva_con_sesion)
 
         def aplicar_controlado():
             aplicar_y_entrar()
-            assert ver() == '1.2.1', 'versión aplicada: ' + str(ver())
+            assert ver() == V(1), 'versión aplicada: ' + str(ver())
             assert A.pg.evaluate("() => window.__UCO.core.state && window.__UCO.core.state.prev.nombre") == 'Preventivo actualizaciones', 'vuelve al mismo preventivo'
             assert A.unit_id('ACT 1'), 'la unidad sigue ahí'
             aud = A.pg.evaluate("() => window.__UCO.core.repo.listAudit().then(l => l.filter(a => a.accion === 'Actualización de la aplicación').map(a => a.anterior + '>' + a.nuevo))")
-            assert '1.2.0>1.2.1' in aud, aud
-            return 'recarga controlada → 1.2.1, mismo preventivo y datos; anotado en la auditoría'
+            assert f'{V(0)}>{V(1)}' in aud, aud
+            return f'recarga controlada → {V(1)}, mismo preventivo y datos; anotado en la auditoría'
         check('Actualización: aplicación controlada, datos conservados y auditoría', aplicar_controlado)
 
         def integridad():
-            publicar(static, '1.2.9', sha_mal=True)
+            publicar(static, V(9), sha_mal=True)
             buscar(); A.pg.wait_for_timeout(5000)
             assert not A.pg.locator('[data-act-bar="lista"]').count(), 'no debe ofrecer una versión que no supera la verificación'
             esperando = A.pg.evaluate('() => navigator.serviceWorker.getRegistration().then(r => !!(r.waiting || r.installing))')
             assert not esperando, 'la versión manipulada no queda instalada'
-            assert ver() == '1.2.1'
-            return 'la versión con suma SHA-256 incorrecta se rechaza; sigue la 1.2.1'
+            assert ver() == V(1)
+            return f'la versión con suma SHA-256 incorrecta se rechaza; sigue la {V(1)}'
         check('Actualización: comprobación de integridad (SHA-256) de la versión descargada', integridad)
 
         def recuperacion():
-            publicar(static, '1.2.2', rompe=True)
+            publicar(static, V(2), rompe=True)
             buscar(); aplicar = A.pg.wait_for_selector('[data-act-bar="lista"]', timeout=30000)
             A.pg.click('[data-act-bar="lista"] [data-a="act.aplicar"]'); A.sheet().locator('button[type=submit]').click()
             A.pg.wait_for_selector('#uco-recuperacion', timeout=40000)
@@ -934,32 +937,32 @@ def scenario_actualizaciones(b):
             assert 'Tus datos están a salvo' in txt and 'Fallo de arranque simulado' in txt, txt
             A.pg.locator('#uco-recuperacion button', has_text='Usar la versión anterior').click()
             A.pg.wait_for_selector('form[data-f="auth.login"]', timeout=30000)
-            assert ver() == '1.2.1', 'vuelve a la versión anterior: ' + str(ver())
+            assert ver() == V(1), 'vuelve a la versión anterior: ' + str(ver())
             A.login('coord', 'clave-coordinador')
             assert A.unit_id('ACT 1'), 'datos intactos'
             A.pg.evaluate('() => window.__UCO.go("actualizaciones")'); A.pg.wait_for_selector('[data-act="app"]')
             assert 'versión anterior' in A.pg.inner_text('[data-act="app"]')
-            return 'pantalla de recuperación → versión anterior (1.2.1) con los datos intactos'
+            return f'pantalla de recuperación → versión anterior ({V(1)}) con los datos intactos'
         check('Actualización: recuperación ante una versión que no arranca', recuperacion)
 
         def corregida():
-            publicar(static, '1.2.3')
+            publicar(static, V(3))
             buscar(); aplicar_y_entrar()
-            assert ver() == '1.2.3', str(ver())
+            assert ver() == V(3), str(ver())
             assert A.unit_id('ACT 1')
-            return 'versión corregida 1.2.3 aplicada tras la recuperación'
+            return f'versión corregida {V(3)} aplicada tras la recuperación'
         check('Actualización: versión corregida tras la recuperación', corregida)
 
         def sin_sesion():
             A.logout()
-            publicar(static, '1.2.4')
+            publicar(static, V(4))
             A.pg.evaluate('() => navigator.serviceWorker.getRegistration().then(r => r.update())')
-            A.pg.wait_for_function('() => window.__UCO && window.__UCO.version === "1.2.4"', timeout=40000)
+            A.pg.wait_for_function('() => window.__UCO && window.__UCO.version === "' + V(4) + '"', timeout=40000)
             A.pg.wait_for_selector('form[data-f="auth.login"]')
-            assert 'v1.2.4' in A.pg.inner_text('.auth-head')
+            assert f'v{V(4)}' in A.pg.inner_text('.auth-head')
             A.login('coord', 'clave-coordinador')
             assert A.unit_id('ACT 1')
-            return 'en la pantalla de acceso se aplica sola (1.2.4)'
+            return f'en la pantalla de acceso se aplica sola ({V(4)})'
         check('Actualización: sin sesión abierta se aplica sola', sin_sesion)
         errores = [e for e in A.errors if 'Fallo de arranque simulado' not in e]
         check('Actualización: sin errores de JavaScript', lambda: (_ for _ in ()).throw(Exception('; '.join(errores[:5]))) if errores else 'ninguno')
@@ -1902,6 +1905,9 @@ def scenario_informes(b):
             g = [x for x in json.loads(reg()) if x['accion'] == 'generar']
             assert [x['n'] for x in g] == [1, 2] and g[0]['hash'] == A.hash1 and g[1]['motivo'].startswith('Corrección autorizada'), g
             assert A.pg.locator('.inf-v').count() == 2
+            assert g[0]['huellaOps'] == g[1]['huellaOps'] and len(g[0]['huellaOps']) == 64, 'generar o consultar no cambia el registro de operaciones'
+            with A.pg.expect_download() as dl: A.a('rep.do', k='json')
+            j = json.loads(open(dl.value.path(), 'rb').read()); assert j['huellaRegistro'] == g[0]['huellaOps'], 'la exportación JSON permite comprobar la huella del registro'
             assert A.state("return JSON.stringify([s.units, s.avisos])") == A.antes, 'generar o exportar no cambia unidades ni avisos'
             A.nav('mas'); A.a('nav', v='bitacora'); A.pg.wait_for_timeout(500)
             txt = A.pg.inner_text('main'); assert 'Informe generado (versión 2)' in txt and 'Informe exportado' in txt, txt[:500]

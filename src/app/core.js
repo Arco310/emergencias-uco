@@ -19,7 +19,7 @@ import { describeOp } from '../core/timeline.js';
 import { detectarIncoherencias } from '../core/validaciones.js';
 import { buildReport } from '../core/report.js';
 import { sha256hex } from '../core/crypto.js';
-import { registrosInforme } from '../core/fiabilidad.js';
+import { registrosInforme, huellaRegistro } from '../core/fiabilidad.js';
 
 export class AppCore {
   /** opciones: pruebas (entorno CLAUDE_TEST) y servidor (dirección del servidor central; por defecto la
@@ -568,9 +568,10 @@ export class AppCore {
     const nOps = registrosInforme(e.ops);
     const bytes = await buildReport(e, { usuario: this.user.nombre, dispositivo: this.device.nombre, version: { n, motivo, provisional, pendientes, conflictos }, horas: { meta, compartido } });
     const hash = await sha256hex(bytes);
-    await this.exec(C.informeRegistrar, { accion: 'generar', n, hash, formato: 'pdf', motivo, provisional, pendientes, conflictos, nOps });
+    const huellaOps = await huellaRegistro(e.ops);
+    await this.exec(C.informeRegistrar, { accion: 'generar', n, hash, huellaOps, formato: 'pdf', motivo, provisional, pendientes, conflictos, nOps });
     const blob = await this.repo.putBlob(bytes, { mime: 'application/pdf', nombre: 'informe-v' + n + '.pdf' });
-    await this.repo.guardarVersionInforme(pid, { n, t: now(), por: this.user.nombre, dispositivo: this.device.nombre, hash, blob, tam: bytes.length, motivo, provisional, pendientes, conflictos, nOps, automatico: !!automatico });
+    await this.repo.guardarVersionInforme(pid, { n, t: now(), por: this.user.nombre, dispositivo: this.device.nombre, hash, huellaOps, blob, tam: bytes.length, motivo, provisional, pendientes, conflictos, nOps, automatico: !!automatico });
     return { n, hash, bytes, provisional };
   }
   /** PDF de una versión guardada en este dispositivo (null si se generó en otro) */

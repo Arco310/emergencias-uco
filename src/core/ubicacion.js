@@ -59,6 +59,7 @@ export function motivoInformeNoValido(x = {}) {
   if (x.n != null && !(Number.isInteger(x.n) && x.n >= 1 && x.n < 100000)) return 'Número de versión del informe no válido';
   if (x.accion === 'generar' && x.hash == null) return 'Falta la huella del informe';
   if (x.hash != null && !/^[0-9a-f]{64}$/.test(x.hash)) return 'Huella SHA-256 del informe no válida';
+  if (x.huellaOps != null && !/^[0-9a-f]{64}$/.test(x.huellaOps)) return 'Huella del registro de operaciones no válida';
   if (x.motivo != null && (typeof x.motivo !== 'string' || x.motivo.length > 500)) return 'Motivo del informe demasiado largo';
   for (const k of ['pendientes', 'nOps', 'conflictos']) if (x[k] != null && !(Number.isInteger(x[k]) && x[k] >= 0)) return 'Dato del informe no válido: ' + k;
   return null;

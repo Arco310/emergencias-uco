@@ -163,7 +163,7 @@ export function informeRegistrar(ctx, x = {}) {
   if (!perm) fail('Acción de informe no válida');
   needPerm(ctx.user, perm);
   const d = {};
-  for (const k of ['accion', 'n', 'hash', 'formato', 'motivo', 'provisional', 'pendientes', 'conflictos', 'nOps']) if (x[k] != null && x[k] !== '') d[k] = x[k];
+  for (const k of ['accion', 'n', 'hash', 'huellaOps', 'formato', 'motivo', 'provisional', 'pendientes', 'conflictos', 'nOps']) if (x[k] != null && x[k] !== '') d[k] = x[k];
   if (d.motivo != null) d.motivo = String(d.motivo).trim();
   if (d.provisional != null) d.provisional = !!d.provisional;
   const m = motivoInformeNoValido(d); if (m) fail(m, 'datos');

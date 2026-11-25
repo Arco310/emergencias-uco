@@ -11,7 +11,7 @@ import { unitLabel, avisoLabel, liveUnits } from '../../core/engine.js';
 import { buildReport } from '../../core/report.js';
 import { prevJSON, csvZip, prevXLSX } from '../../core/exporters.js';
 import { sha256hex } from '../../core/crypto.js';
-import { registrosInforme } from '../../core/fiabilidad.js';
+import { registrosInforme, huellaRegistro } from '../../core/fiabilidad.js';
 import { SYNC_ESTADOS } from '../../data/sync.js';
 import { openCatalog, catalogButtons, CAT_TITLE, nuevoTipoRecurso } from './catalogs.js';
 import { overriddenVis } from '../../core/visual.js';
@@ -200,7 +200,7 @@ export async function exportReport(kind, { share = false } = {}) {
     hash = await sha256hex(bytes);
     r = await saveFile(base + '.pdf', bytes, MIME.pdf, { share });
   } else if (kind === 'xlsx') r = await saveFile(base + '.xlsx', prevXLSX(e, who), MIME.xlsx, { share });
-  else if (kind === 'json') r = await saveFile(base + '.json', JSON.stringify(prevJSON(e, who), null, 1), MIME.json, { share });
+  else if (kind === 'json') { const j = prevJSON(e, who); j.huellaRegistro = await huellaRegistro(e.ops); r = await saveFile(base + '.json', JSON.stringify(j, null, 1), MIME.json, { share }); }
   else if (kind === 'csv') r = await saveFile(base + '-csv.zip', csvZip(e, now(), { meta, compartido }), MIME.csv, { share });
   else return;
   if (r && r !== 'cancelado') { try { await c.registrarInforme('exportar', { formato: kind, hash }); } catch (err) { console.warn('Registro de la exportación', err); } }

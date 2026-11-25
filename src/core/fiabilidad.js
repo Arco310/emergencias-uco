@@ -4,7 +4,8 @@
 //  - rx: hora en que el servidor la recibió por primera vez (solo en preventivos compartidos);
 //  - sy: hora en que este dispositivo la recibió del servidor o recibió su confirmación.
 // Aquí solo se describe qué se sabe y qué no: no se reconstruye ni se estima ningún dato.
-import { fmtDur } from './util.js';
+import { fmtDur, stableStringify } from './util.js';
+import { sha256hex } from './crypto.js';
 
 export const UMBRAL_DIFERIDO = 2 * 60000; // más de 2 min entre la hora declarada y la recepción: registro diferido
 export const UMBRAL_RELOJ = 60000;        // declarada más de 1 min después de recibirse: reloj del dispositivo adelantado
@@ -15,6 +16,15 @@ const pl = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
 export const NO_CAMBIAN_INFORME = new Set(['informe.reg', 'prev.archivo']);
 /** Número de registros que cuentan para el informe (para saber si hay cambios después de una versión) */
 export const registrosInforme = ops => ops.filter(o => !NO_CAMBIAN_INFORME.has(o.k)).length;
+/** Huella SHA-256 del registro de operaciones que cuenta para el informe: no depende del orden de llegada
+ *  ni de los datos propios de cada dispositivo (números, secuencia, horas de sincronización). Con la
+ *  exportación JSON cualquiera puede comprobar que un informe corresponde exactamente a esos registros. */
+export async function huellaRegistro(ops) {
+  const canon = ops.filter(o => !NO_CAMBIAN_INFORME.has(o.k))
+    .map(({ num, ref, sq, ps, rx, sy, estado, ...o }) => o)
+    .sort((a, b) => (a.h < b.h ? -1 : a.h > b.h ? 1 : a.id < b.id ? -1 : 1));
+  return sha256hex(new TextEncoder().encode(stableStringify(canon)));
+}
 
 /**
  * ops: operaciones del preventivo; meta: Map id → { rx, sy, ps } guardado en este dispositivo.

@@ -4,7 +4,7 @@ import { clone } from './util.js';
 import { tiposAvisoIncidentes } from './incidentes.js';
 
 export const APP_NAME = 'Gestor de Emergencias UCO';
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 export const SCHEMA_VERSION = 1;
 
 /**

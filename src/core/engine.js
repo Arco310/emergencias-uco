@@ -170,7 +170,7 @@ H['prev.create'] = (s, op) => {
 H['informe.reg'] = (s, op) => {
   const x = op.x || {};
   const r = { id: op.id, accion: x.accion, formato: x.formato || null, t: op.t, por: op.u ? op.u.n : '', dev: op.dn || op.d || '' };
-  for (const k of ['n', 'hash', 'motivo', 'provisional', 'pendientes', 'conflictos', 'nOps']) if (x[k] != null) r[k] = x[k];
+  for (const k of ['n', 'hash', 'huellaOps', 'motivo', 'provisional', 'pendientes', 'conflictos', 'nOps']) if (x[k] != null) r[k] = x[k];
   s.informes = [...(s.informes || []), r];
 };
 H['revision.set'] = (s, op) => {

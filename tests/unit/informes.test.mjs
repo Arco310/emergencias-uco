@@ -116,7 +116,7 @@ test('informe PDF verificable: versión, identidad UCO, configuración y sectore
   const plano = [...txt.matchAll(/<< \/Length (\d+) \/Filter \/FlateDecode >>\nstream\n/g)].map(m => inflateSync(Buffer.from(txt.slice(m.index + m[0].length, m.index + m[0].length + Number(m[1])), 'latin1')).toString('latin1')).join('\n');
   for (const s of ['Gestor de Emergencias UCO', 'Versión 2 del informe', 'PROVISIONAL', 'Configuración y sectores utilizados', 'Responsables', 'Lola Pérez (Responsable sanitaria)',
     'Plano del preventivo', 'Actividad por unidad', 'Utilización de los recursos', 'Avisos al cierre', 'Incidencias detectadas', 'Cronología',
-    'Fiabilidad de los datos y limitaciones', 'Registros diferidos', 'Recibida en el servidor', 'Corrección autorizada tras reapertura'])
+    'Fiabilidad de los datos y limitaciones', 'Huella SHA-256 del registro de operaciones', 'Registros diferidos', 'Recibida en el servidor', 'Corrección autorizada tras reapertura'])
     assert.ok(plano.includes(W(s)), 'falta: ' + s);
   assert.match(plano, /(?:-?[\d.]+ ){6}c /, 'unidades dibujadas como círculos en el plano');
   assert.ok(plano.includes(W('Incorporación de unidad')) || plano.includes(W('Alta de unidad')), 'la cronología incluye la incorporación de unidades');
@@ -130,4 +130,17 @@ test('cambios posteriores a una versión: no cuentan el registro del informe ni 
   d.run(C.informeRegistrar, { accion: 'consultar', n: 1, formato: 'pdf' });
   d.run(C.prevArchivar, false); d.run(C.prevArchivar, true);
   assert.equal(registrosInforme(d.engine.ops), n, 'consultar o archivar no son cambios para el informe');
+});
+
+test('huella del registro de operaciones: la misma para los mismos registros, en cualquier orden y sin datos locales', async () => {
+  const { huellaRegistro } = await import('../../src/core/fiabilidad.js');
+  const d = finalizado(); const ops = d.engine.ops;
+  const h = await huellaRegistro(ops);
+  assert.match(h, /^[0-9a-f]{64}$/);
+  const desordenadas = [...ops].reverse().map(o => ({ ...o, sq: 99, num: 7, rx: 1, sy: 2, ps: 1 }));
+  assert.equal(await huellaRegistro(desordenadas), h, 'no dependen del orden de llegada ni de metadatos de este dispositivo');
+  d.run(C.informeRegistrar, { accion: 'consultar', n: 1, formato: 'pdf' });
+  assert.equal(await huellaRegistro(d.engine.ops), h, 'consultar el informe no cambia la huella');
+  const cambiado = ops.map((o, i) => (i === 3 ? { ...o, x: { ...o.x, manipulado: true } } : o));
+  assert.notEqual(await huellaRegistro(cambiado), h, 'cualquier cambio en un registro cambia la huella');
 });

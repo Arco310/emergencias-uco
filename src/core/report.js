@@ -9,7 +9,7 @@ import { APP_NAME, APP_VERSION } from './defaults.js';
 import { etiquetaTipoAviso, tipoAvisoDef } from './incidentes.js';
 import { describirOrigen } from './templates.js';
 import { activePeriods } from './stats.js';
-import { fiabilidadHoras } from './fiabilidad.js';
+import { fiabilidadHoras, huellaRegistro, registrosInforme } from './fiabilidad.js';
 import { detectarIncoherencias, NIVELES } from './validaciones.js';
 import { ACCIONES_INFORME, FORMATOS_INFORME } from './ubicacion.js';
 import { nombreVista } from './mapas.js';
@@ -232,7 +232,10 @@ export async function buildReport(engine, { usuario = '', dispositivo = '', vers
   doc.h2('Fiabilidad de los datos y limitaciones');
   const compartido = horas ? !!horas.compartido : p.modalidad === 'compartida';
   const f = fiabilidadHoras(engine.ops, (horas && horas.meta) || new Map(), { compartido });
+  doc.para('La huella del registro de operaciones permite comprobar, con la exportación JSON del preventivo, que este informe corresponde exactamente a esos registros.', { size: 8.5, color: '#555555' });
   doc.para('Todos los tiempos del informe se calculan con la hora declarada por el dispositivo que registró cada cambio. En los preventivos compartidos se conserva además la hora en que el servidor lo recibió y la hora en que este dispositivo lo sincronizó; no se corrige ni se estima ninguna hora.', { size: 8.5 });
+  const huella = await huellaRegistro(engine.ops);
+  doc.para('Huella SHA-256 del registro de operaciones (' + registrosInforme(engine.ops) + ' registros): ' + huella, { size: 8.5, bold: true });
   doc.kv([['Registros analizados', String(f.total)], ['Con hora de recepción del servidor', compartido ? String(f.conServidor) : 'No aplica (independiente)'], ['Pendientes de enviar desde este dispositivo', String(f.pendientes)], ['Dispositivos que registraron cambios', String(f.dispositivos.length)]], { size: 9 });
   if (f.dispositivos.length) doc.table([{ label: 'Dispositivo', w: 1.6 }, { label: 'Registros', w: 0.8, align: 'right' }, { label: 'Diferidos', w: 0.8, align: 'right' }, { label: 'Mayor retraso', w: 1, align: 'right' }, { label: 'Reloj adelantado', w: 1, align: 'right' }],
     f.dispositivos.map(d => [d.nombre, d.ops, compartido ? d.diferidos : '—', d.maxRetraso ? fmtDur(d.maxRetraso) : '—', d.adelanto ? fmtDur(d.adelanto) : '—']), { size: 7.5 });

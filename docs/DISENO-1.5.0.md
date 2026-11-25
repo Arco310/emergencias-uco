@@ -113,3 +113,24 @@ Cada fase lleva:
 - La regresión completa de `npm test` y de los escenarios 1–11.
 
 Los 47 criterios de aceptación se verificarán uno a uno en el informe de entrega.
+
+## 5. Cambios respecto al diseño (al implementarlo)
+- **Plantillas: tres permisos.**
+  - «Crear plantillas» (`plantillas.crear`).
+  - «Modificar, desactivar y eliminar» (`plantillas.gestionar`), que incluye crear.
+  - «Usar plantillas» (`plantillas.usar`), incluido en «Crear preventivos».
+- **Plantillas: sin referencias rotas.** Al excluir sectores o el plano, las unidades quedan sin sector o sin posición, y los puntos y las delimitaciones se quitan.
+- **Informes: la operación se llama `informe.reg`.** Registra generar, exportar y consultar.
+- **Informes: dos huellas.** Cada versión guarda la huella del PDF y la del registro de operaciones, que también va en el PDF y en la exportación JSON.
+- **Informes: permiso de consulta** «Consultar los informes guardados» (`informes.ver`).
+- **Horas: también `sy`.** Además de `rx` (servidor), cada dispositivo guarda `sy` (sincronización). Las dos van fuera del contenido cifrado de la operación.
+- **Monitorización: la ruta es `POST …/admin/estado`.** Así el código de administración del modo anterior viaja en el cuerpo y nunca en la dirección.
+- **Monitorización: cartografía desde el dispositivo.** La comprobación se hace desde el dispositivo, que es quien carga las teselas, y solo al pulsar.
+- **Monitorización: permiso** «Consultar el estado técnico del servidor y del sistema» (`sistema.estado`).
+- **Compatibilidad: el servidor 1.5.0 exige aplicaciones 1.5.0 para sincronizar** (`minCliente`). Las anteriores mostrarían las operaciones nuevas como conflictos.
+- **Correcciones encontradas al probar:**
+  - los diálogos con un campo de texto guardaban «[object Object]» (desde la 1.0.0);
+  - en el modo servidor, las peticiones atendidas intentaban responder dos veces (1.4.0);
+  - los permisos incluidos no se aplicaban en cadena.
+
+Documentación de cada parte: `UCO_MAPAS_CAPAS.md`, `UCO_AVISOS.md`, `UCO_VALIDACIONES_OPERATIVAS.md`, `UCO_PLANTILLAS_PREVENTIVOS.md`, `UCO_INFORMES.md`, `UCO_MONITORIZACION.md` y `UCO_ACCESIBILIDAD.md`.

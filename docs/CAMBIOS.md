@@ -3,6 +3,101 @@
 Cada versión publica a la vez la aplicación y el servidor central. Los servidores ven la versión nueva en
 Sistema → Actualizaciones y solo se instala cuando un administrador lo decide.
 
+## 1.5.0 (preparada, sin publicar · rama `mejora-1.5.0`)
+
+**Mapa: capas, filtros, sectores y puntos**
+- **Capas y filtros:**
+  - Capas: unidades, avisos activos, avisos finalizados, sectores, puntos de interés, infraestructura y apoyo, y etiquetas.
+  - Filtros combinables: tipo, clave, disponibilidad, sector y tipo de aviso.
+  - Son preferencias de cada dispositivo y de cada preventivo: no cambian datos ni lo que ven los demás.
+- **Leyenda automática.** La disponibilidad se marca con símbolo (✓ ● ‖ ◆ ✕), no solo con color.
+- **Agrupación de unidades cercanas.** Probada con 150 unidades.
+- **Sectores delimitados** en el plano y **puntos de interés y de apoyo**. Hay 13 categorías de partida (accesos, puesto sanitario, hospital, abastecimiento…).
+- **Ficha contextual** al tocar cualquier elemento, y **lista** como alternativa al mapa.
+
+**Avisos desde el mapa**
+- «Nuevo aviso en el mapa» coloca un marcador provisional que se ajusta así:
+  - arrastrándolo;
+  - con las flechas en pantalla o del teclado.
+  - Después se confirma y se abre el formulario.
+- **Ubicación sin mapa:** dirección, sector, punto de interés, coordenadas o GPS.
+- **Origen y hora de cada ubicación.** Se distingue «marcada en el mapa» de una posición GPS real.
+- **Coordenadas validadas** también en el servidor.
+- **Unidades en el formulario** con su tipo, clave, sector, avisos, descanso y disponibilidad:
+  - las tres primeras compatibles y libres aparecen como sugeridas, sin marcarse;
+  - las no asignables, deshabilitadas;
+  - se pueden asignar varias a la vez.
+- **Sin conexión,** el aviso se ve como «Pendiente de confirmar» hasta que el servidor lo confirma.
+
+**Accesibilidad** (WCAG 2.2 AA como referencia; no se declara conformidad completa)
+- El aviso se crea sin depender del arrastre ni del mapa.
+- El foco va al panel que se abre y vuelve al cerrarlo. Escape cierra.
+- Símbolos además de colores, y alternativa en lista.
+- Barra del plano en una fila en el móvil.
+
+**Detección de incoherencias**
+- **21 reglas** en cinco grupos: unidades, avisos, descansos, preventivo y sincronización.
+- **Niveles:** información, moderada, alta y crítica.
+- Cada advertencia explica qué ocurre, desde cuándo, por qué es incoherente, sus consecuencias y qué hacer.
+- Se agrupan para no repetirse.
+- Se pueden marcar como revisadas, asignar, resolver con nota, reabrir y consultar con su historial.
+- Niveles, umbrales y reglas activas se ajustan por preventivo.
+- Nunca se cambia nada automáticamente.
+
+**Plantillas de preventivo**
+- Al crear una plantilla se elige qué incluir. Los usuarios y roles previstos van desmarcados porque son datos personales.
+- **Versiones:**
+  - cada cambio crea una versión y conserva la anterior;
+  - se puede restaurar una versión anterior;
+  - cada preventivo sabe con qué versión se creó y qué no heredó.
+- **Desactivar** plantillas.
+- **Asistente de creación** en 7 pasos, con revisión de unidades y sectores, opciones heredadas y resumen final.
+- **Permisos** para crear, para modificar o eliminar y para usar plantillas.
+
+**Informes**
+- **Al finalizar se guarda la versión 1** del informe en PDF, con su huella SHA-256.
+- **Nuevas versiones** solo con motivo. Las anteriores se conservan.
+- **«Comprobar un PDF…»** indica si un archivo es una versión registrada y no modificada.
+- **Registro** de quién genera, consulta o exporta, en la bitácora. No toca nada operativo y el servidor lo valida.
+- **PDF ampliado:**
+  - identidad UCO y aviso de provisional;
+  - configuración y sectores, y plano esquemático;
+  - utilización de recursos y actividad por unidad;
+  - avisos al cierre, cronología ampliada e incidencias;
+  - fiabilidad de los datos y limitaciones;
+  - huella del registro de operaciones y registro del informe.
+- **Horas verificables:**
+  - el servidor devuelve la hora a la que recibió cada operación y cada dispositivo guarda la de sincronización;
+  - el informe distingue la hora declarada, la recibida y la sincronizada;
+  - se indican los registros diferidos, pendientes o con el reloj adelantado.
+- **Excel (XLSX)** sin librerías, con las mismas tablas que el CSV, las horas de registro y el registro del informe. CSV y JSON añaden esos datos sin dejar de ser compatibles.
+- Permiso nuevo «Consultar los informes guardados».
+
+**Estado del sistema** (Sistema → Estado del sistema, solo administradores)
+- **Servidor:** versión, último reinicio, actividad, API y errores recientes.
+- **Datos:** prueba real de escritura y lectura, y disco.
+- **Memoria y CPU.**
+- **Dispositivos activos** según su señal de actividad.
+- **Operaciones** recibidas y rechazadas, y conflictos.
+- **Copias:** realizadas y fallidas.
+- **Cartografía:** comprobación manual (Google no se comprueba).
+- **Alertas** con origen, hora e historial.
+- En el modo anterior pide el código de administración del servidor. Sin secretos y cada consulta queda auditada.
+
+**Correcciones**
+- **Notas y motivos escritos en los diálogos** (fallo presente desde la 1.0.0). Las notas de los avisos, los motivos de reapertura (preventivo y aviso), las notas de las incoherencias y otros textos se guardaban como «[object Object]». Los textos ya guardados así no se pueden recuperar.
+- **Peticiones atendidas dos veces en el modo servidor** (1.4.0). El servidor seguía procesando las peticiones ya atendidas e intentaba responder dos veces (errores en el registro).
+- **Permisos incluidos en cadena.** Ahora se aplican en cadena: quien puede revisar incoherencias también puede verlas.
+- **Texto escrito en los paneles abiertos** (Chrome). Al repintar un panel abierto se podía guardar el valor anterior de un campo con el foco.
+
+**Datos y compatibilidad**
+- **Todo es aditivo:**
+  - catálogos `puntos` y `categoriasPunto` y zona de los sectores;
+  - `cfg.reglas`, `loc.fuente` y `loc.t`;
+  - operaciones `revision.set` e `informe.reg`;
+  - horas `rx` y `sy` fuera del contenido cifrado.
+- **La 1.5.0 exige aplicaciones 1.5.0 para sincronizar.** Las apps anteriores verían las operaciones nuevas como conflictos. Las apps se actualizan solas al abrirse y, mientras tanto, siguen trabajando en local.
+
 ## 1.4.0 (preparada, sin publicar · rama `mejora-1.4.0`)
 
 **Configuración de recursos**

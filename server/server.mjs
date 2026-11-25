@@ -21,9 +21,11 @@ import { crearModoServidor, cuentaUid } from './espacio-servidor.mjs';
 // Node 18: WebCrypto global (lo usan las funciones de cifrado compartidas con la aplicación)
 if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 /** Versión mínima de la aplicación compatible con este servidor (las anteriores deben actualizarse) */
-const MIN_CLIENTE = '1.1.0';
+// 1.5.0: hay operaciones nuevas (informes, revisiones de incoherencias, puntos del plano) que una app anterior
+// no sabe aplicar y mostraría como conflictos: los dispositivos deben actualizarse para sincronizar (lo hacen al abrir)
+const MIN_CLIENTE = '1.5.0';
 /** Versión del formato de los datos del servidor (migraciones al arrancar) */
 const ESQUEMA = 2;
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
@@ -217,7 +219,7 @@ function orgSave(o, ...names) {
 // Espacios en «modo servidor» (1.4.0): cuentas, sesiones, permisos y validación de operaciones
 const MS = crearModoServidor({ DATA, log, writeAtomic, appendDurable, secretoServidor, comprobarCodigo, limiteAcceso, falloAcceso, limpiarFallos: uid => fallosCuenta.delete(uid), orgSave });
 /** Versión mínima de la app: 1.4.0 en cuanto un espacio pasa al modo servidor (las anteriores no pueden escribir en él) */
-function minCliente() { try { for (const d of fs.readdirSync(ORG_DIR)) { const o = orgLoad(d); if (o && o.meta.modo === 'servidor') return '1.4.0'; } } catch { } return MIN_CLIENTE; }
+function minCliente() { return MIN_CLIENTE; } // (1.4.0 pedía la 1.4.0 solo con espacios en modo servidor; desde la 1.5.0, siempre)
 function orgAuth(req, o) {
   const h = req.headers.authorization || '';
   const tok = h.startsWith('Bearer ') ? h.slice(7) : '';
@@ -295,7 +297,7 @@ async function apiOrg(req, res, url, parts) {
   let quien = null;
   if (modoServidor) {
     quien = await MS.autenticar(req, o);
-    if (!quien) return send(res, 401, { error: orgAuth(req, o) ? 'Actualiza la aplicación: este servidor ya exige iniciar sesión con tu usuario' : 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion', modo: 'servidor', minCliente: '1.4.0' });
+    if (!quien) return send(res, 401, { error: orgAuth(req, o) ? 'Actualiza la aplicación: este servidor ya exige iniciar sesión con tu usuario' : 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion', modo: 'servidor', minCliente: minCliente() });
     const r = await MS.privado(req, res, url, parts, o, quien, { send, readJson }); if (r !== undefined) return r;
   } else if (!orgAuth(req, o)) return send(res, 401, { error: 'Credenciales del espacio central no válidas' });
   const what = parts[4];
@@ -452,7 +454,7 @@ async function api(req, res, url) {
   let quien = null;
   if (oPrev && MS.activo(oPrev)) {
     quien = await MS.autenticar(req, oPrev);
-    if (!quien) return send(res, 401, { error: auth(req, p) ? 'Actualiza la aplicación: este servidor ya exige iniciar sesión con tu usuario' : 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion', minCliente: '1.4.0' });
+    if (!quien) return send(res, 401, { error: auth(req, p) ? 'Actualiza la aplicación: este servidor ya exige iniciar sesión con tu usuario' : 'Tu sesión ha caducado: vuelve a iniciar sesión', codigo: 'sesion', minCliente: minCliente() });
     if (!MS.puedeVerPrev(oPrev, quien.u, pid)) return send(res, 403, { error: 'No tienes acceso a este preventivo', codigo: 'permiso' });
   } else if (!auth(req, p)) return send(res, 401, { error: 'Credenciales no válidas' });
   const what = parts[4];

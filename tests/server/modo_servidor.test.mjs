@@ -60,7 +60,7 @@ test('espacio nuevo en modo servidor: el creador es el primer administrador y en
   const yo = await api('/org/' + ORG + '/yo', { token: admin });
   assert.ok(yo.permisos.includes('usuarios.admin'));
   assert.equal((await entrar(ORG, 'jefa', 'otra-clave')).status, 403);
-  assert.equal((await api('/version')).minCliente, '1.4.0', 'las apps anteriores deben actualizarse');
+  assert.equal((await api('/version')).minCliente, '1.5.0', 'las apps anteriores deben actualizarse (1.5.0: operaciones nuevas que una app anterior no sabe aplicar)');
   assert.equal((await api('/org/' + ORG, { token: kOrg.token })).status, 401, 'el token del espacio ya no basta');
 });
 

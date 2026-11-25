@@ -83,3 +83,13 @@ test('estado del sistema por HTTP: exige el código de administración, no devue
   const r2 = await (await req('/org/' + org + '/admin/estado', { method: 'POST', token: tok, body: { codigo } })).json();
   assert.equal(r2.generado, e.generado, 'caché de 10 s');
 });
+
+test('copia de seguridad fallida: se muestra el error y una alerta alta con su origen', () => {
+  const DATA = tmp('uco-mon-c-'), BASE = tmp('uco-base-c-'); const t = Date.UTC(2026, 10, 25, 12, 0, 0);
+  const M = crearMonitor({ DATA, BASE, version: '1.5.0', ahora: () => t, statfs: () => ({ bavail: 2e9, blocks: 4e9, bsize: 4096 }), intervaloCpu: 0 });
+  const e = M.estado({ actualizaciones: { error: 'No se pudo hacer la copia de seguridad previa: ENOSPC en C:\\Users\\Pepe\\copias' } });
+  assert.match(e.copias.error, /copia de seguridad previa: ENOSPC/); assert.doesNotMatch(e.copias.error, /Pepe/);
+  assert.equal(e.copias.ultima, null, 'ninguna copia realizada');
+  const a = e.alertas.activas.find(x => x.origen === 'Copias de seguridad'); assert.ok(a && a.nivel === 'alta' && a.desde === t, JSON.stringify(e.alertas.activas));
+  fs.rmSync(DATA, { recursive: true, force: true }); fs.rmSync(BASE, { recursive: true, force: true });
+});

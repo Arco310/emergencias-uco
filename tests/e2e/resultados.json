@@ -1,29 +1,29 @@
 {
- "fecha": "2026-11-25 12:59:43",
+ "fecha": "2026-11-25 13:17:43",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Migración del espacio al modo servidor desde la aplicación",
+   "prueba": "Exportación a Excel (XLSX) abierta con un lector independiente",
    "resultado": "SUPERADA",
-   "detalle": "espacio 1.3.0 → modo servidor con el código del servidor y la contraseña; el preventivo compartido sigue"
+   "detalle": "Excel válido (10 hojas: Resumen, Unidades, Tiempos por clave, Avisos…); exportación registrada"
   },
   {
-   "prueba": "Sesión revocada o caducada: se renueva con la contraseña",
+   "prueba": "Informe generado automáticamente al finalizar",
    "resultado": "SUPERADA",
-   "detalle": "sesiones de Eva cerradas por el administrador → «Inicia sesión para sincronizar» → contraseña → vuelve a sincronizar"
+   "detalle": "al finalizar: versión 1 guardada y registrada (SHA-256 a5c1078ed288…), preventivo cerrado y archivado"
   },
   {
-   "prueba": "Cambios rechazados por el servidor: visibles y revisables",
+   "prueba": "Descarga de la versión, contenido y comprobación de la huella",
    "resultado": "SUPERADA",
-   "detalle": "unidad creada sin conexión con un permiso ya retirado: el servidor la rechaza, se deshace, queda en «Cambios rechazados» y se marca como revisada"
+   "detalle": "PDF de 13 KB con la huella registrada; contenido verificado; comprobación de archivos original y modificado"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 11, admin)",
+   "prueba": "Nueva versión con motivo, conservando la anterior",
    "resultado": "SUPERADA",
-   "detalle": "ninguno"
+   "detalle": "versión 2 con motivo; la 1 se conserva con su huella; unidades y avisos intactos; todo en la bitácora"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 11, Eva)",
+   "prueba": "Sin errores de JavaScript (escenario 16)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }
