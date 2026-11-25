@@ -433,6 +433,8 @@ def scenario_shared(browser):
         M.ctx.set_offline(True); M.pg.wait_for_timeout(300)
         M.nav('avisos'); M.a('a.new'); M.a('inc.mas'); M.fill('desc', 'Creado sin red'); M.sheet().locator('form[data-f="a.save"] button.primary').click(); M.pg.wait_for_timeout(400); M.close_sheets()
         ref = M.state("return Object.values(s.avisos).find(a => a.desc === 'Creado sin red').ref")
+        # 1.5.0: hasta que el servidor lo confirma se ve como pendiente, no como un aviso confirmado
+        assert M.pg.locator('.acard', has_text='Creado sin red').locator('.warn-chip', has_text='Pendiente de confirmar').count() == 1, 'distintivo de pendiente'
         a2 = M.unit_id('A2'); M.open_unit('A2'); M.sheet().locator('[data-a="u.clave"][data-k="C6"]').click(); M.pg.wait_for_timeout(400); M.close_sheets()
         T.nav('avisos'); T.a('a.new'); T.a('inc.mas'); T.fill('desc', 'Tablet mientras móvil sin red'); T.sheet().locator('form[data-f="a.save"] button.primary').click(); T.pg.wait_for_timeout(400); T.close_sheets()
         M.shot('02-movil-sin-red'); time.sleep(3)
@@ -440,7 +442,9 @@ def scenario_shared(browser):
         sa = T.state("return JSON.stringify([Object.values(s.avisos).map(a => a.desc + ':' + a.num).sort(), Object.values(s.units).map(u => u.ind + ':' + u.clave).sort()])")
         sb = M.state("return JSON.stringify([Object.values(s.avisos).map(a => a.desc + ':' + a.num).sort(), Object.values(s.units).map(u => u.ind + ':' + u.clave).sort()])")
         assert sa == sb and 'Creado sin red:null' not in sa and 'A2:C6' in sa, (sa, sb)
-        return f'trabajo sin red (ref. provisional {ref}), reconexión y convergencia sin pérdidas'
+        M.nav('avisos'); M.pg.wait_for_timeout(300)
+        assert M.pg.locator('.acard', has_text='Creado sin red').locator('.warn-chip').count() == 0, 'confirmado: sin distintivo'
+        return f'trabajo sin red (ref. provisional {ref}, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas'
     check('Compartido: desconexión, trabajo local y reconexión', offline)
     def conflict():
         M.ctx.set_offline(True); a3 = T.unit_id('A3')
@@ -742,13 +746,14 @@ def scenario_coordinacion(b):
     check('Plano: devolver una unidad a pendientes de asignación', devolver)
     def aviso_punto():
         mb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(mb['x'] + mb['width'] * 0.25, mb['y'] + mb['height'] * 0.3); A.pg.wait_for_timeout(400)
-        A.pg.locator('[data-pop="aviso"]').click(); A.pg.wait_for_timeout(300); A.a('inc.mas')
-        f = A.sheet().locator('form[data-f="a.save"]'); loc = f.locator('[data-locsum]').inner_text(); assert '40.4' in loc and '-3.7' in loc, loc
+        # 1.5.0: marcador provisional que se ajusta y se confirma antes del formulario
+        A.pg.wait_for_selector('[data-ajuste]'); A.a('plan.avisoUsar'); A.pg.wait_for_timeout(300); A.a('inc.mas')
+        f = A.sheet().locator('form[data-f="a.save"]'); loc = f.locator('[data-locsum]').inner_text(); assert '40.4' in loc and '-3.7' in loc and 'no es una posición GPS' in loc, loc
         f.locator('[name=desc]').fill('Desvanecimiento en la plaza'); f.locator('button.primary').click(); A.pg.wait_for_timeout(700); A.close_sheets()
         a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Desvanecimiento en la plaza')")
-        assert a['plan'] and a['loc']['lat'] and a['num'] == 1, a
+        assert a['plan'] and a['loc']['lat'] and a['loc']['fuente'] == 'mapa' and a['num'] == 1, a
         assert A.pg.locator(f'.mk[data-mk="a"][data-id="{a["id"]}"]').count() == 1
-        return 'clic en el mapa → tipo de incidente o «Más datos» → formulario con la ubicación ya puesta → aviso nº 1 con marcador en el plano'
+        return 'clic en el mapa → marcador provisional → «Usar esta ubicación» → «Más datos» → formulario con la ubicación (marcada en el mapa, no GPS) → aviso nº 1 con marcador en el plano'
     check('Avisos: crear un aviso haciendo clic en el mapa', aviso_punto)
     def aviso_zona():
         A.a('plan.zona'); mb = A.pg.locator('.coord-map').bounding_box()
@@ -1525,6 +1530,97 @@ def scenario_capas(b):
     finally:
         srv.terminate(); shutil.rmtree(data, ignore_errors=True)
 
+# ---------------- Escenario 13 (1.5.0): avisos desde el mapa y alternativas accesibles ----------------
+def scenario_avisos_mapa(b):
+    print('\n== Escenario 13: avisos desde el mapa, ubicación sin mapa y accesibilidad (1.5.0) ==')
+    port = PORT + 13; url = f'http://127.0.0.1:{port}/'; data = tempfile.mkdtemp(prefix='uco-e2e-avm-')
+    salida = os.path.join(data, 'capas.json')
+    subprocess.run(['node', 'tests/e2e/generar_capas.mjs', salida], cwd=ROOT, check=True)
+    datos = json.load(open(salida))
+    srv = start_server(data, port)
+    try:
+        A = App(b, 'avisos-mapa', TABLET, base=url)
+        estado = {}
+        def mk(sel): return A.pg.locator('.coord-map ' + sel).count()
+        def tocar(fx, fy):
+            bb = A.pg.locator('.coord-map').bounding_box(); A.pg.mouse.click(bb['x'] + bb['width'] * fx, bb['y'] + bb['height'] * fy); A.pg.wait_for_timeout(500)
+        def nombres_vacios(scope):
+            # Controles visibles sin nombre accesible (etiqueta, aria-label, title o texto)
+            return A.pg.evaluate("""sel => [...document.querySelectorAll(sel + ' button, ' + sel + ' input, ' + sel + ' select, ' + sel + ' textarea')].filter(e => e.offsetParent && e.type !== 'hidden').filter(e => {
+                const t = (e.getAttribute('aria-label') || e.title || (e.labels && [...e.labels].map(l => l.textContent).join(' ')) || e.textContent || '').trim();
+                return !t; }).map(e => e.outerHTML.slice(0, 80))""", scope)
+        def desde_mapa():
+            A.setup('Marta Coordinadora', 'marta', 'clave-marta-1', 'Tablet', 'T'); A.perms(False)
+            ops = datos['prev_capas']; nmax = max([o.get('num') or 0 for o in ops])
+            A.pg.evaluate("async ([pid, ops, n]) => { const c = window.__UCO.core; await c.repo.appendOps(pid, ops); await c.repo.maxCounter(pid, n); await c.openPrev(pid); await c._summary(pid); window.__UCO.render(); }", ['prev_capas', ops, nmax])
+            A.nav('plano'); A.pg.wait_for_selector('.coord-map .leaflet-marker-icon', timeout=20000); A.pg.wait_for_timeout(1000)
+            A.a('plan.avisoMapa'); A.pg.wait_for_selector('[data-a="plan.avisoSinMapa"]')
+            tocar(0.3, 0.45)  # dentro del sector 1
+            A.pg.wait_for_selector('[data-ajuste]'); assert mk('.mk.av.nuevo') == 1, 'marcador provisional'
+            ini = A.pg.locator('[data-prov-pos]').inner_text(); assert 'sector Sector 1' in ini, ini
+            A.a('plan.mover', d='e'); A.a('plan.mover', d='e')
+            tras_botones = A.pg.locator('[data-prov-pos]').inner_text(); assert tras_botones != ini, 'los botones lo mueven'
+            A.pg.locator('[data-ajuste]').focus(); A.pg.keyboard.press('ArrowUp'); A.pg.wait_for_timeout(400)
+            tras_teclado = A.pg.locator('[data-prov-pos]').inner_text(); assert tras_teclado != tras_botones, 'las teclas de dirección también'
+            assert A.pg.evaluate('() => !!document.activeElement.closest("[data-ajuste]")'), 'el foco sigue en el ajuste'
+            assert not nombres_vacios('.aviso-prov'), nombres_vacios('.aviso-prov')
+            A.shot('01-marcador-provisional')
+            A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('.sheet-wrap [data-a="inc.mas"]'); A.a('inc.mas')
+            f = A.sheet().locator('form[data-f="a.save"]'); loc = f.locator('[data-locsum]').inner_text()
+            assert 'no es una posición GPS' in loc, loc
+            assert f.locator('[name=sector]').input_value() == 'sec_1', 'sector propuesto por la delimitación'
+            A.pg.wait_for_selector('.sheet-wrap [data-unidades-aviso] .u-asig')
+            u = {r['ind']: r for r in A.pg.evaluate("""() => [...document.querySelectorAll('.sheet-wrap .u-asig')].map(l => ({ ind: l.querySelector('b').textContent, dis: l.querySelector('input').disabled, sug: !!l.querySelector('.ok-chip'), txt: l.textContent }))""")}
+            assert u['SVB-1']['sug'] and not u['SVB-1']['dis'], u['SVB-1']
+            assert u['SVB-2']['dis'] and 'descanso' in u['SVB-2']['txt'].lower(), u['SVB-2']
+            assert u['SVA-1']['dis'] and 'Ocupada' in u['SVA-1']['txt'], u['SVA-1']
+            assert not any(x['sug'] for x in u.values() if x['dis']), 'nunca se sugiere una unidad que no puede'
+            assert not A.pg.locator('.sheet-wrap input[name=u_asig]:checked').count(), 'ninguna se marca sola'
+            assert not nombres_vacios('.sheet-wrap form[data-f="a.save"]'), nombres_vacios('.sheet-wrap form[data-f="a.save"]')
+            A.pg.wait_for_timeout(300); A.shot('02-formulario-unidades', True)
+            A.sheet().locator('.u-asig', has_text='SVB-1').locator('input').check()
+            f.locator('[name=desc]').fill('Mareo junto a la fuente'); f.locator('button.primary').click(); A.pg.wait_for_timeout(900); A.close_sheets()
+            a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Mareo junto a la fuente')")
+            assert a['loc']['fuente'] == 'mapa' and a['sector'] == 'sec_1' and a['plan'], a
+            svb = A.state("return Object.values(s.units).find(x => x.ind === 'SVB-1').id")
+            assert any(p['u'] == svb and p['lib'] is None for p in a['part']), 'SVB-1 asignada'
+            estado['aviso'] = a['id']
+            return 'botón → toque → marcador provisional (sector 1) ajustado con botones y con el teclado → formulario con ubicación «marcada en el mapa», sector y unidades con su situación; SVB-1 sugerida y elegida, las ocupadas o en descanso no se pueden marcar'
+        check('Aviso desde el mapa: marcar, ajustar sin arrastrar, confirmar y elegir unidades', desde_mapa)
+        def sin_mapa():
+            A.nav('avisos'); A.a('a.new'); A.pg.wait_for_selector('.sheet-wrap [data-a="inc.mas"]'); A.a('inc.mas')
+            f = A.sheet().locator('form[data-f="a.save"]'); f.locator('[data-a="a.formLoc"]').click(); A.pg.wait_for_selector('.sheet-wrap #f_locpt')
+            # Coordenadas imposibles: se avisa y no se guardan
+            A.sheet().locator('#f_lat').fill('95'); A.sheet().locator('#f_lon').fill('-3.7'); A.sheet().locator('form[data-f="loc.save"] button.primary').click(); A.pg.wait_for_timeout(500)
+            assert 'Coordenadas no válidas' in A.toast_text(), A.toast_text()
+            A.sheet().locator('#f_lat').fill(''); A.sheet().locator('#f_lon').fill('')
+            A.sheet().locator('#f_locpt').select_option('pt_puerta'); A.pg.wait_for_timeout(400)
+            assert 'Punto del plano' in A.sheet().locator('[data-loc-fuente]').inner_text()
+            A.sheet().locator('form[data-f="loc.save"] button.primary').click(); A.pg.wait_for_timeout(800)
+            assert not A.pg.locator('.sheet-wrap form[data-f="loc.save"]').count(), 'la hoja de ubicación no se cierra. Avisos: ' + A.toast_text()
+            f = A.sheet().locator('form[data-f="a.save"]'); assert 'Puerta 3' in f.locator('[data-locsum]').inner_text()
+            f.locator('[name=desc]').fill('Persona desorientada en la puerta'); f.locator('button.primary').click(); A.pg.wait_for_timeout(900); A.close_sheets()
+            a = A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).find(a => a.desc === 'Persona desorientada en la puerta')")
+            assert a['loc']['fuente'] == 'punto' and a['loc']['ref'] == 'pt_puerta' and a['plan'], a
+            A.nav('plano'); A.pg.wait_for_timeout(1200); assert mk(f'.mk[data-mk="a"][data-id="{a["id"]}"]') == 1, 'aparece en el plano'
+            return 'sin tocar el mapa: coordenadas imposibles rechazadas; punto del plano «Puerta 3» como ubicación (origen «punto»), y el aviso aparece en el plano'
+        check('Ubicación sin el mapa: punto del plano y coordenadas validadas', sin_mapa)
+        def teclado():
+            # Crear un aviso solo con el teclado desde el plano (sin ratón ni arrastre)
+            A.pg.locator('[data-a="plan.avisoMapa"]').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('[data-a="plan.avisoSinMapa"]')
+            A.pg.locator('[data-a="plan.avisoSinMapa"]').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('.sheet-wrap [data-a="inc.mas"]')
+            A.pg.locator('.sheet-wrap [data-a="inc.mas"]').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_selector('.sheet-wrap form[data-f="a.save"] [name=desc]')
+            A.pg.locator('.sheet-wrap [name=desc]').focus(); A.pg.keyboard.type('Aviso creado con el teclado')
+            A.pg.locator('.sheet-wrap form[data-f="a.save"] button.primary').focus(); A.pg.keyboard.press('Enter'); A.pg.wait_for_timeout(900)
+            assert A.pg.evaluate("() => Object.values(window.__UCO.core.state.avisos).some(a => a.desc === 'Aviso creado con el teclado')")
+            A.close_sheets()
+            return 'desde el plano solo con Tab/Intro: «Nuevo aviso en el mapa» → «Sin el mapa» → «Más datos» → descripción → crear'
+        check('Accesibilidad: crear un aviso solo con el teclado', teclado)
+        check('Sin errores de JavaScript (escenario 13)', lambda: (_ for _ in ()).throw(Exception('; '.join(A.errors[:5]))) if A.errors else 'ninguno')
+        A.ctx.close()
+    finally:
+        srv.terminate(); shutil.rmtree(data, ignore_errors=True)
+
 def main():
     if os.path.isdir(SHOTS): shutil.rmtree(SHOTS)
     os.makedirs(SHOTS)
@@ -1546,6 +1642,7 @@ def main():
             if only in ('', '10'): scenario_modo_servidor(b)
             if only in ('', '11'): scenario_migracion_sesion(b)
             if only in ('', '12'): scenario_capas(b)
+            if only in ('', '13'): scenario_avisos_mapa(b)
             b.close()
     finally:
         SRV['p'].terminate(); shutil.rmtree(data, ignore_errors=True)

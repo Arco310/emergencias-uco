@@ -623,8 +623,10 @@ H["unit.loc"] = (s, op) => {
   const n = op.x.n || null;
   const cur = u.loc ? { txt: u.loc.txt || "", lat: u.loc.lat ?? null, lon: u.loc.lon ?? null } : null;
   const nn = n ? { txt: n.txt || "", lat: n.lat ?? null, lon: n.lon ?? null } : null;
-  if (same(cur, nn)) return { noop: true };
-  u.loc = nn ? { ...nn, t: op.t } : null;
+  const extra = n ? Object.fromEntries(["fuente", "prec", "ref"].filter((k) => n[k] != null).map((k) => [k, n[k]])) : {};
+  const curX = u.loc ? Object.fromEntries(["fuente", "prec", "ref"].filter((k) => u.loc[k] != null).map((k) => [k, u.loc[k]])) : {};
+  if (same(cur, nn) && same(curX, extra)) return { noop: true };
+  u.loc = nn ? { ...nn, ...extra, t: op.t } : null;
   u.hl.push({ t: op.t, ...nn || { txt: "", lat: null, lon: null }, ant: cur, op: op.id });
 };
 H["unit.plan"] = (s, op) => {
@@ -903,17 +905,17 @@ var Engine = class {
     return { ok: true, state: s };
   }
   /** Número definitivo asignado por el servidor (o localmente) */
-  setNumber(opId, num) {
+  setNumber(opId, num2) {
     const op = this.byId.get(opId);
-    if (!op || op.num === num) return false;
+    if (!op || op.num === num2) return false;
     const antes = op.num;
-    op.num = num;
+    op.num = num2;
     const s = this.state;
     const a = op.k === "aviso.create" ? s.avisos[op.e] : null;
-    if (antes == null && a && a.num == null && !s.numAviso[num] && !s.conflicts[opId]) {
-      a.num = num;
-      s.numAviso[num] = a.id;
-      s.maxNum = Math.max(s.maxNum, num);
+    if (antes == null && a && a.num == null && !s.numAviso[num2] && !s.conflicts[opId]) {
+      a.num = num2;
+      s.numAviso[num2] = a.id;
+      s.maxNum = Math.max(s.maxNum, num2);
       this.version++;
       return true;
     }
@@ -1163,6 +1165,35 @@ function motivoTipoNoDisponible(t, noDisponibles) {
   if (!t) return null;
   if (t.retirado) return "retirado";
   if (t.activo === false || noDisponibles && noDisponibles.has(t.id)) return "desactivado";
+  return null;
+}
+
+// src/core/ubicacion.js
+var FUENTES_LOC = {
+  mapa: "Marcada en el mapa (no es una posici\xF3n GPS)",
+  gps: "Posici\xF3n GPS del dispositivo",
+  direccion: "Direcci\xF3n escrita",
+  coordenadas: "Coordenadas introducidas a mano",
+  punto: "Punto del plano",
+  sector: "Centro del sector"
+};
+var num = (v) => v === null || v === void 0 || v === "" ? null : typeof v === "number" ? v : Number.NaN;
+function motivoLocNoValida(l) {
+  if (!l) return null;
+  if (typeof l !== "object") return "Ubicaci\xF3n no v\xE1lida";
+  if (String(l.txt || "").length > 300) return "La descripci\xF3n de la ubicaci\xF3n es demasiado larga (m\xE1ximo 300 caracteres)";
+  const lat = num(l.lat);
+  const lon = num(l.lon);
+  if (lat == null !== (lon == null)) return "Indica latitud y longitud";
+  if (lat != null && !(Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return "Coordenadas no v\xE1lidas: la latitud va de -90 a 90 y la longitud de -180 a 180";
+  if (l.fuente && !FUENTES_LOC[l.fuente]) return "Origen de la ubicaci\xF3n desconocido";
+  return null;
+}
+function motivoContenidoNoValido(op) {
+  const x = op && op.x || {};
+  if (op.k === "aviso.create") return motivoLocNoValida(x.a && x.a.loc);
+  if (op.k === "aviso.update") return x.f && x.f.loc ? motivoLocNoValida(x.f.loc.n) : null;
+  if (op.k === "unit.loc") return motivoLocNoValida(x.n);
   return null;
 }
 
@@ -1891,6 +1922,11 @@ function crearModoServidor(deps) {
       const falta = req.filter((x) => !ef.has(x));
       if (falta.length) {
         rechazo("No tienes permiso para: " + falta.map((x) => (PERM_LABEL[x] || x).toLowerCase()).join(", "));
+        continue;
+      }
+      const contenido = motivoContenidoNoValido(op);
+      if (contenido) {
+        rechazo(contenido, "datos");
         continue;
       }
       const enAlta = ops.some((x) => x && x.k === "prev.create" && x.b === op.b);

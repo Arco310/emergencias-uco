@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Engine, applyOp, lazyCopy, permisosEfectivos, permisosOp, comprobarCambioUsuario, defaultRoles, normalizarPerfil, estadoUsuario, accesoPreventivo, PERM_KEYS, PERM_LABEL, motivoTipoNoDisponible, orgKeys, prevKeys, open, seal, unb64 } from './nucleo.mjs';
+import { Engine, applyOp, lazyCopy, permisosEfectivos, permisosOp, comprobarCambioUsuario, defaultRoles, normalizarPerfil, estadoUsuario, accesoPreventivo, PERM_KEYS, PERM_LABEL, motivoTipoNoDisponible, motivoContenidoNoValido, orgKeys, prevKeys, open, seal, unb64 } from './nucleo.mjs';
 
 const SESION_MS = 90 * 24 * 3600e3;      // una sesión caduca a los 90 días sin usarse
 const CODIGO_MS = Number(process.env.UCO_CODIGO_MS) || 72 * 3600e3; // un código de activación o restablecimiento caduca a las 72 h
@@ -466,6 +466,8 @@ export function crearModoServidor(deps) {
       if (!req) { rechazo('Operación no reconocida por el servidor (¿aplicación sin actualizar?)', 'datos'); continue; }
       const falta = req.filter(x => !ef.has(x));
       if (falta.length) { rechazo('No tienes permiso para: ' + falta.map(x => (PERM_LABEL[x] || x).toLowerCase()).join(', ')); continue; }
+      const contenido = motivoContenidoNoValido(op); // p. ej. coordenadas imposibles (1.5.0)
+      if (contenido) { rechazo(contenido, 'datos'); continue; }
       const enAlta = ops.some(x => x && x.k === 'prev.create' && x.b === op.b);
       const tipo = op.k === 'unit.create' && !enAlta ? op.x && op.x.u && op.x.u.tipo : op.k === 'unit.update' ? op.x && op.x.f && op.x.f.tipo && op.x.f.tipo.n : null;
       const motivo = tipoNoDisponible(o, st, tipo, ops.filter(Boolean), op);

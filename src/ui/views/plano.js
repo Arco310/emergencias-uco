@@ -9,10 +9,10 @@ import { esc, attr, toast, confirmDlg, btn, empty, pickFile, readBytes, closeShe
 import { icon, unitSvg, SIZE_PX } from '../icons.js';
 import { now, uid } from '../../core/util.js';
 import { liveUnits, unitLabel, unitSituation, SITUACION_LABEL, sectorNombre, activeParts } from '../../core/engine.js';
-import { normalizarFiltros, filtrosActivos, filtrarUnidades, filtrarAvisos, sectoresVisibles, puntosVisibles, leyenda, agrupar, categoriasPunto, centroide, DISPONIBILIDAD, simboloDisponibilidad, GRUPOS_PUNTO } from '../../core/capas.js';
+import { normalizarFiltros, filtrosActivos, filtrarUnidades, filtrarAvisos, sectoresVisibles, puntosVisibles, leyenda, agrupar, categoriasPunto, centroide, DISPONIBILIDAD, simboloDisponibilidad, GRUPOS_PUNTO, sectorDePunto } from '../../core/capas.js';
 import { unitVisual, effectiveVis } from '../../core/visual.js';
 import * as C from '../../core/commands.js';
-import { geoANorm, normAGeo, hasCoords, fmtCoords, round6 } from '../../core/geo.js';
+import { geoANorm, normAGeo, hasCoords, fmtCoords, round6, haversineKm } from '../../core/geo.js';
 import { openUnit, openAviso, avisoNumber, nuevoAvisoEn } from './ops.js';
 import { L, crearMapa, capaBase, aLatLngBounds, NOMBRE_PROVEEDOR, proveedor } from '../mapa.js';
 import { VISTAS_MAPA, VISTA_DEFECTO, nombreVista } from '../../core/mapas.js';
@@ -101,6 +101,7 @@ export function renderPlano() {
     ${canEdit ? btn(pl && !esMapa(pl) ? 'Cambiar imagen' : 'Importar imagen', 'plan.import', { ic: 'subir', cls: pl ? '' : 'primary' }) : ''}
     ${canEdit ? btn('Importar desde Google Maps', 'plan.google', { ic: 'mapa', cls: pl ? '' : 'primary' }) : ''}
     ${canEdit ? btn('Biblioteca de planos', 'plan.biblio', { ic: 'capas' }) : ''}
+    ${pl && operativo() && can('avisos.crear') ? btn(f.marcarAviso || f.nuevoAviso ? 'Cancelar el aviso' : 'Nuevo aviso en el mapa', f.marcarAviso || f.nuevoAviso ? 'plan.avisoCancelar' : 'plan.avisoMapa', { ic: 'avisos', cls: f.marcarAviso || f.nuevoAviso ? 'primary' : '' }) : ''}
     ${pl && operativo() && can('avisos.crear') ? btn(f.dibujo ? 'Cancelar zona' : 'Aviso por zona', 'plan.zona', { ic: 'zona', cls: f.dibujo ? 'primary' : '' }) : ''}
     ${esMapa(pl) ? btn(nombreVista(vistaActual()), 'plan.vista', { ic: 'capas', title: 'Tipo de mapa: estándar, satélite, híbrido o relieve', disabled: !puedeVista(), cls: 'vista-btn' }) : ''}
     ${pl ? `${btn('', 'plan.fit', { ic: 'ajustar', title: 'Ver todo el plano' })}
@@ -124,6 +125,8 @@ export function renderPlano() {
   ${placing ? `<div class="banner info">${icon('pin')}<div>Toca en el plano para colocar <b>${esc(placing.ind)}</b>.</div>${btn('Cancelar', 'plan.cancelPick', { cls: 'ghost' })}</div>` : ''}
   ${f.dibujo ? `<div class="banner info">${icon('zona')}<div>${f.dibujo.para ? `Toca en el plano para delimitar <b>${esc(f.dibujo.para.nombre)}</b>` : 'Toca en el plano para marcar los puntos de la zona'} (${(f.dibujo.pts || []).length} marcados, mínimo 3).</div>
     <div class="row gap-s">${btn('Deshacer punto', 'plan.zonaUndo', { cls: 'ghost sm' })}${btn(f.dibujo.para ? 'Guardar delimitación' : 'Crear aviso en la zona', 'plan.zonaOk', { cls: 'primary sm' })}${!f.dibujo.para && zonas.length ? btn('Usar una zona existente', 'plan.zonaExist', { cls: 'ghost sm' }) : ''}${f.dibujo.para ? btn('Cancelar', 'plan.zona', { cls: 'ghost sm' }) : ''}</div></div>` : ''}
+  ${f.marcarAviso && !f.nuevoAviso ? `<div class="banner info">${icon('avisos')}<div>Toca en el plano el lugar del aviso. ¿Prefieres no usar el mapa? Indica la dirección, un sector, un punto del plano o las coordenadas en el formulario.</div><div class="row gap-s">${btn('Sin el mapa', 'plan.avisoSinMapa', { cls: 'sm' })}${btn('Cancelar', 'plan.avisoCancelar', { cls: 'ghost sm' })}</div></div>` : ''}
+  ${f.nuevoAviso ? bannerAvisoProvisional(f) : ''}
   ${f.situarPunto ? `<div class="banner info">${icon('pin')}<div>Toca en el plano para situar <b>${esc(f.situarPunto.nombre)}</b>.</div>${btn('Cancelar', 'plan.puntoCancelar', { cls: 'ghost' })}</div>` : ''}
   <div class="coord">
     <aside class="coord-pend" data-pendientes>
@@ -258,7 +261,7 @@ function sincronizar() {
     if (a.zona && a.zona.pts && a.zona.pts.length >= 3) {
       zs.add(a.id); const col = fin ? '#757575' : a.estado === 'en_curso' ? '#1565C0' : a.estado === 'asignado' ? '#B26A00' : '#C62828';
       let z = M.z.get(a.id); const lls = a.zona.pts.map(aLatLng); const sig = JSON.stringify(a.zona.pts) + col;
-      if (!z) { z = L.polygon(lls, { color: col, weight: 2, fillOpacity: fin ? 0.05 : 0.15, dashArray: fin ? '4 4' : null, bubblingMouseEvents: false }); z.on('click', () => { if (!filt('plano').dibujo) seleccionar('a', a.id); }); z.bindTooltip('Aviso ' + avisoNumber(a)); z.addTo(M.map); M.z.set(a.id, z); }
+      if (!z) { z = L.polygon(lls, { color: col, weight: 2, fillOpacity: fin ? 0.05 : 0.15, dashArray: fin ? '4 4' : null, bubblingMouseEvents: false }); z.on('click', ev => { if (modoColocar()) return clicMapa(ev); seleccionar('a', a.id); }); z.bindTooltip('Aviso ' + avisoNumber(a)); z.addTo(M.map); M.z.set(a.id, z); }
       else if (z._sig !== sig) { z.setLatLngs(lls); z.setStyle({ color: col, dashArray: fin ? '4 4' : null, fillOpacity: fin ? 0.05 : 0.15 }); }
       z._sig = sig;
     }
@@ -272,10 +275,9 @@ function sincronizar() {
     let z = M.s.get(sec.id);
     if (z && z._sig !== sig) { z.remove(); z = null; }
     if (!z) {
-      z = L.polygon(lls, { color: sec.color || '#455A64', weight: 2, dashArray: '8 6', fillOpacity: 0.06, bubblingMouseEvents: false });
-      z.on('click', () => { if (!filt('plano').dibujo && !filt('plano').situarPunto) seleccionar('s', sec.id); });
-      if (fl.capas.etiquetas) z.bindTooltip(sec.nombre, { permanent: true, direction: 'center', className: 'sec-label' });
-      z.addTo(M.map); z.bringToBack(); z._sig = sig; M.s.set(sec.id, z);
+      const pol = L.polygon(lls, { color: sec.color || '#455A64', weight: 2, dashArray: '8 6', fillOpacity: 0.06, interactive: false });
+      z = L.featureGroup([pol, ...(fl.capas.etiquetas ? [etiquetaMapa(centroide(sec.zona.pts), sec.nombre, 'sec-label', () => seleccionar('s', sec.id))] : [])]);
+      z.addTo(M.map); pol.bringToBack(); z._sig = sig; M.s.set(sec.id, z);
     }
   }
   for (const [id, z] of M.s) if (!ss.has(id)) { z.remove(); M.s.delete(id); }
@@ -289,13 +291,12 @@ function sincronizar() {
     if (m && m._sig !== sig) { m.remove(); m = null; }
     if (!m) {
       if (pt.zona) {
-        m = L.polygon(pt.zona.pts.map(aLatLng), { color: c.color, weight: 2, fillOpacity: 0.12, bubblingMouseEvents: false });
-        m.bindTooltip(pt.nombre + ' · ' + c.nombre, fl.capas.etiquetas ? { permanent: true, direction: 'center', className: 'poi-label' } : {});
+        m = L.featureGroup([L.polygon(pt.zona.pts.map(aLatLng), { color: c.color, weight: 2, fillOpacity: 0.12, interactive: false }), etiquetaMapa(centroide(pt.zona.pts), fl.capas.etiquetas ? pt.nombre : c.nombre, 'poi-label', () => seleccionar('p', pt.id))]);
       } else {
         const html = `<div class="mk poi${f.sel && f.sel.id === pt.id ? ' sel' : ''}" data-mk="p" data-id="${pt.id}" style="--pc:${attr(c.color)}" title="${attr(pt.nombre + ' · ' + c.nombre)}"><span class="mk-poi">${icon(c.icono || 'pin')}</span>${fl.capas.etiquetas ? `<span class="mk-l">${esc(pt.nombre)}</span>` : ''}</div>`;
         m = L.marker(aLatLng(pt.pos), { icon: L.divIcon({ html, className: 'mk-wrap', iconSize: [28, 28], iconAnchor: [14, 14] }), keyboard: false, zIndexOffset: 200 });
       }
-      m.on('click', () => { if (!filt('plano').dibujo) seleccionar('p', pt.id); });
+      if (!pt.zona) m.on('click', ev => { if (modoColocar()) return clicMapa(ev); seleccionar('p', pt.id); });
       m.addTo(M.map); m._sig = sig; M.p.set(pt.id, m);
     }
   }
@@ -309,9 +310,75 @@ function sincronizar() {
     m._tipos = [...tipos]; m.on('click', () => M.map.fitBounds(b.pad(0.4), { maxZoom: M.map.getMaxZoom() }));
     M.g.addLayer(m);
   }
+  // 8) Aviso nuevo: marcador provisional (arrastrable) hasta confirmar la ubicación
+  const prov = f.nuevoAviso;
+  if (prov) {
+    const ll = aLatLng(prov.pos);
+    if (!M.prov) {
+      M.prov = L.marker(ll, { icon: L.divIcon({ html: '<div class="mk av nuevo" title="Ubicación del nuevo aviso (provisional)"><span class="mk-av">!</span><span class="mk-l">Nuevo aviso</span></div>', className: 'mk-wrap', iconSize: [30, 30], iconAnchor: [15, 15] }), draggable: true, keyboard: false, zIndexOffset: 1000 });
+      M.prov.on('dragend', () => { const f2 = filt('plano'); if (!f2.nuevoAviso || !M.prov) return; const ll2 = M.prov.getLatLng(); if (!dentro(ll2)) toast('Fuera del plano: se coloca en el borde', 'warn'); f2.nuevoAviso = { pos: dePunto(ll2) }; G.render(); });
+      M.prov.addTo(M.map);
+    } else M.prov.setLatLng(ll);
+  } else if (M.prov) { M.prov.remove(); M.prov = null; }
   dibujarBorrador();
 }
 const UMBRAL_AGRUPAR = 60;
+/** ¿Se está colocando o dibujando algo? Entonces los toques sobre elementos van al plano */
+const modoColocar = () => { const f = filt('plano'); return !!(f.dibujo || f.situarPunto || f.marcarAviso || f.nuevoAviso || f.place || f.placeAviso); };
+/** Etiqueta de texto en el mapa que se puede tocar (nombre de un sector o de una zona) */
+function etiquetaMapa(pos, texto, cls, onClick) {
+  const m = L.marker(aLatLng(pos), { icon: L.divIcon({ html: `<div class="${cls}" role="button" title="${attr(texto)}: ver detalles">${esc(texto)}</div>`, className: 'mk-wrap lbl-wrap', iconSize: [0, 0] }), keyboard: false, zIndexOffset: -100 });
+  m.on('click', ev => { if (modoColocar()) return clicMapa(ev); onClick(); });
+  return m;
+}
+
+// ---------- aviso desde el mapa: ajuste accesible del marcador provisional ----------
+const pasosAjuste = pl => (esMapa(pl) ? [[1, '1 m'], [5, '5 m'], [25, '25 m']] : [[0.5, '0,5 %'], [2, '2 %'], [5, '5 %']]);
+function textoProv(pos) {
+  const p = P(); const sec = sectorDePunto(p.cat.sectores, pos); const nomSec = sec ? ((p.cat.sectores || []).find(x => x.id === sec) || {}).nombre : '';
+  return (esMapa(p.plano) ? fmtCoords({ lat: pos.lat, lon: pos.lon }) : 'punto del plano (' + Math.round(pos.x * 100) + ' %, ' + Math.round(pos.y * 100) + ' %)') + (nomSec ? ' · sector ' + nomSec : '');
+}
+function bannerAvisoProvisional(f) {
+  const pl = P().plano; const pasos = pasosAjuste(pl); const paso = f.pasoAviso && pasos.some(x => x[0] === f.pasoAviso) ? f.pasoAviso : pasos[1][0];
+  return `<div class="banner info aviso-prov" data-ajuste tabindex="0" role="group" aria-label="Ubicación del nuevo aviso. Flechas: ajustar. Intro: usar esta ubicación. Escape: cancelar.">
+    ${icon('pin')}<div class="grow"><b>Ubicación del nuevo aviso:</b> <span aria-live="polite" data-prov-pos>${esc(textoProv(f.nuevoAviso.pos))}</span><br>
+    <span class="muted small">Marcada en el mapa (no es una posición GPS). Ajústala arrastrando el marcador, con estos botones o con las teclas de dirección.</span>
+    <div class="ajuste">${[['n', '↑', 'Mover hacia arriba (norte)'], ['s', '↓', 'Mover hacia abajo (sur)'], ['o', '←', 'Mover a la izquierda (oeste)'], ['e', '→', 'Mover a la derecha (este)']].map(([d, t, l]) => `<button type="button" class="btn" data-a="plan.mover" data-d="${d}" aria-label="${l}" title="${l}">${t}</button>`).join('')}
+      <label class="small">Paso <select data-c="plan.paso" aria-label="Distancia de cada ajuste">${pasos.map(([v, l]) => `<option value="${v}"${v === paso ? ' selected' : ''}>${l}</option>`).join('')}</select></label></div></div>
+    <div class="row gap-s">${btn('Usar esta ubicación', 'plan.avisoUsar', { cls: 'primary' })}${btn('Cancelar', 'plan.avisoCancelar', { cls: 'ghost' })}</div></div>`;
+}
+function moverProvisional(dir, foco) {
+  const f = filt('plano'); if (!f.nuevoAviso) return;
+  const pl = P().plano; const pasos = pasosAjuste(pl); const paso = f.pasoAviso && pasos.some(x => x[0] === f.pasoAviso) ? f.pasoAviso : pasos[1][0];
+  let dx, dy;
+  if (esMapa(pl)) { const b = pl.bounds; dx = paso / (haversineKm(b.n, b.w, b.n, b.e) * 1000); dy = paso / (haversineKm(b.n, b.w, b.s, b.w) * 1000); }
+  else { dx = dy = paso / 100; }
+  const q = { x: f.nuevoAviso.pos.x, y: f.nuevoAviso.pos.y };
+  if (dir === 'n') q.y -= dy; else if (dir === 's') q.y += dy; else if (dir === 'o') q.x -= dx; else if (dir === 'e') q.x += dx;
+  q.x = clamp(q.x); q.y = clamp(q.y);
+  f.nuevoAviso = { pos: esMapa(pl) ? { ...q, ...normAGeo(pl.bounds, q.x, q.y) } : q };
+  G.render(); enfocar(foco || '[data-ajuste]');
+}
+/** Devuelve el foco tras repintar (la pantalla se vuelve a dibujar) */
+function enfocar(sel) { requestAnimationFrame(() => requestAnimationFrame(() => { const el = document.querySelector(sel); if (el) el.focus({ preventScroll: true }); })); }
+A['plan.avisoMapa'] = () => { const f = filt('plano'); f.sel = null; f.place = null; f.dibujo = null; f.situarPunto = null; f.marcarAviso = true; G.render(); };
+A['plan.avisoSinMapa'] = () => { const f = filt('plano'); f.marcarAviso = false; f.nuevoAviso = null; G.render(); nuevoAvisoEn({}); };
+A['plan.avisoCancelar'] = () => { const f = filt('plano'); f.marcarAviso = false; f.nuevoAviso = null; G.render(); };
+A['plan.mover'] = el => moverProvisional(el.dataset.d, `[data-a="plan.mover"][data-d="${el.dataset.d}"]`);
+CH['plan.paso'] = el => { filt('plano').pasoAviso = Number(el.value); };
+A['plan.avisoUsar'] = () => {
+  const f = filt('plano'); const prov = f.nuevoAviso; if (!prov) return;
+  const pl = P().plano; const pos = prov.pos; f.nuevoAviso = null; G.render();
+  const loc = esMapa(pl) ? { txt: '', lat: pos.lat, lon: pos.lon, fuente: 'mapa', t: now() } : { txt: 'Punto del plano', lat: null, lon: null, fuente: 'mapa', t: now() };
+  nuevoAvisoEn({ plan: pos, loc, sector: sectorDePunto(P().cat.sectores, pos) });
+};
+if (typeof document !== 'undefined') document.addEventListener('keydown', ev => {
+  const g = ev.target && ev.target.closest ? ev.target.closest('[data-ajuste]') : null; if (!g || ev.target.tagName === 'SELECT') return;
+  const d = { ArrowUp: 'n', ArrowDown: 's', ArrowLeft: 'o', ArrowRight: 'e' }[ev.key];
+  if (d) { ev.preventDefault(); moverProvisional(d, ev.target === g ? '[data-ajuste]' : null); }
+  else if (ev.key === 'Enter' && ev.target === g) { ev.preventDefault(); A['plan.avisoUsar'](); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); A['plan.avisoCancelar'](); }
+});
 function eventosUnidad(m, id) {
   let clicT = null;
   m.on('click', () => { clearTimeout(clicT); clicT = setTimeout(() => seleccionar('u', id), 260); });
@@ -339,8 +406,8 @@ async function clicMapa(ev) {
   const f = filt('plano'); const ll = ev.latlng;
   try {
     // Un toque fuera de los elementos cierra la ficha contextual (también fuera del plano)
-    if (f.sel && !f.place && !f.placeAviso && !f.dibujo && !f.situarPunto) { f.sel = null; G.render(); return; }
-    if (!dentro(ll)) { if (f.place || f.placeAviso || f.dibujo) toast('Toca dentro del plano', 'warn'); return; }
+    if (f.sel && !f.place && !f.placeAviso && !f.dibujo && !f.situarPunto && !f.marcarAviso && !f.nuevoAviso) { f.sel = null; G.render(); return; }
+    if (!dentro(ll)) { if (f.marcarAviso || f.nuevoAviso) { toast('Toca dentro del plano', 'warn'); return; } if (f.place || f.placeAviso || f.dibujo) toast('Toca dentro del plano', 'warn'); return; }
     if (f.dibujo) { f.dibujo.pts.push(dePunto(ll)); G.render(); return; }
     if (f.situarPunto) { const d = f.situarPunto; f.situarPunto = null; await guardarPunto({ ...d, pos: dePunto(ll) }); return; }
     if (f.placeAviso) { const id = f.placeAviso; f.placeAviso = null; await G.core.exec(C.avisoPlan, id, dePunto(ll)); toast('Aviso situado en el plano', 'ok'); openAviso(id); return; }
@@ -350,13 +417,8 @@ async function clicMapa(ev) {
       f.place = next ? next.id : null; G.render(); return;
     }
     if (!operativo() || !can('avisos.crear')) return;
-    // Crear un aviso en el punto tocado
-    const pos = dePunto(ll);
-    const pop = L.popup({ closeButton: true, autoPan: true }).setLatLng(ll)
-      .setContent(`<div class="pop-aviso"><b>${esMapa(P().plano) ? esc(fmtCoords({ lat: pos.lat, lon: pos.lon })) : 'Punto del plano'}</b><button type="button" class="btn primary sm" data-pop="aviso">${icon('avisos')}<span>Crear aviso aquí</span></button></div>`)
-      .openOn(M.map);
-    const b = pop.getElement() && pop.getElement().querySelector('[data-pop="aviso"]');
-    if (b) b.addEventListener('click', () => { M.map.closePopup(); nuevoAvisoEn({ plan: pos, loc: esMapa(P().plano) ? { txt: '', lat: pos.lat, lon: pos.lon } : null }); });
+    // Aviso en el punto tocado: marcador provisional que se ajusta y se confirma antes del formulario
+    f.marcarAviso = false; f.sel = null; f.nuevoAviso = { pos: dePunto(ll) }; G.render(); enfocar('[data-ajuste]');
   } catch (e) { toast(e.message, 'error'); }
 }
 /** Zona que se está dibujando (polígono provisional con sus vértices) */
@@ -437,7 +499,7 @@ function crearAvisoZona(pts) {
   // Ubicación del aviso: el centro de la zona
   const cx = pts.reduce((t, p) => t + p.x, 0) / pts.length, cy = pts.reduce((t, p) => t + p.y, 0) / pts.length;
   const pl = P().plano; const g = esMapa(pl) ? normAGeo(pl.bounds, cx, cy) : null;
-  nuevoAvisoEn({ plan: { x: cx, y: cy, ...(g || {}) }, loc: g ? { txt: '', lat: g.lat, lon: g.lon } : null, zona: { pts } });
+  nuevoAvisoEn({ plan: { x: cx, y: cy, ...(g || {}) }, loc: g ? { txt: '', lat: g.lat, lon: g.lon, fuente: 'mapa', t: now() } : null, zona: { pts }, sector: sectorDePunto(P().cat.sectores, { x: cx, y: cy }) });
 }
 A['plan.google'] = () => abrirSelectorMapa({ onConfirm: async r => { if (await incorporarAlPreventivo(r)) { filt('plano').focus = null; G.render(); } } });
 A['plan.biblio'] = () => abrirBiblioteca({ onElegir: async r => { if (await incorporarAlPreventivo(r)) G.render(); } });
@@ -517,6 +579,7 @@ function renderCapas() {
     <h3>Avisos</h3>${chips('tiposAviso', 'Tipo de aviso', [...new Set(avisos.map(a => a.tipo).filter(Boolean))].map(id => [id, etiquetaTipoAviso(p.cat.tiposAviso, id) || id])) || '<p class="muted small">Aún no hay avisos con tipo.</p>'}
     <h3>Sectores</h3><ul class="ref-list capas-list">${(p.cat.sectores || []).map(x => `<li class="row gap wrap">${sw2(x.color)}<b class="grow">${esc(x.nombre)}</b>
       ${x.zona ? `<label class="switch sm"><input type="checkbox" data-c="plan.secVer" data-id="${attr(x.id)}"${fl.sectoresOcultos.includes(x.id) ? '' : ' checked'}><span>Ver</span></label>` : '<span class="muted small">sin delimitar</span>'}
+      ${x.zona ? btn('Detalles', 'plan.secFicha', { cls: 'sm ghost', data: { id: x.id } }) : ''}
       ${editable() && can('sectores.gestionar') ? btn(x.zona ? 'Cambiar delimitación' : 'Delimitar en el plano', 'plan.secDelimitar', { cls: 'sm', data: { id: x.id } }) + (x.zona ? btn('Quitar delimitación', 'plan.secQuitarZona', { cls: 'sm ghost', data: { id: x.id } }) : '') : ''}</li>`).join('')}</ul>
     <h3>Puntos del plano</h3>${editable() && can('planos.editar') ? `<div class="row">${btn('Añadir punto', 'plan.puntoNuevo', { ic: 'mas_add', cls: 'sm' })}</div>` : ''}
     ${Object.entries(GRUPOS_PUNTO).map(([g, nom]) => `<fieldset class="filtro"><legend>${esc(nom)}</legend><ul class="ref-list capas-list">${cats.filter(c => c.grupo === g).map(c => { const n = puntos.filter(x => x.categoria === c.id).length; return `<li class="row gap"><b class="sim poi" style="--pc:${attr(c.color)}" aria-hidden="true">${icon(c.icono || 'pin')}</b><span class="grow">${esc(c.nombre)} <span class="muted">(${n})</span></span><label class="switch sm"><input type="checkbox" data-c="plan.catVer" data-id="${attr(c.id)}"${fl.categoriasOcultas.includes(c.id) ? '' : ' checked'}><span>Ver</span></label></li>`; }).join('')}</ul></fieldset>`).join('')}
@@ -524,6 +587,7 @@ function renderCapas() {
     <div class="row end gap">${btn('Restablecer', 'plan.restablecer', { ic: 'sync' })}<button type="button" class="btn primary" data-a="sheet.close">Hecho</button></div>`;
 }
 
+A['plan.secFicha'] = el => { closeSheet(); seleccionar('s', el.dataset.id); };
 // ---------- delimitación de sectores ----------
 A['plan.secDelimitar'] = el => {
   const sec = (P().cat.sectores || []).find(x => x.id === el.dataset.id); if (!sec) return;

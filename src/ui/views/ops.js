@@ -10,7 +10,9 @@ import * as C from '../../core/commands.js';
 import { suggestUnits } from '../../core/suggest.js';
 import { avisoTimes, TIEMPOS_AVISO } from '../../core/stats.js';
 import { avisoHistory, AVISO_ESTADO } from '../../core/timeline.js';
-import { hasCoords, fmtCoords, googleMapsUrl, googleEmbedUrl, embedUrl, osmUrl, nominatimUrl, parseCoords, round6, fmtKm } from '../../core/geo.js';
+import { hasCoords, fmtCoords, googleMapsUrl, googleEmbedUrl, embedUrl, osmUrl, nominatimUrl, parseCoords, round6, fmtKm, geoANorm, normAGeo } from '../../core/geo.js';
+import { normalizarLoc, motivoLocNoValida, describirFuente } from '../../core/ubicacion.js';
+import { categoriasPunto, centroide, simboloDisponibilidad } from '../../core/capas.js';
 import { ICONOS, FORMAS, TAMANOS, BORDES, ETIQUETAS, TARJETAS, CAMPOS_TARJETA, KPIS, CAMPOS_PLANTILLA } from '../../core/defaults.js';
 import { tipoAvisoDef, etiquetaTipo, etiquetaTipoAviso } from '../../core/incidentes.js';
 import { abrirSelectorIncidente, campoTipoAviso, opcionesTipoAviso } from './incidente.js';
@@ -61,7 +63,7 @@ export function avisoCard(a) {
   const ta = tipoAvisoDef(p.cat.tiposAviso, a.tipo);
   const units = [...new Set(activeParts(a).map(x => x.u))].map(id => s.units[id]).filter(Boolean);
   return `<button type="button" class="acard est-${a.estado}" data-a="a.open" data-id="${a.id}" style="--tc:${attr(ta ? ta.color : '#546E7A')}">
-    <span class="anum${a.num == null ? ' prov' : ''}">${esc(avisoNum(a))}</span>
+    <span class="anum${a.num == null ? ' prov' : ''}">${esc(avisoNum(a))}</span>${a.num == null && a.ref ? '<span class="chip sm warn-chip" title="Creado sin conexión: el servidor aún no lo ha confirmado ni le ha dado número">Pendiente de confirmar</span>' : ''}
     <span class="acard-main">
       <span class="row gap-s wrap">${ta ? chip(etiquetaTipo(ta), ta.color) : ''}${estadoChip(a.estado)}<span class="muted small">${fmtTime(a.t ?? a.creado)}${a.estado !== 'finalizado' ? ' · hace <span data-since="' + (a.t ?? a.creado) + '"></span>' : ''}</span></span>
       ${a.desc ? `<span class="adesc">${esc(a.desc)}</span>` : ''}
@@ -211,7 +213,7 @@ function unitSheet(id) {
   <h3>Ficha</h3>
   <dl class="dl">
     ${dd('Identificador', u.ind)}${dd('Nombre', u.nombre)}${dd('Denominación', u.denom)}${dd('Categoría', u.categoria)}
-    ${dd('Ubicación', u.loc ? [u.loc.txt, fmtCoords(u.loc)].filter(Boolean).join(' · ') + ' (' + fmtTime(u.loc.t) + ')' : '')}
+    ${dd('Ubicación', u.loc ? [u.loc.txt, fmtCoords(u.loc)].filter(Boolean).join(' · ') + ' (' + (describirFuente(u.loc) || fmtTime(u.loc.t)) + ')' : '')}
     ${dd('Equipamiento', u.equip.join(', '))}${dd('Características', u.caract.join(', '))}${dd('Descripción', u.desc)}${dd('Observaciones', u.obs)}
     ${dd('Color ' + base.codigo, `<span class="swatch" style="background:${attr(u.colorC0)}"></span>${esc(u.colorC0)}`, true)}
   </dl>
@@ -507,7 +509,7 @@ function avisoFields(p, tipo = '') {
 function setFormLoc(form, loc) {
   form._loc = loc;
   const el = form.querySelector('[data-locsum]');
-  if (el) el.textContent = loc ? [loc.txt, fmtCoords(loc)].filter(Boolean).join(' · ') || '—' : '—';
+  if (el) el.innerHTML = loc ? esc([loc.txt, fmtCoords(loc)].filter(Boolean).join(' · ') || '—') + (describirFuente(loc) ? `<br><span class="muted small">${esc(describirFuente(loc))}</span>` : '') : '—';
 }
 // Nuevo aviso: primero el tipo de incidente (carpetas → código) y, al tocar el código, se crea el aviso y se
 // abre para asignar unidades. «Más datos antes de crear…» abre el formulario completo.
@@ -518,7 +520,7 @@ A['a.new'] = el => {
   nuevoAviso({ unit });
 };
 /** Nuevo aviso desde el plano, con la ubicación (y la zona) ya puestas */
-export function nuevoAvisoEn({ plan = null, loc = null, zona = null } = {}) { nuevoAviso({ plan, loc, zona }); }
+export function nuevoAvisoEn({ plan = null, loc = null, zona = null, sector = null } = {}) { nuevoAviso({ plan, loc, zona, sector }); }
 function nuevoAviso(ctx) {
   abrirSelectorIncidente({
     titulo: ctx.unit ? 'Nuevo aviso con ' + unitLabel(ctx.unit) : ctx.zona ? 'Nuevo aviso en una zona' : ctx.plan ? 'Nuevo aviso en el plano' : 'Nuevo aviso',
@@ -530,7 +532,7 @@ function nuevoAviso(ctx) {
 function inicioAviso(ctx) {
   const p = P(); const u = ctx.unit;
   const loc = ctx.loc || (ctx.plan ? { txt: 'Punto del plano', lat: null, lon: null } : u && u.loc && (u.loc.txt || u.loc.lat != null) ? { txt: u.loc.txt, lat: u.loc.lat, lon: u.loc.lon } : null);
-  const sector = u && u.sector && (p.cat.sectores || []).some(x => x.id === u.sector) ? u.sector : null;
+  const sector = ctx.sector && (p.cat.sectores || []).some(x => x.id === ctx.sector) ? ctx.sector : u && u.sector && (p.cat.sectores || []).some(x => x.id === u.sector) ? u.sector : null;
   return { loc, sector };
 }
 async function crearAvisoRapido(ctx, tipo) {
@@ -550,16 +552,57 @@ async function crearAviso(d, unitId) {
 function formularioAviso(ctx) {
   const p = P(); const unit = ctx.unit;
   const nota = unit ? `<p class="note">${icon('unidades')} Se asignará <b>${esc(unitLabel(unit))}</b> al crear el aviso.</p>`
-    : ctx.plan || ctx.zona ? `<p class="note">${icon(ctx.zona ? 'zona' : 'pin')} ${ctx.zona ? 'Zona de ' + ctx.zona.pts.length + ' puntos marcada en el plano; la ubicación del aviso es su centro.' : 'Ubicación tomada del punto marcado en el plano.'}</p>`
-    : '<p class="muted small">Tras crearlo verás las unidades sugeridas para asignar.</p>';
+    : ctx.plan || ctx.zona ? `<p class="note">${icon(ctx.zona ? 'zona' : 'pin')} ${ctx.zona ? 'Zona de ' + ctx.zona.pts.length + ' puntos marcada en el plano; la ubicación del aviso es su centro.' : 'Ubicación marcada en el plano (no es una posición GPS).'}</p>`
+    : '';
   openSheet({
     title: unit ? 'Nuevo aviso con ' + unitLabel(unit) : ctx.zona ? 'Nuevo aviso en una zona' : ctx.plan ? 'Nuevo aviso en el plano' : 'Nuevo aviso', size: 'l',
     render: () => `<form data-f="a.save" data-tdef="${toLocalInput(now())}"${unit ? ` data-unit="${unit.id}"` : ''}>${fieldsHtml(avisoFields(p), { t: now() })}
-      ${nota}<div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear aviso</button></div></form>`,
-    onMount: el2 => { const f = el2.querySelector('form'); const ini = inicioAviso(ctx); f._plan = ctx.plan || null; f._zona = ctx.zona || null; setFormLoc(f, ini.loc); if (ini.sector) f.sector.value = ini.sector; },
+      ${nota}${can('avisos.asignar') && activo() ? `<fieldset class="unidades-aviso"><legend>Unidades</legend><p class="muted small">Situación de cada unidad y sugerencias según tipo, cercanía y sector. Las sugerencias solo orientan: tú decides. Las que no pueden atenderlo aparecen sin poder marcarse, con el motivo.</p><div data-unidades-aviso></div></fieldset>` : ''}
+      <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="sheet.close">Cancelar</button><button class="btn primary">Crear aviso</button></div></form>`,
+    onMount: el2 => {
+      const f = el2.querySelector('form'); const ini = inicioAviso(ctx); f._plan = ctx.plan || null; f._zona = ctx.zona || null; f._marcadas = new Set(unit ? [unit.id] : []);
+      setFormLoc(f, ini.loc); if (ini.sector) f.sector.value = ini.sector;
+      f.addEventListener('change', ev => { if (ev.target.name === 'u_asig') { ev.target.checked ? f._marcadas.add(ev.target.value) : f._marcadas.delete(ev.target.value); } else pintarUnidadesForm(f); });
+      pintarUnidadesForm(f);
+    },
   });
 }
-A['a.formLoc'] = el => { const form = el.closest('form'); openLocEditor({ title: 'Ubicación del aviso', value: form._loc, onSave: loc => setFormLoc(form, loc) }); };
+/** Unidades en el formulario de un aviso nuevo: situación, motivo si no puede y sugerencia (nunca se marcan solas) */
+function pintarUnidadesForm(form) {
+  const cont = form.querySelector('[data-unidades-aviso]'); if (!cont) return;
+  const s = S(); const p = P(); const t = now();
+  const prov = { tipo: (form.querySelector('[name=tipo]') || {}).value || null, loc: form._loc || null, plan: form._plan || null, sector: (form.sector && form.sector.value) || null, part: [] };
+  const lista = suggestUnits(s, prov, t); const todas = form._todas;
+  const elegibles = lista.filter(r => !r.blocked && r.compatible); const sugeridas = new Set(elegibles.slice(0, 3).map(r => r.u.id));
+  const filas = (todas ? lista : lista.slice(0, 10)).map(r => {
+    const u = r.u; const sit = unitSituation(s, u, t); const puede = !r.blocked && r.compatible; const marcada = form._marcadas.has(u.id) && puede;
+    const motivo = r.blocked || (!r.compatible ? 'Tipo no compatible con el aviso' : '');
+    const tipo = ((p.cat.tiposRecurso || []).find(x => x.id === u.tipo) || {}).nombre || '';
+    const avAct = Object.values(s.avisos).filter(a => a.estado !== 'finalizado' && activeParts(a).some(x => x.u === u.id)).length;
+    return `<label class="u-asig${puede ? '' : ' no'}"><input type="checkbox" name="u_asig" value="${attr(u.id)}"${marcada ? ' checked' : ''}${puede ? '' : ' disabled'}>
+      ${unitSvg(unitVisual(p, u, t), { px: 28 })}<span class="grow"><b>${esc(unitLabel(u))}</b> ${claveChip(u.clave, u.motivoEsp)} ${sugeridas.has(u.id) ? '<span class="chip sm ok-chip">Sugerida</span>' : ''}
+      <span class="muted small d-block">${[simboloDisponibilidad(sit) + ' ' + (SITUACION_LABEL[sit] || sit), tipo, 'Sector ' + sectorNombre(p, u, '—'), u.loc && (u.loc.txt || hasCoords(u.loc)) ? 'Ubicación: ' + (u.loc.txt || fmtCoords(u.loc)) : '', avAct ? avAct + ' aviso(s) activo(s)' : '', ...r.reasons].filter(Boolean).map(esc).join(' · ')}</span>
+      ${motivo ? `<span class="small bad-txt d-block">No disponible: ${esc(motivo)}</span>` : ''}</span></label>`;
+  }).join('');
+  cont.innerHTML = (filas || '<p class="muted">No hay unidades en el preventivo.</p>') + (!todas && lista.length > 10 ? `<button type="button" class="btn sm ghost" data-a="a.formTodas">Ver las ${lista.length} unidades</button>` : '');
+}
+A['a.formTodas'] = el => { const f = el.closest('form'); f._todas = true; pintarUnidadesForm(f); };
+A['a.formLoc'] = el => {
+  const form = el.closest('form');
+  openLocEditor({ title: 'Ubicación del aviso', value: form._loc, conPlano: true, onSave: (loc, extra = {}) => {
+    setFormLoc(form, loc);
+    if (extra.plan) form._plan = extra.plan;
+    else if (loc && hasCoords(loc)) form._plan = posDeCoordenadas(loc); // con coordenadas dentro del plano cartográfico, se sitúa en él
+    if (extra.sector && form.sector) form.sector.value = extra.sector;
+    pintarUnidadesForm(form);
+  } });
+};
+/** Posición en el plano cartográfico de unas coordenadas (o null si no hay plano o quedan fuera) */
+function posDeCoordenadas(loc) {
+  const pl = P().plano; if (!pl || pl.tipo !== 'mapa' || !pl.bounds) return null;
+  const q = geoANorm(pl.bounds, loc.lat, loc.lon);
+  return q.x >= 0 && q.x <= 1 && q.y >= 0 && q.y <= 1 ? { x: q.x, y: q.y, lat: loc.lat, lon: loc.lon } : null;
+}
 F['a.save'] = async form => {
   const v = readForm(form);
   // Si no se ha cambiado la hora propuesta, se usa la hora exacta de creación (con segundos)
@@ -573,7 +616,16 @@ F['a.save'] = async form => {
     await exec(C.avisoUpdate, form.dataset.id, { tipo: d.tipo, desc: d.desc, t: d.t != null && toLocalInput(d.t) !== toLocalInput(tOld) ? d.t : tOld, loc: d.loc, sector: d.sector, obs: d.obs });
     closeSheet(); toast('Aviso actualizado', 'ok'); return;
   }
-  const ops = await crearAviso(d, form.dataset.unit || null);
+  const marcadas = form._marcadas ? [...form._marcadas] : (form.dataset.unit ? [form.dataset.unit] : []);
+  let ops;
+  if (marcadas.length <= 1) ops = await crearAviso(d, marcadas[0] || null);
+  else {
+    try { ops = await exec(C.avisoCreate, d, { unidades: marcadas }); }
+    catch (e) {
+      if (!['descanso', 'no_disponible', 'incompatible', 'ocupada'].includes(e.code)) throw e;
+      ops = await exec(C.avisoCreate, d); toast('Aviso creado sin unidades: ' + e.message + '. Asígnalas desde el aviso.', 'warn', 8000);
+    }
+  }
   closeSheet(); toast('Aviso creado', 'ok'); openAviso(ops[0].e);
 };
 
@@ -600,11 +652,11 @@ function avisoSheet(id) {
     </div>`;
   };
   return `
-  <div class="row gap-s wrap">${ta ? chip(etiquetaTipo(ta), ta.color) : ''}${estadoChip(a.estado)}${a.num == null ? `<span class="chip warn">Número provisional ${esc(a.ref || '')}</span>` : a.ref ? `<span class="chip muted">Ref. ${esc(a.ref)}</span>` : ''}</div>
+  <div class="row gap-s wrap">${ta ? chip(etiquetaTipo(ta), ta.color) : ''}${estadoChip(a.estado)}${a.num == null ? `<span class="chip warn" title="Creado sin conexión o aún sin sincronizar: el servidor todavía no lo ha confirmado ni le ha dado número">Pendiente de confirmar · nº provisional ${esc(a.ref || '')}</span>` : a.ref ? `<span class="chip muted">Ref. ${esc(a.ref)}</span>` : ''}</div>
   ${a.desc ? `<p class="adesc big">${esc(a.desc)}</p>` : ''}
   <dl class="dl">
     <dt>Hora del aviso</dt><dd>${fmtDateTime(a.t ?? a.creado)}${a.estado !== 'finalizado' ? ' · hace <span data-since="' + (a.t ?? a.creado) + '"></span>' : ''}</dd>
-    ${a.loc && (a.loc.txt || hasCoords(a.loc)) ? `<dt>Ubicación</dt><dd>${esc([a.loc.txt, fmtCoords(a.loc)].filter(Boolean).join(' · '))} <a class="link" href="${attr(googleMapsUrl(a.loc))}" target="_blank" rel="noopener">${icon('mapa')}Google Maps</a></dd>` : ''}
+    ${a.loc && (a.loc.txt || hasCoords(a.loc)) ? `<dt>Ubicación</dt><dd>${esc([a.loc.txt, fmtCoords(a.loc)].filter(Boolean).join(' · '))} <a class="link" href="${attr(googleMapsUrl(a.loc))}" target="_blank" rel="noopener">${icon('mapa')}Google Maps</a>${describirFuente(a.loc) ? `<br><span class="muted small" data-loc-fuente>${esc(describirFuente(a.loc))}</span>` : ''}</dd>` : ''}
     ${a.sector ? `<dt>Sector</dt><dd>${esc(named(p.cat.sectores, a.sector))}</dd>` : ''}
     ${a.obs ? `<dt>Observaciones</dt><dd>${esc(a.obs)}</dd>` : ''}
     <dt>Creado por</dt><dd>${esc(a.creadoPor)} · ${fmtDateTime(a.creado)}</dd>
@@ -670,14 +722,21 @@ A['a.inplan'] = el => { while (document.querySelector('.sheet-wrap')) closeSheet
 // ======================= ubicaciones y mapa real =======================
 let LOC = null;
 /** Editor de ubicación: texto, coordenadas, GPS, enlace de Google Maps y búsqueda gratuita (OpenStreetMap) */
-export function openLocEditor({ title = 'Ubicación', value = null, onSave }) {
-  LOC = { v: { txt: '', lat: null, lon: null, ...(value || {}) }, onSave, results: null };
+export function openLocEditor({ title = 'Ubicación', value = null, onSave, conPlano = false }) {
+  LOC = { v: { txt: '', lat: null, lon: null, ...(value || {}) }, onSave, results: null, conPlano, extra: {} };
   openSheet({ title, size: 'm', live: true, render: renderLoc, onClose: () => { LOC = null; } });
 }
 function renderLoc() {
   if (!LOC) return '';
   const v = LOC.v; const online = navigator.onLine !== false && !G.preview;
+  const p = P(); const pts = LOC.conPlano ? (p.cat.puntos || []) : []; const secs = LOC.conPlano ? (p.cat.sectores || []).filter(x => x.zona) : [];
+  const mal = motivoLocNoValida(normalizarLoc(v)); const pl = p.plano;
+  const fuera = !mal && hasCoords(v) && pl && pl.tipo === 'mapa' && pl.bounds && !(v.lat <= pl.bounds.n && v.lat >= pl.bounds.s && v.lon <= pl.bounds.e && v.lon >= pl.bounds.w);
   return `<form data-f="loc.save">
+    ${pts.length || secs.length ? `<div class="row gap wrap">${pts.length ? `<div class="fld grow"><label for="f_locpt">Un punto del plano</label><select id="f_locpt" data-c="loc.punto"><option value="">—</option>${pts.map(x => `<option value="${attr(x.id)}"${v.fuente === 'punto' && v.ref === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div>` : ''}
+      ${secs.length ? `<div class="fld grow"><label for="f_locsec">El centro de un sector</label><select id="f_locsec" data-c="loc.sector"><option value="">—</option>${secs.map(x => `<option value="${attr(x.id)}"${v.fuente === 'sector' && v.ref === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div>` : ''}</div>` : ''}
+    ${describirFuente(v) ? `<p class="small muted" data-loc-fuente>${icon('info')} ${esc(describirFuente(v))}</p>` : ''}
+    ${mal ? `<p class="note bad small" role="alert">${esc(mal)}</p>` : fuera ? `<p class="note warn small" role="status">Estas coordenadas quedan fuera del plano del preventivo.</p>` : ''}
     <div class="fld"><label for="f_loctxt">Dirección o descripción</label><input id="f_loctxt" name="txt" value="${attr(v.txt)}" placeholder="Puerta 3, Calle Mayor 10…" data-c="loc.txt" data-live="1"></div>
     <div class="row gap"><div class="fld grow"><label for="f_lat">Latitud</label><input id="f_lat" name="lat" inputmode="decimal" value="${attr(v.lat ?? '')}" data-c="loc.lat" data-live="1"></div>
     <div class="fld grow"><label for="f_lon">Longitud</label><input id="f_lon" name="lon" inputmode="decimal" value="${attr(v.lon ?? '')}" data-c="loc.lon" data-live="1"></div></div>
@@ -692,13 +751,27 @@ function renderLoc() {
     <div class="row end gap sticky-foot"><button type="button" class="btn ghost" data-a="loc.clear">Quitar ubicación</button><button class="btn primary">Guardar ubicación</button></div>
   </form>`;
 }
-CH['loc.txt'] = el => { LOC.v.txt = el.value; };
-CH['loc.lat'] = el => { LOC.v.lat = el.value === '' ? null : Number(String(el.value).replace(',', '.')); };
-CH['loc.lon'] = el => { LOC.v.lon = el.value === '' ? null : Number(String(el.value).replace(',', '.')); };
+const origen = (fuente, extra = {}) => { LOC.v.fuente = fuente; LOC.v.t = now(); delete LOC.v.ref; delete LOC.v.prec; Object.assign(LOC.v, extra); LOC.extra = {}; };
+CH['loc.txt'] = el => { LOC.v.txt = el.value; if (LOC.v.lat == null) origen('direccion'); };
+CH['loc.lat'] = el => { LOC.v.lat = el.value === '' ? null : Number(String(el.value).replace(',', '.')); origen('coordenadas'); };
+CH['loc.lon'] = el => { LOC.v.lon = el.value === '' ? null : Number(String(el.value).replace(',', '.')); origen('coordenadas'); };
+// Alternativas sin tocar el mapa: un punto del plano o el centro de un sector delimitado
+CH['loc.punto'] = el => {
+  const pt = (P().cat.puntos || []).find(x => x.id === el.value); if (!pt) return;
+  const pos = pt.pos || (pt.zona ? centroide(pt.zona.pts) : null); const g = pos && pos.lat == null && P().plano && P().plano.tipo === 'mapa' ? normAGeo(P().plano.bounds, pos.x, pos.y) : pos;
+  LOC.v.txt = pt.nombre; LOC.v.lat = g && g.lat != null ? g.lat : null; LOC.v.lon = g && g.lon != null ? g.lon : null; origen('punto', { ref: pt.id });
+  LOC.extra = { plan: pos ? { x: pos.x, y: pos.y, ...(g && g.lat != null ? { lat: g.lat, lon: g.lon } : {}) } : null }; refreshSheets();
+};
+CH['loc.sector'] = el => {
+  const sec = (P().cat.sectores || []).find(x => x.id === el.value); if (!sec || !sec.zona) return;
+  const c = centroide(sec.zona.pts); const g = P().plano && P().plano.tipo === 'mapa' ? normAGeo(P().plano.bounds, c.x, c.y) : null;
+  LOC.v.txt = 'Sector ' + sec.nombre; LOC.v.lat = g ? g.lat : null; LOC.v.lon = g ? g.lon : null; origen('sector', { ref: sec.id });
+  LOC.extra = { plan: { x: c.x, y: c.y, ...(g || {}) }, sector: sec.id }; refreshSheets();
+};
 A['loc.gps'] = () => new Promise(res => {
   if (!navigator.geolocation || G.preview) { toast('La geolocalización no está disponible aquí', 'error'); return res(); }
   toast('Obteniendo posición…');
-  navigator.geolocation.getCurrentPosition(p => { LOC.v.lat = round6(p.coords.latitude); LOC.v.lon = round6(p.coords.longitude); if (!LOC.v.txt) LOC.v.txt = 'Posición GPS (±' + Math.round(p.coords.accuracy) + ' m)'; refreshSheets(); res(); },
+  navigator.geolocation.getCurrentPosition(p => { LOC.v.lat = round6(p.coords.latitude); LOC.v.lon = round6(p.coords.longitude); origen('gps', { prec: Math.round(p.coords.accuracy) }); if (!LOC.v.txt) LOC.v.txt = 'Posición GPS (±' + Math.round(p.coords.accuracy) + ' m)'; refreshSheets(); res(); },
     e => { toast('No se pudo obtener la posición: ' + (e.code === 1 ? 'permiso denegado' : e.message), 'error'); res(); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
 });
 A['loc.paste'] = async () => {
@@ -706,7 +779,7 @@ A['loc.paste'] = async () => {
   try { text = await navigator.clipboard.readText(); } catch { }
   if (!parseCoords(text)) { const r = await confirmDlg({ title: 'Enlace o coordenadas', input: { label: 'Pega el enlace de Google Maps o "lat, lon"', value: text } }); if (r == null) return; text = r; }
   const c = parseCoords(text); if (!c) { toast('No se encontraron coordenadas en el texto', 'error'); return; }
-  LOC.v.lat = c.lat; LOC.v.lon = c.lon; refreshSheets();
+  LOC.v.lat = c.lat; LOC.v.lon = c.lon; origen('coordenadas'); refreshSheets();
 };
 A['loc.search'] = async () => {
   const q = (LOC.v.txt || '').trim(); if (!q) { toast('Escribe primero la dirección', 'error'); return; }
@@ -714,12 +787,13 @@ A['loc.search'] = async () => {
   catch { toast('No se pudo consultar el buscador', 'error'); LOC.results = []; }
   refreshSheets();
 };
-A['loc.pick'] = el => { const r = LOC.results[Number(el.dataset.i)]; LOC.v.lat = round6(Number(r.lat)); LOC.v.lon = round6(Number(r.lon)); if (!LOC.v.txt) LOC.v.txt = r.display_name; LOC.results = null; refreshSheets(); };
+A['loc.pick'] = el => { const r = LOC.results[Number(el.dataset.i)]; LOC.v.lat = round6(Number(r.lat)); LOC.v.lon = round6(Number(r.lon)); origen('direccion'); if (!LOC.v.txt) LOC.v.txt = r.display_name; LOC.results = null; refreshSheets(); };
 A['loc.clear'] = async () => { const cb = LOC.onSave; closeSheet(); await cb(null); };
 F['loc.save'] = async () => {
-  const v = LOC.v; const loc = { txt: String(v.txt || '').trim(), lat: v.lat == null || isNaN(v.lat) ? null : v.lat, lon: v.lon == null || isNaN(v.lon) ? null : v.lon };
-  if ((loc.lat == null) !== (loc.lon == null)) { toast('Indica latitud y longitud', 'error'); return; }
-  const cb = LOC.onSave; closeSheet(); await cb(loc.txt || loc.lat != null ? loc : null);
+  const loc = normalizarLoc(LOC.v); const mal = motivoLocNoValida(loc);
+  if (mal) { toast(mal, 'error'); return; }
+  if (loc && !loc.fuente) { loc.fuente = hasCoords(loc) ? 'coordenadas' : 'direccion'; loc.t = loc.t || now(); }
+  const cb = LOC.onSave; const extra = LOC.extra || {}; closeSheet(); await cb(loc, extra);
 };
 A['u.loc'] = el => {
   const u = S().units[el.dataset.id];

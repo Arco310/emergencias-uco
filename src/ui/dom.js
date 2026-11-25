@@ -55,7 +55,10 @@ export function refreshSheets() {
     const el = document.getElementById(s.id); if (!el) continue;
     const body = el.querySelector('.sheet-body');
     const st = body.scrollTop;
-    body.innerHTML = s.render();
+    // Al sustituir el contenido, Chrome lanza «change» desde el campo que tenía el foco con su valor ANTIGUO
+    // (aún conectado). Mientras se repinta se ignoran esos eventos: si no, deshacen lo que se acaba de elegir.
+    G.repintandoHoja = true;
+    try { body.innerHTML = s.render(); } finally { G.repintandoHoja = false; }
     body.scrollTop = st;
     if (s.footer) el.querySelector('.sheet-foot').innerHTML = s.footer();
     if (s.title && typeof s.title === 'function') el.querySelector('.sheet-title').innerHTML = s.title();

@@ -1,44 +1,74 @@
 {
- "fecha": "2026-11-25 04:11:36",
+ "fecha": "2026-11-25 04:28:23",
  "navegador": "Google Chrome (Playwright)",
  "resultados": [
   {
-   "prueba": "Capas: unidades, avisos, sectores y puntos con su leyenda",
+   "prueba": "Servidor central (espacio 1.3.0 sin migrar): activación con el código del servidor",
    "resultado": "SUPERADA",
-   "detalle": "3 unidades (una con el símbolo de descanso), aviso activo, sector delimitado con su nombre, 2 puntos y leyenda con símbolos"
+   "detalle": "espacio central como el de la 1.3.0 (sin migrar), activado con el código del servidor; estado conectado"
   },
   {
-   "prueba": "Filtros combinados y restablecer (ocultar no es desactivar)",
+   "prueba": "Servidor central: alta de usuario",
    "resultado": "SUPERADA",
-   "detalle": "tipo SVB → 2; + descanso → 1 (SVB-2); los datos no cambian; «Restablecer» vuelve a mostrar las 3"
+   "detalle": "usuario creado en la tablet; su cuenta queda publicada en el servidor central"
   },
   {
-   "prueba": "Avisos finalizados, sectores y categorías: mostrar u ocultar",
+   "prueba": "Servidor central: dispositivo nuevo con usuario y contraseña",
    "resultado": "SUPERADA",
-   "detalle": "avisos finalizados bajo petición; sectores y categorías se ocultan uno a uno; restablecer"
+   "detalle": "el móvil nuevo entra solo con usuario y contraseña, con su rol; una contraseña errónea se rechaza"
   },
   {
-   "prueba": "Puntos y delimitación de sectores desde el plano",
+   "prueba": "Compartido: crear preventivo sin pedir servidor",
    "resultado": "SUPERADA",
-   "detalle": "punto nuevo tocando el plano y sector 2 delimitado con 3 toques; se guardan en el preventivo (bitácora)"
+   "detalle": "creado sin pedir servidor ni códigos: queda compartido y vinculado al servidor central"
   },
   {
-   "prueba": "Ficha contextual sin salir del mapa",
+   "prueba": "Compartido: el preventivo aparece solo en el otro dispositivo",
    "resultado": "SUPERADA",
-   "detalle": "unidad y aviso: ficha dentro del mapa (situación, clave, unidades) con acceso a la ficha completa"
+   "detalle": "aparece solo en el móvil y se abre con un toque, con sus 3 unidades"
   },
   {
-   "prueba": "Preferencias de visualización por preventivo",
+   "prueba": "Compartido: avisos simultáneos sin duplicados",
    "resultado": "SUPERADA",
-   "detalle": "filtro guardado tras recargar en ese preventivo; el otro preventivo no se ve afectado"
+   "detalle": "números definitivos únicos 1 y 2 en ambos dispositivos"
   },
   {
-   "prueba": "Muchos elementos: agrupación y fluidez",
+   "prueba": "Compartido: desconexión, trabajo local y reconexión",
    "resultado": "SUPERADA",
-   "detalle": "150 unidades: 5 grupos al abrir (2070 ms hasta ver el plano); al tocar un grupo se acerca y aparecen 150 unidades sueltas"
+   "detalle": "trabajo sin red (ref. provisional KP-2, «Pendiente de confirmar»), reconexión, número definitivo y convergencia sin pérdidas"
   },
   {
-   "prueba": "Sin errores de JavaScript (escenario 12)",
+   "prueba": "Compartido: resolución de conflictos",
+   "resultado": "SUPERADA",
+   "detalle": "conflicto detectado (sin última escritura silenciosa) y resuelto por el administrador"
+  },
+  {
+   "prueba": "Servidor central: varios preventivos usan el mismo servidor",
+   "resultado": "SUPERADA",
+   "detalle": "2 preventivos compartidos, todos con el servidor central http://127.0.0.1:8650 sin haberlo pedido"
+  },
+  {
+   "prueba": "Tipos de recurso: el tipo nuevo aparece en el otro dispositivo",
+   "resultado": "SUPERADA",
+   "detalle": "tipo «Bicicleta sanitaria» creado en la tablet → disponible en el móvil sin hacer nada"
+  },
+  {
+   "prueba": "Actualizaciones: estado del servidor y de los dispositivos",
+   "resultado": "SUPERADA",
+   "detalle": "Sistema → Actualizaciones muestra el servidor y los 2 dispositivos con su nombre y versión"
+  },
+  {
+   "prueba": "Servidor central: caída temporal del servidor sin interrumpir el trabajo",
+   "resultado": "SUPERADA",
+   "detalle": "servidor detenido: se sigue trabajando en local (sin_conexion, 2 pendiente(s)); al volver se envía todo y el otro dispositivo lo recibe"
+  },
+  {
+   "prueba": "Tablet: panel operativo multicolumna",
+   "resultado": "SUPERADA",
+   "detalle": "panel de 3 columnas y navegación lateral"
+  },
+  {
+   "prueba": "Sin errores de JavaScript (multidispositivo)",
    "resultado": "SUPERADA",
    "detalle": "ninguno"
   }

@@ -288,8 +288,10 @@ H['unit.loc'] = (s, op) => {
   const u = getUnit(s, op.e); const n = op.x.n || null;
   const cur = u.loc ? { txt: u.loc.txt || '', lat: u.loc.lat ?? null, lon: u.loc.lon ?? null } : null;
   const nn = n ? { txt: n.txt || '', lat: n.lat ?? null, lon: n.lon ?? null } : null;
-  if (same(cur, nn)) return { noop: true };
-  u.loc = nn ? { ...nn, t: op.t } : null;
+  const extra = n ? Object.fromEntries(['fuente', 'prec', 'ref'].filter(k => n[k] != null).map(k => [k, n[k]])) : {}; // origen (1.5.0)
+  const curX = u.loc ? Object.fromEntries(['fuente', 'prec', 'ref'].filter(k => u.loc[k] != null).map(k => [k, u.loc[k]])) : {};
+  if (same(cur, nn) && same(curX, extra)) return { noop: true };
+  u.loc = nn ? { ...nn, ...extra, t: op.t } : null;
   u.hl.push({ t: op.t, ...(nn || { txt: '', lat: null, lon: null }), ant: cur, op: op.id });
 };
 

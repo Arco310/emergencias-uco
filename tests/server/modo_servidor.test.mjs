@@ -147,6 +147,11 @@ test('operaciones: el servidor comprueba permisos e identidad aunque se llame di
   assert.equal(malo.res[0].rechazada, true); assert.equal(malo.res[0].codigo, 'permiso'); assert.match(malo.res[0].error, /eliminar o archivar unidades/);
   const g = await api('/prev/' + PID + '/ops?after=0', { token: opeSes });
   assert.ok(!g.ops.some(o => o.id === malo.res[0].id), 'la operación rechazada no se guarda');
+  // Contenido manipulado (1.5.0): coordenadas imposibles en un aviso; la app no lo permite y el servidor tampoco
+  const av = B.run(C.avisoCreate, { desc: 'Manipulado', loc: { txt: '', lat: 40.4, lon: -3.7, fuente: 'mapa' } });
+  av[0].x.a.loc.lat = 500;
+  const r5 = await enviar(PID, kPrev, av, opeSes);
+  assert.equal(r5.res[0].rechazada, true); assert.equal(r5.res[0].codigo, 'datos'); assert.match(r5.res[0].error, /coordenadas/i);
   // Suplantación: Pepe envía una operación firmada como la administradora, o desde otro dispositivo
   const falsa = A.run(C.unitCreate, { ind: 'X-1' });
   const s1 = await enviar(PID, kPrev, falsa, opeSes);

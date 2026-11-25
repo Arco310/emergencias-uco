@@ -204,7 +204,7 @@ function bindGlobal() {
     const b = form.querySelector('[type=submit]'); if (b) b.disabled = true;
     runAction(async () => { try { await fn(form, ev); } finally { if (b && b.isConnected) b.disabled = false; } }, form, ev);
   });
-  const onCh = ev => { const el = ev.target.closest('[data-c]'); if (!el) return; const fn = CH[el.dataset.c]; if (fn) runAction(fn, el, ev); };
+  const onCh = ev => { if (G.repintandoHoja) return; const el = ev.target.closest('[data-c]'); if (!el) return; const fn = CH[el.dataset.c]; if (fn) runAction(fn, el, ev); };
   document.addEventListener('change', onCh);
   document.addEventListener('input', ev => { const el = ev.target.closest('[data-c][data-live]'); if (el) onCh(ev); });
   window.addEventListener('popstate', () => {

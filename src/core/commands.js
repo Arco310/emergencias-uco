@@ -6,6 +6,7 @@ import { boundsValidos } from './geo.js';
 import { motivoTipoNoDisponible, referenciasTipoPrev } from './recursos.js';
 import { esVista, VISTA_DEFECTO } from './mapas.js';
 import { DEFAULT_CATEGORIAS_PUNTO } from './defaults.js';
+import { normalizarLoc, motivoLocNoValida } from './ubicacion.js';
 import { claveDef, baseClave, isResting, activeParts, unitLabel, avisoLabel, CATALOGOS, SECTOR_OTROS } from './engine.js';
 
 function mkOp(ctx, k, e, x, b) {
@@ -398,10 +399,9 @@ export function unitDelete(ctx, id) {
 export function unitLoc(ctx, id, loc) {
   needPerm(ctx.user, 'ubicaciones.editar');
   const s = editable(ctx); const u = unit(s, id);
-  const norm = l => (l && (String(l.txt || '').trim() || l.lat != null) ? { txt: String(l.txt || '').trim(), lat: l.lat ?? null, lon: l.lon ?? null } : null);
-  const n = norm(loc); const cur = norm(u.loc);
-  if (n && (n.lat != null) !== (n.lon != null)) fail('Coordenadas incompletas');
-  if (n && n.lat != null && (Math.abs(n.lat) > 90 || Math.abs(n.lon) > 180)) fail('Coordenadas fuera de rango');
+  const sinHora = l => { const x = normalizarLoc(l); if (x) delete x.t; return x; }; // la hora la pone la operación
+  const n = sinHora(loc); const cur = sinHora(u.loc);
+  const mal = motivoLocNoValida(n); if (mal) fail(mal);
   if (same(cur, n)) return [];
   return [mkOp(ctx, 'unit.loc', id, { o: cur, n }, uid('b_'))];
 }
@@ -467,7 +467,8 @@ export function avisoCreate(ctx, d, { unidades = [], forzarIncompatible = false 
   const s = operativo(ctx);
   if (!d.tipo && !String(d.desc || '').trim()) fail('Indica el tipo o la descripción del aviso');
   const id = uid('a_'); const b = uid('b_');
-  const a = { tipo: d.tipo || null, desc: String(d.desc || '').trim(), t: d.t || null, loc: d.loc || null, sector: d.sector || null, obs: d.obs || '', plan: posPlano(d.plan) };
+  const loc = normalizarLoc(d.loc); const mal = motivoLocNoValida(loc); if (mal) fail(mal);
+  const a = { tipo: d.tipo || null, desc: String(d.desc || '').trim(), t: d.t || null, loc, sector: d.sector || null, obs: d.obs || '', plan: posPlano(d.plan) };
   if (d.zona) a.zona = zonaValida(d.zona);
   const op = mkOp(ctx, 'aviso.create', id, { a }, b);
   if (ctx.mode === 'compartida') { op.nn = true; op.nr = true; } else { op.nl = true; }
@@ -482,6 +483,7 @@ export function avisoCreate(ctx, d, { unidades = [], forzarIncompatible = false 
 export function avisoUpdate(ctx, id, cambios) {
   needPerm(ctx.user, 'avisos.editar');
   const s = editable(ctx); const a = aviso(s, id);
+  if ('loc' in cambios) { cambios = { ...cambios, loc: normalizarLoc(cambios.loc) }; const mal = motivoLocNoValida(cambios.loc); if (mal) fail(mal); }
   const f = fieldsDiff(a, cambios);
   if (!Object.keys(f).length) return [];
   return [mkOp(ctx, 'aviso.update', id, { f }, uid('b_'))];
